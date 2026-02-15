@@ -77,7 +77,7 @@ Start by saving something important.
   if (await isLimitReached(user)) {
     await sendTelegram(
       chatId,
-      "🚫 You've reached your daily limit (20 messages). Try again tomorrow."
+      "🚫 You've reached your daily limit (20 messages). Try again tomorrow or contact Petvn for help."
     );
     return new Response("ok");
   }
@@ -91,24 +91,83 @@ Start by saving something important.
 
   if (text.startsWith("/save")) {
     const content = text.replace("/save", "").trim();
-
+  
     if (!content) {
       await sendTelegram(chatId, "Write something after /save 🙂");
       return new Response("ok");
     }
-
+  
+    // 1️⃣ Create embedding
     const embedding = await createEmbedding(content);
-
-    await supabase.from("knowledge").insert({
-      user_id: chatId,
-      content,
-      role: "note",
-      embedding,
-    });
-
-    await sendTelegram(chatId, "Saved to memory 🧠");
+  
+    // 2️⃣ Insert knowledge
+    const { data: insertedKnowledge, error: insertError } =
+      await supabase
+        .from("knowledge")
+        .insert({
+          user_id: chatId,
+          content,
+          role: "note",
+          embedding,
+        })
+        .select()
+        .single();
+  
+    if (insertError) {
+      console.error("Knowledge insert error:", insertError);
+      await sendTelegram(chatId, "Error saving memory.");
+      return new Response("ok");
+    }
+  
+    // 3️⃣ Extract entities
+    const { extractEntities } = await import("@/lib/extractEntities");
+    const entities = await extractEntities(content);
+  
+    // 4️⃣ Insert & Link entities
+    for (let entity of entities) {
+      const { name, type } = entity;
+  
+      if (!name || !type) continue;
+  
+      // Insert if not exists
+      const { data: existingEntity } = await supabase
+        .from("entities")
+        .select("*")
+        .eq("user_id", chatId)
+        .ilike("name", name)
+        .single();
+  
+      let entityId;
+  
+      if (existingEntity) {
+        entityId = existingEntity.id;
+      } else {
+        const { data: newEntity } = await supabase
+          .from("entities")
+          .insert({
+            user_id: chatId,
+            name,
+            type,
+          })
+          .select()
+            .single();
+  
+        entityId = newEntity.id;
+      }
+  
+      // Link knowledge to entity
+      await supabase.from("knowledge_links").insert({
+        user_id: chatId,
+        knowledge_id: insertedKnowledge.id,
+        entity_id: entityId,
+      });
+    }
+  
+    await sendTelegram(chatId, "Saved and structured 🧠🔗");
+  
     return new Response("ok");
   }
+  
 
   // =========================
   // SEARCH MEMORY
