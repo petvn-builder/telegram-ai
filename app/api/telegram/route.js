@@ -22,6 +22,49 @@ export async function POST(req) {
   if (!text) return new Response("ok");
 
   // =========================
+// START COMMAND (NO LIMIT, NO SAVE)
+// =========================
+
+if (text === "/start") {
+  const telegramId = message.from.id;
+  const username = message.from.username || "";
+
+  // Ensure user exists
+  await getOrCreateUser(telegramId, username);
+
+  const welcomeMessage = `
+🧠 Welcome to Your AI Memory Assistant
+
+Think of me as your second brain.
+
+You can:
+
+💾 Save knowledge  
+Use:
+/save <your text>
+
+Example:
+→ /save My AWS key expires in March
+
+🔎 Ask naturally  
+→ When does my AWS key expire?  
+→ What do I know about project deadlines?
+
+Everything you save is:
+• Private  
+• Organized  
+• Instantly searchable  
+
+Start by saving something important.
+  `;
+
+  await sendTelegram(chatId, welcomeMessage);
+
+  return new Response("ok");
+}
+
+
+  // =========================
   // DAILY LIMIT CHECK
   // =========================
 
