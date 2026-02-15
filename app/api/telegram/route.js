@@ -213,56 +213,59 @@ return new Response("ok");
     }
   
     // 3️⃣ Extract entities
-    const { extractEntities } = await import("@/lib/extractEntities");
-    const entities = await extractEntities(content);
-  
-    // 4️⃣ Insert & Link entities
+const { extractEntities } = await import("@/lib/extractEntities");
+let entities = await extractEntities(content);
+
+console.log("Extracted:", entities);
+
+if (!Array.isArray(entities)) {
+  entities = [];
+}
+
+// 4️⃣ Insert & Link entities
 for (let entity of entities) {
-  const { name, type } = entity;
+  const name = entity.name?.trim();
+  const type = entity.type?.trim();
 
   if (!name || !type) continue;
 
-  // Try to find existing entity
-  const { data: existingEntity, error: findError } = await supabase
+  const { data: existingEntity } = await supabase
     .from("entities")
-    .select("*")
+    .select("id")
     .eq("user_id", chatId)
-    .ilike("name", name)
-    .maybeSingle(); // 🔥 IMPORTANT: use maybeSingle()
+    .eq("name", name)
+    .maybeSingle();
 
   let entityId;
 
   if (existingEntity) {
     entityId = existingEntity.id;
   } else {
-    const { data: newEntity, error: insertEntityError } =
-      await supabase
-        .from("entities")
-        .insert({
-          user_id: chatId,
-          name,
-          type,
-        })
-        .select()
-        .single();
+    const { data: newEntity, error } = await supabase
+      .from("entities")
+      .insert({
+        user_id: chatId,
+        name,
+        type,
+      })
+      .select()
+      .single();
 
-    if (insertEntityError) {
-      console.error("Entity insert error:", insertEntityError);
+    if (error) {
+      console.error("Entity insert error:", error);
       continue;
     }
 
     entityId = newEntity.id;
   }
 
-  // 🔗 Link knowledge to entity
-  await supabase
-    .from("knowledge_links")
-    .insert({
-      user_id: chatId,
-      knowledge_id: insertedKnowledge.id,
-      entity_id: entityId,
-    });
+  await supabase.from("knowledge_links").insert({
+    user_id: chatId,
+    knowledge_id: insertedKnowledge.id,
+    entity_id: entityId,
+  });
 }
+
 
   
     await sendTelegram(chatId, "Saved and structured 🧠🔗");
