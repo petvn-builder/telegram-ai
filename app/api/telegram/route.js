@@ -2,6 +2,13 @@ import { createEmbedding } from "@/lib/embeddings";
 import { askOpenAI } from "@/lib/openai";
 import { getSupabase } from "@/lib/supabase";
 
+import {
+  getOrCreateUser,
+  resetIfNewDay,
+  isLimitReached,
+  incrementUsage
+} from "@/lib/user";
+
 export async function POST(req) {
   const supabase = getSupabase();
   const body = await req.json();
@@ -15,8 +22,30 @@ export async function POST(req) {
   if (!text) return new Response("ok");
 
   // =========================
+  // DAILY LIMIT CHECK
+  // =========================
+
+  const telegramId = message.from.id; // real user id
+  const username = message.from.username || "";
+
+  let user = await getOrCreateUser(telegramId, username);
+  user = await resetIfNewDay(user);
+
+  if (await isLimitReached(user)) {
+    await sendTelegram(
+      chatId,
+      "🚫 You've reached your daily limit (20 messages). Try again tomorrow."
+    );
+    return new Response("ok");
+  }
+
+  // Increment BEFORE AI work
+  await incrementUsage(user.id);
+
+  // =========================
   // SAVE COMMAND
   // =========================
+
   if (text.startsWith("/save")) {
     const content = text.replace("/save", "").trim();
 
@@ -70,8 +99,9 @@ export async function POST(req) {
   console.log("----------------------------------");
 
   // =========================
-  // ASK OPENAI (ONLY ONCE)
+  // ASK OPENAI
   // =========================
+
   const aiResponse = await askOpenAI(memory, text);
 
   await sendTelegram(chatId, aiResponse);
