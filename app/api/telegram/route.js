@@ -225,7 +225,40 @@ if (text.startsWith("/entity")) {
   // =========================
   // SEARCH MEMORY
   // =========================
+      // =========================
+// GRAPH CONTEXT ENHANCEMENT
+// =========================
 
+const { data: possibleEntities } = await supabase
+.from("entities")
+.select("*")
+.eq("user_id", chatId);
+
+let graphMemory = "";
+
+for (let entity of possibleEntities || []) {
+if (text.toLowerCase().includes(entity.name.toLowerCase())) {
+
+  const { data: links } = await supabase
+    .from("knowledge_links")
+    .select("knowledge_id")
+    .eq("entity_id", entity.id);
+
+  const knowledgeIds = links.map(l => l.knowledge_id);
+
+  const { data: notes } = await supabase
+    .from("knowledge")
+    .select("content")
+    .in("id", knowledgeIds);
+
+  graphMemory += `\n[Entity: ${entity.name}]\n`;
+
+  for (let note of notes || []) {
+    graphMemory += `${note.content}\n`;
+  }
+}
+}
+  
   const queryEmbedding = await createEmbedding(text);
 
   const { data: memories, error: memoryError } = await supabase.rpc(
@@ -257,7 +290,9 @@ if (text.startsWith("/entity")) {
   // ASK OPENAI
   // =========================
 
-  const aiResponse = await askOpenAI(memory, text);
+  const combinedMemory = graphMemory + "\n" + memory;
+  const aiResponse = await askOpenAI(combinedMemory, text);
+
 
   await sendTelegram(chatId, aiResponse);
 
