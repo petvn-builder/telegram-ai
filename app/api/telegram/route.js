@@ -223,12 +223,19 @@ if (!Array.isArray(entities)) {
   entities = [];
 }
 
-// 4️⃣ Insert & Link entities
+// 4️⃣ Insert & Link entities (WITH structured fields)
 for (let entity of entities) {
   const name = entity.name?.trim();
   const type = entity.type?.trim();
 
   if (!name || !type) continue;
+
+  const structuredData = {
+    attributes: entity.attributes || {},
+    events: entity.events || [],
+    relationships: entity.relationships || [],
+    responsibilities: entity.responsibilities || []
+  };
 
   const { data: existingEntity } = await supabase
     .from("entities")
@@ -241,6 +248,13 @@ for (let entity of entities) {
 
   if (existingEntity) {
     entityId = existingEntity.id;
+
+    // 🔥 UPDATE structured fields if entity already exists
+    await supabase
+      .from("entities")
+      .update(structuredData)
+      .eq("id", entityId);
+
   } else {
     const { data: newEntity, error } = await supabase
       .from("entities")
@@ -248,6 +262,7 @@ for (let entity of entities) {
         user_id: chatId,
         name,
         type,
+        ...structuredData
       })
       .select()
       .single();
@@ -259,6 +274,17 @@ for (let entity of entities) {
 
     entityId = newEntity.id;
   }
+
+  // 🔗 Link knowledge to entity
+  await supabase
+    .from("knowledge_links")
+    .insert({
+      user_id: chatId,
+      knowledge_id: insertedKnowledge.id,
+      entity_id: entityId,
+    });
+}
+
 
   await supabase.from("knowledge_links").insert({
     user_id: chatId,
