@@ -1,5 +1,4 @@
 import { createEmbedding } from "@/lib/embeddings";
-
 import { askOpenAI } from "@/lib/openai";
 import { getSupabase } from "@/lib/supabase";
 
@@ -26,140 +25,84 @@ export async function POST(req) {
       return new Response("ok");
     }
 
-  const embedding = await createEmbedding(content);
+    const embedding = await createEmbedding(content);
 
-  await supabase.from("knowledge").insert({
-  user_id: chatId,
-  content,
-  role: "note",
-  embedding,
-});
+    await supabase.from("knowledge").insert({
+      user_id: chatId,
+      content,
+      role: "note",
+      embedding,
+    });
 
     await sendTelegram(chatId, "Saved to memory 🧠");
     return new Response("ok");
   }
 
   // =========================
-  // FETCH USER KNOWLEDGE
-    // =========================
-// FETCH RELEVANT MEMORY
-// =========================
+  // SEARCH MEMORY
+  // =========================
 
-// 1️⃣ Create embedding of user query
-const queryEmbedding = await createEmbedding(text);
+  const queryEmbedding = await createEmbedding(text);
 
-// 2️⃣ Search similar memories
-const { data: memories, error: memoryError } = await supabase.rpc(
-  "match_knowledge",
-  {
-    query_embedding: queryEmbedding,
-    match_user: chatId,
-    match_count: 8,
+  const { data: memories, error: memoryError } = await supabase.rpc(
+    "match_knowledge",
+    {
+      query_embedding: queryEmbedding,
+      match_user: chatId,
+      match_count: 8,
+    }
+  );
+
+  if (memoryError) {
+    console.error("Memory search error:", memoryError);
   }
-);
 
-if (memoryError) {
-  console.error("Memory search error:", memoryError);
-}
+  let memory = "";
 
-// 3️⃣ Build structured memory string
-let memory = "";
+  for (let item of memories || []) {
+    memory += `[${item.role}] ${item.content}\n`;
+  }
 
-for (let item of memories || []) {
-  memory += `[${item.role}] ${item.content}\n`;
-}
-
-// Debug logs
-console.log("----- MEMORY SENT TO OPENAI -----");
-console.log(memory);
-
-console.log("----- USER MESSAGE -----");
-console.log(text);
-console.log("----------------------------------");
-
-// 4️⃣ Ask OpenAI
-const aiResponse = await askOpenAI(memory, text);
-
-// 5️⃣ Send response to Telegram
-await sendTelegram(chatId, aiResponse);
-
-// =========================
-// SAVE USER + AI MESSAGE
-// =========================
-
-const userEmbedding = await createEmbedding(text);
-const aiEmbedding = await createEmbedding(aiResponse);
-
-const { error: insertError } = await supabase
-  .from("knowledge")
-  .insert([
-    {
-      user_id: chatId,
-      content: text,
-      role: "user",
-      embedding: userEmbedding,
-    },
-    {
-      user_id: chatId,
-      content: aiResponse,
-      role: "ai",
-      embedding: aiEmbedding,
-    },
-  ]);
-
-if (insertError) {
-  console.error("Insert error:", insertError);
-}
-
-
-  // Then call OpenAI
-  const aiResponse = await askOpenAI(memory, text);
-
-
-  // =========================
-  // ASK OPENAI
-  // =========================
   console.log("----- MEMORY SENT TO OPENAI -----");
   console.log(memory);
-
   console.log("----- USER MESSAGE -----");
   console.log(text);
   console.log("----------------------------------");
 
+  // =========================
+  // ASK OPENAI (ONLY ONCE)
+  // =========================
   const aiResponse = await askOpenAI(memory, text);
 
-
-  // Send response to Telegram
   await sendTelegram(chatId, aiResponse);
 
   // =========================
-  // BATCH INSERT (User + AI)
+  // SAVE USER + AI
   // =========================
-  // Create embeddings
-const userEmbedding = await createEmbedding(text);
-const aiEmbedding = await createEmbedding(aiResponse);
 
-// Insert with vectors
-const { error: insertError } = await supabase
-  .from("knowledge")
-  .insert([
-    {
-      user_id: chatId,
-      content: text,
-      role: "user",
-      embedding: userEmbedding,
-    },
-    {
-      user_id: chatId,
-      content: aiResponse,
-      role: "ai",
-      embedding: aiEmbedding,
-    },
-  ]);
+  const userEmbedding = await createEmbedding(text);
+  const aiEmbedding = await createEmbedding(aiResponse);
 
-if (insertError) {
-  console.error("Insert error:", insertError);
-}
+  const { error: insertError } = await supabase
+    .from("knowledge")
+    .insert([
+      {
+        user_id: chatId,
+        content: text,
+        role: "user",
+        embedding: userEmbedding,
+      },
+      {
+        user_id: chatId,
+        content: aiResponse,
+        role: "ai",
+        embedding: aiEmbedding,
+      },
+    ]);
+
+  if (insertError) {
+    console.error("Insert error:", insertError);
+  }
 
   return new Response("ok");
 }
