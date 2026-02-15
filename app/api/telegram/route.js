@@ -101,19 +101,59 @@ if (text.startsWith("/entity")) {
     .select("content")
     .in("id", knowledgeIds);
 
-  let response = `🧠 ${entity.name} (${entity.type})\n\n`;
+  // 3️⃣ Get related entities
+const { data: relatedLinks } = await supabase
+.from("knowledge_links")
+.select("entity_id")
+.in("knowledge_id", knowledgeIds);
 
-  if (notes && notes.length > 0) {
-    response += "Related notes:\n\n";
-    for (let note of notes) {
-      response += `• ${note.content}\n`;
-    }
-  } else {
-    response += "No linked notes yet.";
-  }
+const relatedEntityIds = relatedLinks
+.map(l => l.entity_id)
+.filter(id => id !== entity.id);
 
-  await sendTelegram(chatId, response);
-  return new Response("ok");
+const { data: relatedEntities } = await supabase
+.from("entities")
+.select("name, type")
+.in("id", relatedEntityIds);
+
+// 4️⃣ Build summary with AI
+const notesText = (notes || [])
+.map(n => n.content)
+.join("\n");
+
+const summaryPrompt = `
+You are generating a structured knowledge page.
+
+Entity:
+Name: ${entity.name}
+Type: ${entity.type}
+
+Notes:
+${notesText}
+
+Generate:
+1. Short summary (2-4 sentences)
+2. Key insights
+3. Important facts
+Keep it concise.
+`;
+
+const summaryResponse = await askOpenAI("", summaryPrompt);
+
+// 5️⃣ Format response
+let response = `🧠 ${entity.name} (${entity.type})\n\n`;
+response += `📄 Summary:\n${summaryResponse}\n\n`;
+
+if (relatedEntities && relatedEntities.length > 0) {
+response += `🔗 Related:\n`;
+for (let r of relatedEntities) {
+  response += `• ${r.name} (${r.type})\n`;
+}
+}
+
+await sendTelegram(chatId, response);
+return new Response("ok");
+
 }
 
 
