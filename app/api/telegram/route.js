@@ -284,16 +284,6 @@ for (let entity of entities) {
       entity_id: entityId,
     });
 }
-
-
-  await supabase.from("knowledge_links").insert({
-    user_id: chatId,
-    knowledge_id: insertedKnowledge.id,
-    entity_id: entityId,
-  });
-}
-
-
   
     await sendTelegram(chatId, "Saved and structured 🧠🔗");
   
