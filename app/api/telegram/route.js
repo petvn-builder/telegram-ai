@@ -217,44 +217,53 @@ return new Response("ok");
     const entities = await extractEntities(content);
   
     // 4️⃣ Insert & Link entities
-    for (let entity of entities) {
-      const { name, type } = entity;
-  
-      if (!name || !type) continue;
-  
-      // Insert if not exists
-      const { data: existingEntity } = await supabase
+for (let entity of entities) {
+  const { name, type } = entity;
+
+  if (!name || !type) continue;
+
+  // Try to find existing entity
+  const { data: existingEntity, error: findError } = await supabase
+    .from("entities")
+    .select("*")
+    .eq("user_id", chatId)
+    .ilike("name", name)
+    .maybeSingle(); // 🔥 IMPORTANT: use maybeSingle()
+
+  let entityId;
+
+  if (existingEntity) {
+    entityId = existingEntity.id;
+  } else {
+    const { data: newEntity, error: insertEntityError } =
+      await supabase
         .from("entities")
-        .select("*")
-        .eq("user_id", chatId)
-        .ilike("name", name)
+        .insert({
+          user_id: chatId,
+          name,
+          type,
+        })
+        .select()
         .single();
-  
-      let entityId;
-  
-      if (existingEntity) {
-        entityId = existingEntity.id;
-      } else {
-        const { data: newEntity } = await supabase
-          .from("entities")
-          .insert({
-            user_id: chatId,
-            name,
-            type,
-          })
-          .select()
-            .single();
-  
-        entityId = newEntity.id;
-      }
-  
-      // Link knowledge to entity
-      await supabase.from("knowledge_links").insert({
-        user_id: chatId,
-        knowledge_id: insertedKnowledge.id,
-        entity_id: entityId,
-      });
+
+    if (insertEntityError) {
+      console.error("Entity insert error:", insertEntityError);
+      continue;
     }
+
+    entityId = newEntity.id;
+  }
+
+  // 🔗 Link knowledge to entity
+  await supabase
+    .from("knowledge_links")
+    .insert({
+      user_id: chatId,
+      knowledge_id: insertedKnowledge.id,
+      entity_id: entityId,
+    });
+}
+
   
     await sendTelegram(chatId, "Saved and structured 🧠🔗");
   
