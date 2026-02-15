@@ -63,6 +63,59 @@ Start by saving something important.
   return new Response("ok");
 }
 
+// =========================
+// ENTITY VIEW COMMAND
+// =========================
+
+if (text.startsWith("/entity")) {
+  const name = text.replace("/entity", "").trim();
+
+  if (!name) {
+    await sendTelegram(chatId, "Usage: /entity <name>");
+    return new Response("ok");
+  }
+
+  // 1️⃣ Find entity
+  const { data: entity } = await supabase
+    .from("entities")
+    .select("*")
+    .eq("user_id", chatId)
+    .ilike("name", name)
+    .single();
+
+  if (!entity) {
+    await sendTelegram(chatId, "Entity not found.");
+    return new Response("ok");
+  }
+
+  // 2️⃣ Get linked knowledge
+  const { data: links } = await supabase
+    .from("knowledge_links")
+    .select("knowledge_id")
+    .eq("entity_id", entity.id);
+
+  const knowledgeIds = links.map(l => l.knowledge_id);
+
+  const { data: notes } = await supabase
+    .from("knowledge")
+    .select("content")
+    .in("id", knowledgeIds);
+
+  let response = `🧠 ${entity.name} (${entity.type})\n\n`;
+
+  if (notes && notes.length > 0) {
+    response += "Related notes:\n\n";
+    for (let note of notes) {
+      response += `• ${note.content}\n`;
+    }
+  } else {
+    response += "No linked notes yet.";
+  }
+
+  await sendTelegram(chatId, response);
+  return new Response("ok");
+}
+
 
   // =========================
   // DAILY LIMIT CHECK
