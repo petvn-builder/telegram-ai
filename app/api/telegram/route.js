@@ -67,8 +67,9 @@ Start by saving something important.
 // ENTITY VIEW COMMAND
 // =========================
 
-if (text.startsWith("/entity")) {
-  const name = text.replace("/entity", "").trim();
+if (text.toLowerCase().startsWith("/entity")) {
+
+  const name = text.slice(7).trim();
 
   if (!name) {
     await sendTelegram(chatId, "Usage: /entity <name>");
