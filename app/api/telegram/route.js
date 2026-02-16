@@ -306,7 +306,11 @@ const { data: possibleEntities } = await supabase
 let graphMemory = "";
 
 for (let entity of possibleEntities || []) {
-  if (text.toLowerCase().includes(entity.name.toLowerCase())) {
+  const normalizedName = entity.name.toLowerCase().trim();
+const normalizedMemory = memory.toLowerCase();
+
+if (normalizedMemory.includes(normalizedName)) {
+
 
     const { data: links } = await supabase
       .from("knowledge_links")
