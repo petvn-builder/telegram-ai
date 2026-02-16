@@ -344,10 +344,17 @@ for (let item of memories || []) {
 // =========================
 // GRAPH CONTEXT ENHANCEMENT
 // =========================
+
+// fetch entities once
+const { data: possibleEntities } = await supabase
+  .from("entities")
+  .select("id, name, type")
+  .eq("user_id", chatId);
+
 const normalizedQuestion = text.toLowerCase().trim();
 
 let injectedEntities = 0;
-const MAX_ENTITIES = 2;
+const MAX_ENTITIES = 3;
 
 for (let entity of possibleEntities || []) {
 
@@ -360,7 +367,6 @@ for (let entity of possibleEntities || []) {
     injectedEntities < MAX_ENTITIES
   ) {
 
-    // fetch links
     const { data: links } = await supabase
       .from("knowledge_links")
       .select("knowledge_id")
@@ -374,10 +380,7 @@ for (let entity of possibleEntities || []) {
       .select("content")
       .in("id", knowledgeIds);
 
-    graphMemory += `
-    ${entity.name} (${entity.type})
-
-    `;
+    graphMemory += `${entity.name} (${entity.type})\n`;
 
     for (let note of (notes || []).slice(0, 3)) {
       graphMemory += `- ${note.content}\n`;
@@ -386,32 +389,6 @@ for (let entity of possibleEntities || []) {
     graphMemory += "\n";
 
     injectedEntities++;
-  }
-}
-
-Name: ${entity.name}
-Type: ${entity.type}
-
-Attributes:
-${JSON.stringify(entity.attributes || {}, null, 2)}
-
-Events:
-${JSON.stringify(entity.events || [], null, 2)}
-
-Relationships:
-${JSON.stringify(entity.relationships || [], null, 2)}
-
-Responsibilities:
-${JSON.stringify(entity.responsibilities || [], null, 2)}
-
-Linked Notes:
-`;
-
-    for (let note of notes || []) {
-      graphMemory += `- ${note.content}\n`;
-    }
-
-    graphMemory += "\n";
   }
 }
 
