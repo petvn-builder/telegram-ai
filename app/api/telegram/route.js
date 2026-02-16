@@ -294,30 +294,85 @@ for (let entity of entities) {
   
 
   // =========================
-  // SEARCH MEMORY
   // =========================
+// SEARCH MEMORY (VECTOR FIRST)
+// =========================
 
 let memory = "";
 let graphMemory = "";
 
+const queryEmbedding = await createEmbedding(text);
+
+const { data: memories, error: memoryError } = await supabase.rpc(
+  "match_knowledge",
+  {
+    query_embedding: queryEmbedding,
+    match_user: chatId,
+    match_count: 8,
+  }
+);
+
+if (memoryError) {
+  console.error("Memory search error:", memoryError);
+}
+
+for (let item of memories || []) {
+  memory += `[${item.role}] ${item.content}\n`;
+}
+
+// =========================
+// GRAPH CONTEXT ENHANCEMENT (AFTER MEMORY EXISTS)
+// =========================
+
+console.log("---- START GRAPH ENHANCEMENT ----");
+
+const { data: possibleEntities, error: entityError } = await supabase
+  .from("entities")
+  .select("*")
+  .eq("user_id", chatId);
+
+if (entityError) {
+  console.error("Entity fetch error:", entityError);
+}
+
+console.log("Entities found:", possibleEntities?.length || 0);
+
 for (let entity of possibleEntities || []) {
+
+  if (!entity.name) continue;
+
   const normalizedName = entity.name.toLowerCase().trim();
-const normalizedMemory = memory.toLowerCase();
+  const normalizedMemory = memory.toLowerCase();
 
-if (normalizedMemory.includes(normalizedName)) {
+  console.log("Checking entity:", entity.name);
 
+  if (normalizedMemory.includes(normalizedName)) {
 
-    const { data: links } = await supabase
+    console.log("MATCHED ENTITY:", entity.name);
+
+    const { data: links, error: linkError } = await supabase
       .from("knowledge_links")
       .select("knowledge_id")
       .eq("entity_id", entity.id);
 
-    const knowledgeIds = links.map(l => l.knowledge_id);
+    if (linkError) {
+      console.error("Link fetch error:", linkError);
+      continue;
+    }
 
-    const { data: notes } = await supabase
+    const knowledgeIds = (links || []).map(l => l.knowledge_id);
+
+    if (knowledgeIds.length === 0) continue;
+
+    const { data: notes, error: notesError } = await supabase
       .from("knowledge")
       .select("content")
       .in("id", knowledgeIds);
+
+    if (notesError) {
+      console.error("Notes fetch error:", notesError);
+      continue;
+    }
 
     graphMemory += `
 ==============================
@@ -345,7 +400,7 @@ Linked Notes:
       graphMemory += `- ${note.content}\n`;
     }
 
-    graphMemory += `\n`;
+    graphMemory += "\n";
   }
 }
 
