@@ -384,8 +384,6 @@ if (entityError) {
 
 console.log("Entities found:", possibleEntities?.length || 0);
 
-let graphMemory = "";
-
 for (let entity of possibleEntities || []) {
 
   if (!entity.name) continue;
