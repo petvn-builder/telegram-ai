@@ -358,7 +358,7 @@ const { data: possibleEntities } = await supabase
 const normalizedQuestion = text.toLowerCase().trim();
 
 let injectedEntities = 0;
-const MAX_ENTITIES = 3;
+const MAX_ENTITIES = 5;
 
 for (let entity of possibleEntities || []) {
 
@@ -411,7 +411,18 @@ console.log("----------------------------");
   // ASK OPENAI
   // =========================
 
-  const combinedMemory = graphMemory + "\n" + memory;
+  let combinedMemory = "";
+
+  if (graphMemory.trim().length > 0) {
+  combinedMemory += "=== ENTITY CONTEXT ===\n";
+  combinedMemory += graphMemory.trim() + "\n\n";
+  }
+
+  if (memory.trim().length > 0) {
+  combinedMemory += "=== RELEVANT MEMORY ===\n";
+  combinedMemory += memory.trim();
+  }
+
 
   console.log("----- FINAL MEMORY SENT TO OPENAI -----");
 console.log(combinedMemory);
