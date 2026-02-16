@@ -375,10 +375,9 @@ for (let entity of possibleEntities || []) {
       .in("id", knowledgeIds);
 
     graphMemory += `
-==============================
-ENTITY: ${entity.name} (${entity.type})
-==============================
-`;
+    ${entity.name} (${entity.type})
+
+    `;
 
     for (let note of (notes || []).slice(0, 3)) {
       graphMemory += `- ${note.content}\n`;
