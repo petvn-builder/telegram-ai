@@ -9,6 +9,8 @@ import {
   incrementUsage
 } from "@/lib/user";
 
+
+
 export async function POST(req) {
   const supabase = getSupabase();
   const body = await req.json();
@@ -295,6 +297,7 @@ for (let entity of entities) {
   // SEARCH MEMORY
   // =========================
 
+let memory = "";
 let graphMemory = "";
 
 for (let entity of possibleEntities || []) {
@@ -362,7 +365,6 @@ Linked Notes:
     console.error("Memory search error:", memoryError);
   }
 
-  let memory = "";
 
   for (let item of memories || []) {
     memory += `[${item.role}] ${item.content}\n`;
