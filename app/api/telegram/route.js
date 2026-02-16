@@ -306,27 +306,50 @@ const { data: possibleEntities } = await supabase
 let graphMemory = "";
 
 for (let entity of possibleEntities || []) {
-if (text.toLowerCase().includes(entity.name.toLowerCase())) {
+  if (text.toLowerCase().includes(entity.name.toLowerCase())) {
 
-  const { data: links } = await supabase
-    .from("knowledge_links")
-    .select("knowledge_id")
-    .eq("entity_id", entity.id);
+    const { data: links } = await supabase
+      .from("knowledge_links")
+      .select("knowledge_id")
+      .eq("entity_id", entity.id);
 
-  const knowledgeIds = links.map(l => l.knowledge_id);
+    const knowledgeIds = links.map(l => l.knowledge_id);
 
-  const { data: notes } = await supabase
-    .from("knowledge")
-    .select("content")
-    .in("id", knowledgeIds);
+    const { data: notes } = await supabase
+      .from("knowledge")
+      .select("content")
+      .in("id", knowledgeIds);
 
-  graphMemory += `\n[Entity: ${entity.name}]\n`;
+    graphMemory += `
+==============================
+ENTITY CONTEXT
+==============================
+Name: ${entity.name}
+Type: ${entity.type}
 
-  for (let note of notes || []) {
-    graphMemory += `${note.content}\n`;
+Attributes:
+${JSON.stringify(entity.attributes || {}, null, 2)}
+
+Events:
+${JSON.stringify(entity.events || [], null, 2)}
+
+Relationships:
+${JSON.stringify(entity.relationships || [], null, 2)}
+
+Responsibilities:
+${JSON.stringify(entity.responsibilities || [], null, 2)}
+
+Linked Notes:
+`;
+
+    for (let note of notes || []) {
+      graphMemory += `- ${note.content}\n`;
+    }
+
+    graphMemory += `\n`;
   }
 }
-}
+
   
   const queryEmbedding = await createEmbedding(text);
 
