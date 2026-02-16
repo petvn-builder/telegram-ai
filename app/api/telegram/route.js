@@ -322,24 +322,28 @@ if (memoryError) {
 const uniqueContents = new Set();
 const MAX_MEMORY_CHARS = 2000;
 
+const normalizedCurrentMessage = text.trim().toLowerCase();
+
 for (let item of memories || []) {
 
-  // Skip empty rows
   if (!item?.content) continue;
 
-  // Skip AI responses (avoid self-pollution)
+  // Skip AI responses
   if (item.role === "ai") continue;
 
+  const normalizedItem = item.content.trim().toLowerCase();
+
+  // 🚫 Skip echo of current message
+  if (normalizedItem === normalizedCurrentMessage) continue;
+
   // Deduplicate
-  if (uniqueContents.has(item.content)) continue;
-  uniqueContents.add(item.content);
+  if (uniqueContents.has(normalizedItem)) continue;
+  uniqueContents.add(normalizedItem);
 
   memory += `[${item.role}] ${item.content}\n`;
 
-  // Hard length guard
   if (memory.length > MAX_MEMORY_CHARS) break;
 }
-
 
 // =========================
 // GRAPH CONTEXT ENHANCEMENT
