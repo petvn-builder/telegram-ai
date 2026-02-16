@@ -293,16 +293,17 @@ for (let entity of entities) {
   }
   
 
-  // =========================
-  // =========================
-// SEARCH MEMORY (VECTOR FIRST)
+ // =========================
+// SEARCH MEMORY
 // =========================
 
 let memory = "";
 let graphMemory = "";
 
+// 1️⃣ Create embedding
 const queryEmbedding = await createEmbedding(text);
 
+// 2️⃣ Vector search
 const { data: memories, error: memoryError } = await supabase.rpc(
   "match_knowledge",
   {
@@ -316,120 +317,15 @@ if (memoryError) {
   console.error("Memory search error:", memoryError);
 }
 
+// 3️⃣ Build memory string
 for (let item of memories || []) {
   memory += `[${item.role}] ${item.content}\n`;
 }
 
 // =========================
-// GRAPH CONTEXT ENHANCEMENT (AFTER MEMORY EXISTS)
-// =========================
-
-console.log("---- START GRAPH ENHANCEMENT ----");
-
-const { data: possibleEntities, error: entityError } = await supabase
-  .from("entities")
-  .select("*")
-  .eq("user_id", chatId);
-
-if (entityError) {
-  console.error("Entity fetch error:", entityError);
-}
-
-console.log("Entities found:", possibleEntities?.length || 0);
-
-for (let entity of possibleEntities || []) {
-
-  if (!entity.name) continue;
-
-  const normalizedName = entity.name.toLowerCase().trim();
-  const normalizedMemory = memory.toLowerCase();
-
-  console.log("Checking entity:", entity.name);
-
-  if (normalizedMemory.includes(normalizedName)) {
-
-    console.log("MATCHED ENTITY:", entity.name);
-
-    const { data: links, error: linkError } = await supabase
-      .from("knowledge_links")
-      .select("knowledge_id")
-      .eq("entity_id", entity.id);
-
-    if (linkError) {
-      console.error("Link fetch error:", linkError);
-      continue;
-    }
-
-    const knowledgeIds = (links || []).map(l => l.knowledge_id);
-
-    if (knowledgeIds.length === 0) continue;
-
-    const { data: notes, error: notesError } = await supabase
-      .from("knowledge")
-      .select("content")
-      .in("id", knowledgeIds);
-
-    if (notesError) {
-      console.error("Notes fetch error:", notesError);
-      continue;
-    }
-
-    graphMemory += `
-==============================
-ENTITY CONTEXT
-==============================
-Name: ${entity.name}
-Type: ${entity.type}
-
-Attributes:
-${JSON.stringify(entity.attributes || {}, null, 2)}
-
-Events:
-${JSON.stringify(entity.events || [], null, 2)}
-
-Relationships:
-${JSON.stringify(entity.relationships || [], null, 2)}
-
-Responsibilities:
-${JSON.stringify(entity.responsibilities || [], null, 2)}
-
-Linked Notes:
-`;
-
-    for (let note of notes || []) {
-      graphMemory += `- ${note.content}\n`;
-    }
-
-    graphMemory += "\n";
-  }
-}
-
-  
-  const queryEmbedding = await createEmbedding(text);
-
-  const { data: memories, error: memoryError } = await supabase.rpc(
-    "match_knowledge",
-    {
-      query_embedding: queryEmbedding,
-      match_user: chatId,
-      match_count: 8,
-    }
-  );
-
-  if (memoryError) {
-    console.error("Memory search error:", memoryError);
-  }
-
-
-  for (let item of memories || []) {
-    memory += `[${item.role}] ${item.content}\n`;
-  }
-// =========================
 // GRAPH CONTEXT ENHANCEMENT
 // =========================
 
-console.log("---- START GRAPH ENHANCEMENT ----");
-
 const { data: possibleEntities, error: entityError } = await supabase
   .from("entities")
   .select("*")
@@ -439,8 +335,6 @@ if (entityError) {
   console.error("Entity fetch error:", entityError);
 }
 
-console.log("Entities found:", possibleEntities?.length || 0);
-
 for (let entity of possibleEntities || []) {
 
   if (!entity.name) continue;
@@ -448,35 +342,20 @@ for (let entity of possibleEntities || []) {
   const normalizedName = entity.name.toLowerCase().trim();
   const normalizedMemory = memory.toLowerCase();
 
-  console.log("Checking entity:", entity.name);
-
   if (normalizedMemory.includes(normalizedName)) {
 
-    console.log("MATCHED ENTITY:", entity.name);
-
-    const { data: links, error: linkError } = await supabase
+    const { data: links } = await supabase
       .from("knowledge_links")
       .select("knowledge_id")
       .eq("entity_id", entity.id);
 
-    if (linkError) {
-      console.error("Link fetch error:", linkError);
-      continue;
-    }
-
     const knowledgeIds = (links || []).map(l => l.knowledge_id);
+    if (!knowledgeIds.length) continue;
 
-    if (knowledgeIds.length === 0) continue;
-
-    const { data: notes, error: notesError } = await supabase
+    const { data: notes } = await supabase
       .from("knowledge")
       .select("content")
       .in("id", knowledgeIds);
-
-    if (notesError) {
-      console.error("Notes fetch error:", notesError);
-      continue;
-    }
 
     graphMemory += `
 ==============================
@@ -507,6 +386,7 @@ Linked Notes:
     graphMemory += "\n";
   }
 }
+
 
 console.log("---- GRAPH MEMORY BUILT ----");
 console.log(graphMemory || "No graph context injected");
