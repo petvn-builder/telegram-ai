@@ -389,11 +389,6 @@ for (let entity of possibleEntities || []) {
   }
 }
 
-  
-==============================
-ENTITY CONTEXT
-==============================
-
 Name: ${entity.name}
 Type: ${entity.type}
 
