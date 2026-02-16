@@ -317,33 +317,50 @@ if (memoryError) {
   console.error("Memory search error:", memoryError);
 }
 
-// 3️⃣ Build memory string
+// 3️⃣ Build memory string (clean + dedup + filtered)
+
+const uniqueContents = new Set();
+const MAX_MEMORY_CHARS = 2000;
+
 for (let item of memories || []) {
+
+  // Skip empty rows
+  if (!item?.content) continue;
+
+  // Skip AI responses (avoid self-pollution)
+  if (item.role === "ai") continue;
+
+  // Deduplicate
+  if (uniqueContents.has(item.content)) continue;
+  uniqueContents.add(item.content);
+
   memory += `[${item.role}] ${item.content}\n`;
+
+  // Hard length guard
+  if (memory.length > MAX_MEMORY_CHARS) break;
 }
+
 
 // =========================
 // GRAPH CONTEXT ENHANCEMENT
 // =========================
+const normalizedQuestion = text.toLowerCase().trim();
 
-const { data: possibleEntities, error: entityError } = await supabase
-  .from("entities")
-  .select("*")
-  .eq("user_id", chatId);
-
-if (entityError) {
-  console.error("Entity fetch error:", entityError);
-}
+let injectedEntities = 0;
+const MAX_ENTITIES = 2;
 
 for (let entity of possibleEntities || []) {
 
   if (!entity.name) continue;
 
   const normalizedName = entity.name.toLowerCase().trim();
-  const normalizedMemory = memory.toLowerCase();
 
-  if (normalizedMemory.includes(normalizedName)) {
+  if (
+    normalizedQuestion.includes(normalizedName) &&
+    injectedEntities < MAX_ENTITIES
+  ) {
 
+    // fetch links
     const { data: links } = await supabase
       .from("knowledge_links")
       .select("knowledge_id")
@@ -359,8 +376,25 @@ for (let entity of possibleEntities || []) {
 
     graphMemory += `
 ==============================
+ENTITY: ${entity.name} (${entity.type})
+==============================
+`;
+
+    for (let note of (notes || []).slice(0, 3)) {
+      graphMemory += `- ${note.content}\n`;
+    }
+
+    graphMemory += "\n";
+
+    injectedEntities++;
+  }
+}
+
+  
+==============================
 ENTITY CONTEXT
 ==============================
+
 Name: ${entity.name}
 Type: ${entity.type}
 
