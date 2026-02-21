@@ -120,6 +120,16 @@ const { data: relatedEntities } = await supabase
 .in("id", relatedEntityIds);
 
 // 4️⃣ Build summary with AI
+let summaryText = entity.summary;
+const SUMMARY_TTL_HOURS = 24;
+
+// Check freshness
+const isFresh =
+  summaryText &&
+  entity.summary_updated_at &&
+  Date.now() - new Date(entity.summary_updated_at).getTime()
+    < SUMMARY_TTL_HOURS * 60 * 60 * 1000;
+if (!isFresh) {
 const notesText = (notes || [])
 .map(n => n.content)
 .join("\n");
@@ -145,7 +155,7 @@ const summaryResponse = await askOpenAI("", summaryPrompt);
 
 // 5️⃣ Format response
 let response = `🧠 ${entity.name} (${entity.type})\n\n`;
-response += `📄 Summary:\n${summaryResponse}\n\n`;
+response += `📄 Summary:\n${summaryText}\n\n`;
 
 if (relatedEntities && relatedEntities.length > 0) {
 response += `🔗 Related:\n`;
@@ -159,6 +169,15 @@ return new Response("ok");
 
 }
 
+  // 💾 SAVE SUMMARY TO DB
+  await supabase
+    .from("entities")
+    .update({
+      summary: summaryText,
+      summary_updated_at: new Date().toISOString()
+    })
+    .eq("id", entity.id);
+}
 
   // =========================
   // DAILY LIMIT CHECK
