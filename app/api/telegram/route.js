@@ -155,7 +155,7 @@ const summaryResponse = await askOpenAI("", summaryPrompt);
 
 // 5️⃣ Format response
 let response = `🧠 ${entity.name} (${entity.type})\n\n`;
-response += `📄 Summary:\n${summaryText}\n\n`;
+response += `📄 Summary:\n${summaryResponse}\n\n`;
 
 if (relatedEntities && relatedEntities.length > 0) {
 response += `🔗 Related:\n`;
