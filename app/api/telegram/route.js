@@ -96,7 +96,6 @@ Be concise and factual. Do NOT invent information.`;
     return null;
   }
 }
-}
 
 export async function POST(req) {
   const supabase = getSupabase();
