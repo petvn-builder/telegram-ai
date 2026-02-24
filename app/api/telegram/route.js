@@ -17,38 +17,46 @@ async function generateAndSaveSummary(entity, chatId) {
   const supabase = getSupabase();
   const SUMMARY_TTL_HOURS = 24;
 
-  // Check if summary exists and is fresh
-  const isFresh =
-    entity.summary &&
-    entity.summary_updated_at &&
-    Date.now() - new Date(entity.summary_updated_at).getTime() < SUMMARY_TTL_HOURS * 60 * 60 * 1000;
+  try {
+    // Check if summary exists and is fresh
+    const isFresh =
+      entity.summary &&
+      entity.summary_updated_at &&
+      Date.now() - new Date(entity.summary_updated_at).getTime() < SUMMARY_TTL_HOURS * 60 * 60 * 1000;
 
-  if (isFresh) {
-    return entity.summary; // Use cached summary
-  }
+    if (isFresh) {
+      console.log(`[Summary] Using cached summary for entity: ${entity.name}`);
+      return entity.summary; // Use cached summary
+    }
 
-  // Fetch all related notes
-  const { data: links } = await supabase
-    .from("knowledge_links")
-    .select("knowledge_id")
-    .eq("entity_id", entity.id);
+    console.log(`[Summary] Generating new summary for entity: ${entity.name}`);
 
-  const knowledgeIds = (links || []).map(l => l.knowledge_id);
+    // Fetch all related notes
+    const { data: links, error: linksError } = await supabase
+      .from("knowledge_links")
+      .select("knowledge_id")
+      .eq("entity_id", entity.id);
 
-  let notesText = "";
-  if (knowledgeIds.length > 0) {
-    const { data: notes } = await supabase
-      .from("knowledge")
-      .select("content")
-      .in("id", knowledgeIds);
+    if (linksError) throw linksError;
 
-    notesText = (notes || [])
-      .map(n => n.content)
-      .join("\n");
-  }
+    const knowledgeIds = (links || []).map(l => l.knowledge_id);
 
-  // Generate summary with AI
-  const summaryPrompt = `
+    let notesText = "";
+    if (knowledgeIds.length > 0) {
+      const { data: notes, error: notesError } = await supabase
+        .from("knowledge")
+        .select("content")
+        .in("id", knowledgeIds);
+
+      if (notesError) throw notesError;
+
+      notesText = (notes || [])
+        .map(n => n.content)
+        .join("\n");
+    }
+
+    // Generate summary with AI
+    const summaryPrompt = `
 You are generating a concise knowledge summary for a person/project/topic in a personal knowledge graph.
 
 Entity:
@@ -61,18 +69,33 @@ ${notesText || "(No notes yet)"}
 Generate a brief summary (2-4 sentences). Focus on key facts, roles, and relationships.
 Be concise and factual. Do NOT invent information.`;
 
-  const summary = await askOpenAI("", summaryPrompt);
+    const summary = await askOpenAI("", summaryPrompt);
 
-  // Save to database
-  await supabase
-    .from("entities")
-    .update({
-      summary: summary,
-      summary_updated_at: new Date().toISOString()
-    })
-    .eq("id", entity.id);
+    console.log(`[Summary] Generated summary for ${entity.name}: ${summary.substring(0, 100)}...`);
 
-  return summary;
+    // Save to database
+    const { data, error } = await supabase
+      .from("entities")
+      .update({
+        summary: summary,
+        summary_updated_at: new Date().toISOString()
+      })
+      .eq("id", entity.id)
+      .select();
+
+    if (error) {
+      console.error(`[Summary] Error saving summary for ${entity.name}:`, error);
+      throw error;
+    }
+
+    console.log(`[Summary] Successfully saved summary for entity: ${entity.name}`);
+    return summary;
+  } catch (error) {
+    console.error(`[Summary] Error in generateAndSaveSummary for entity ${entity.name}:`, error);
+    // Don't throw - allow process to continue
+    return null;
+  }
+}
 }
 
 export async function POST(req) {
@@ -184,21 +207,25 @@ const { data: relatedEntities } = await supabase
 .in("id", relatedEntityIds);
 
 // 4️⃣ Get or generate summary
-const summary = await generateAndSaveSummary(entity, chatId);
+  try {
+    const summary = await generateAndSaveSummary(entity, chatId);
 
-// 5️⃣ Format response
-let response = `🧠 ${entity.name} (${entity.type})\n\n`;
-response += `📄 Summary:\n${summary}\n\n`;
+    // 5️⃣ Format response
+    let response = `🧠 ${entity.name} (${entity.type})\n\n`;
+    response += `📄 Summary:\n${summary || "(Generating summary...)"}\n\n`;
 
-if (relatedEntities && relatedEntities.length > 0) {
-response += `🔗 Related:\n`;
-for (let r of relatedEntities) {
-  response += `• ${r.name} (${r.type})\n`;
-}
-}
+    if (relatedEntities && relatedEntities.length > 0) {
+      response += `🔗 Related:\n`;
+      for (let r of relatedEntities) {
+        response += `• ${r.name} (${r.type})\n`;
+      }
+    }
 
-await sendTelegram(chatId, response);
-return new Response("ok");
+    await sendTelegram(chatId, response);
+  } catch (error) {
+    console.error("Error displaying entity:", error);
+    await sendTelegram(chatId, `Error displaying entity: ${error.message}`);
+  }
 
 }
 
@@ -290,9 +317,11 @@ for (let entity of entities) {
 
   let entityId;
   let isNewEntity = false;
+  let entityToSummarize = null;
 
   if (existingEntity) {
     entityId = existingEntity.id;
+    entityToSummarize = existingEntity;
 
     // 🔥 UPDATE structured fields if entity already exists
     await supabase
@@ -324,6 +353,7 @@ for (let entity of entities) {
 
     entityId = newEntity.id;
     isNewEntity = true;
+    entityToSummarize = newEntity;
   }
 
   // 🔗 Link knowledge to entity
@@ -335,10 +365,11 @@ for (let entity of entities) {
       entity_id: entityId,
     });
 
-  // 🧠 Generate summary for new or updated entity
-  if (isNewEntity || existingEntity) {
-    const updatedEntity = existingEntity || { id: entityId, name, type, summary: null, summary_updated_at: null };
-    await generateAndSaveSummary(updatedEntity, chatId);
+  // 🧠 Generate summary for new or updated entity (ASYNC - don't wait)
+  if (entityToSummarize) {
+    generateAndSaveSummary(entityToSummarize, chatId).catch(err => 
+      console.error(`[Summary] Failed to generate summary for ${entityToSummarize.name}:`, err)
+    );
   }
 }
   
