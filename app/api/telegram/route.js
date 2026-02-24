@@ -423,16 +423,16 @@ for (let entity of entities) {
   }
   console.log(`[Entity] Successfully linked ${name} to knowledge`);
 
-  // 🧠 Generate summary for new or updated entity (ASYNC - don't wait)
+  // 🧠 Generate summary for new or updated entity (SYNCHRONOUS - wait for completion)
   if (entityToSummarize) {
-    console.log(`[Entity] Triggering async summary generation for ${entityToSummarize.name} (ID: ${entityToSummarize.id})`);
-    (async () => {
-      try {
-        await generateAndSaveSummary(entityToSummarize, chatId);
-      } catch (err) {
-        console.error(`[Entity] Exception in summary generation for ${entityToSummarize.name}:`, err);
-      }
-    })();
+    console.log(`[Entity] Generating summary for ${entityToSummarize.name} (ID: ${entityToSummarize.id})`);
+    try {
+      const summary = await generateAndSaveSummary(entityToSummarize, chatId);
+      console.log(`[Entity] Summary generation complete for ${entityToSummarize.name}`);
+    } catch (err) {
+      console.error(`[Entity] Error generating summary for ${entityToSummarize.name}:`, err);
+      // Continue anyway - don't block entity creation
+    }
   } else {
     console.warn(`[Entity] No entityToSummarize for ${name}`);
   }

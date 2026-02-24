@@ -11,7 +11,7 @@ export async function GET(req: NextRequest) {
     // Get all entities for user
     const { data: entities, error: entError } = await supabase
       .from("entities")
-      .select("id, name, type, created_at")
+      .select("id, name, type, created_at, summary, summary_updated_at")
       .eq("user_id", userId)
       .order("created_at", { ascending: false })
       .limit(5)
