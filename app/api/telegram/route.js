@@ -293,12 +293,19 @@ if (!Array.isArray(entities)) {
   entities = [];
 }
 
+console.log(`[Entity] Processing ${entities.length} entities for knowledge ID: ${insertedKnowledge.id}`);
+
 // 4️⃣ Insert & Link entities (WITH structured fields)
 for (let entity of entities) {
   const name = entity.name?.trim();
   const type = entity.type?.trim();
 
-  if (!name || !type) continue;
+  if (!name || !type) {
+    console.warn(`[Entity] Skipping invalid entity: name=${name}, type=${type}`);
+    continue;
+  }
+
+  console.log(`[Entity] Processing: ${name} (${type})`);
 
   const structuredData = {
     attributes: entity.attributes || {},
@@ -307,23 +314,29 @@ for (let entity of entities) {
     responsibilities: entity.responsibilities || []
   };
 
-  const { data: existingEntity } = await supabase
+  const { data: existingEntity, error: existError } = await supabase
     .from("entities")
     .select("*")
     .eq("user_id", chatId)
     .eq("name", name)
     .maybeSingle();
 
+  if (existError) {
+    console.error(`[Entity] Error querying existing entity ${name}:`, existError);
+    continue;
+  }
+
   let entityId;
   let isNewEntity = false;
   let entityToSummarize = null;
 
   if (existingEntity) {
+    console.log(`[Entity] Found existing entity: ${name} (ID: ${existingEntity.id})`);
     entityId = existingEntity.id;
     entityToSummarize = existingEntity;
 
     // 🔥 UPDATE structured fields if entity already exists
-    await supabase
+    const { error: updateError } = await supabase
       .from("entities")
       .update({
         ...structuredData,
@@ -331,8 +344,15 @@ for (let entity of entities) {
       })
       .eq("id", entityId);
 
+    if (updateError) {
+      console.error(`[Entity] Error updating entity ${name}:`, updateError);
+      continue;
+    }
+    console.log(`[Entity] Updated existing entity: ${name}`);
+
   } else {
-    const { data: newEntity, error } = await supabase
+    console.log(`[Entity] Creating new entity: ${name}`);
+    const { data: newEntity, error: insertError } = await supabase
       .from("entities")
       .insert({
         user_id: chatId,
@@ -345,18 +365,20 @@ for (let entity of entities) {
       .select()
       .single();
 
-    if (error) {
-      console.error("Entity insert error:", error);
+    if (insertError) {
+      console.error(`[Entity] Error creating entity ${name}:`, insertError);
       continue;
     }
 
+    console.log(`[Entity] Created new entity: ${name} (ID: ${newEntity.id})`);
     entityId = newEntity.id;
     isNewEntity = true;
     entityToSummarize = newEntity;
   }
 
   // 🔗 Link knowledge to entity
-  await supabase
+  console.log(`[Entity] Creating link: knowledge ${insertedKnowledge.id} -> entity ${entityId}`);
+  const { error: linkError } = await supabase
     .from("knowledge_links")
     .insert({
       user_id: chatId,
@@ -364,8 +386,15 @@ for (let entity of entities) {
       entity_id: entityId,
     });
 
+  if (linkError) {
+    console.error(`[Entity] Error creating link for ${name}:`, linkError);
+    continue;
+  }
+  console.log(`[Entity] Successfully linked ${name} to knowledge`);
+
   // 🧠 Generate summary for new or updated entity (ASYNC - don't wait)
   if (entityToSummarize) {
+    console.log(`[Entity] Triggering async summary generation for ${name}`);
     generateAndSaveSummary(entityToSummarize, chatId).catch(err => 
       console.error(`[Summary] Failed to generate summary for ${entityToSummarize.name}:`, err)
     );
