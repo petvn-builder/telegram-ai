@@ -17,9 +17,10 @@ async function generateAndSaveSummary(entity, chatId) {
   const supabase = getSupabase();
   const SUMMARY_TTL_HOURS = 24;
 
-  try {
-    console.log(`[Summary] START: Generating summary for entity: ${entity.name} (ID: ${entity.id})`);
+  console.log(`\n========== [SUMMARY] START ==========`);
+  console.log(`[SUMMARY] Entity: ${entity.name} (${entity.id})`);
 
+  try {
     // Check if summary exists and is fresh
     const isFresh =
       entity.summary &&
@@ -27,36 +28,39 @@ async function generateAndSaveSummary(entity, chatId) {
       Date.now() - new Date(entity.summary_updated_at).getTime() < SUMMARY_TTL_HOURS * 60 * 60 * 1000;
 
     if (isFresh) {
-      console.log(`[Summary] Using cached summary for entity: ${entity.name}`);
-      return entity.summary; // Use cached summary
+      console.log(`[SUMMARY] ✅ Using cached summary`);
+      console.log(`========== [SUMMARY] END ==========\n`);
+      return entity.summary;
     }
 
-    console.log(`[Summary] No fresh cache, generating new summary for: ${entity.name}`);
+    console.log(`[SUMMARY] 🔄 Generating new summary...`);
 
     // Fetch all related notes
+    console.log(`[SUMMARY] Fetching knowledge links for entity ${entity.id}...`);
     const { data: links, error: linksError } = await supabase
       .from("knowledge_links")
       .select("knowledge_id")
       .eq("entity_id", entity.id);
 
     if (linksError) {
-      console.error(`[Summary] Error fetching links for ${entity.name}:`, linksError);
+      console.error(`[SUMMARY] ❌ Link fetch error:`, linksError);
       throw linksError;
     }
 
-    console.log(`[Summary] Found ${links?.length || 0} links for ${entity.name}`);
+    console.log(`[SUMMARY] Found ${links?.length || 0} links`);
 
     const knowledgeIds = (links || []).map(l => l.knowledge_id);
 
     let notesText = "";
     if (knowledgeIds.length > 0) {
+      console.log(`[SUMMARY] Fetching ${knowledgeIds.length} notes...`);
       const { data: notes, error: notesError } = await supabase
         .from("knowledge")
         .select("content")
         .in("id", knowledgeIds);
 
       if (notesError) {
-        console.error(`[Summary] Error fetching notes for ${entity.name}:`, notesError);
+        console.error(`[SUMMARY] ❌ Notes fetch error:`, notesError);
         throw notesError;
       }
 
@@ -64,11 +68,11 @@ async function generateAndSaveSummary(entity, chatId) {
         .map(n => n.content)
         .join("\n");
       
-      console.log(`[Summary] Fetched ${notes?.length || 0} notes for ${entity.name}`);
+      console.log(`[SUMMARY] Fetched ${notes?.length || 0} notes, content length: ${notesText.length}`);
     }
 
     // Generate summary with AI
-    console.log(`[Summary] Calling OpenAI for ${entity.name}...`);
+    console.log(`[SUMMARY] 🤖 Calling OpenAI...`);
     
     const summaryPrompt = `
 You are generating a concise knowledge summary for a person/project/topic in a personal knowledge graph.
@@ -85,15 +89,16 @@ Be concise and factual. Do NOT invent information.`;
 
     const summary = await askOpenAI("", summaryPrompt);
 
-    console.log(`[Summary] OpenAI response for ${entity.name}: ${summary?.substring(0, 100)}...`);
+    console.log(`[SUMMARY] OpenAI returned: ${summary?.substring(0, 80) || "NULL"}...`);
 
     if (!summary) {
-      console.warn(`[Summary] OpenAI returned empty summary for ${entity.name}`);
+      console.warn(`[SUMMARY] ⚠️  OpenAI returned empty/null response`);
+      console.log(`========== [SUMMARY] END ==========\n`);
       return null;
     }
 
     // Save to database
-    console.log(`[Summary] Saving summary to DB for ${entity.name}...`);
+    console.log(`[SUMMARY] 💾 Saving to DB...`);
     
     const { data, error } = await supabase
       .from("entities")
@@ -105,21 +110,23 @@ Be concise and factual. Do NOT invent information.`;
       .select();
 
     if (error) {
-      console.error(`[Summary] Error saving summary for ${entity.name}:`, error);
+      console.error(`[SUMMARY] ❌ Database update error:`, error);
+      console.error(`[SUMMARY] Error code:`, error.code);
+      console.error(`[SUMMARY] Error message:`, error.message);
+      console.error(`[SUMMARY] Error hint:`, error.hint);
       throw error;
     }
 
-    console.log(`[Summary] SUCCESS: Saved summary for entity: ${entity.name}`);
+    console.log(`[SUMMARY] ✅ SUCCESS! Saved summary for ${entity.name}`);
+    console.log(`[SUMMARY] Summary: ${summary.substring(0, 100)}...`);
+    console.log(`========== [SUMMARY] END ==========\n`);
     return summary;
   } catch (error) {
-    console.error(`[Summary] FAILED for entity ${entity.name}:`, error);
-    console.error(`[Summary] Error details:`, {
-      message: error.message,
-      code: error.code,
-      hint: error.hint,
-      details: error.details
-    });
-    // Don't throw - allow process to continue
+    console.error(`\n❌ ❌ ❌ [SUMMARY] CRITICAL ERROR ❌ ❌ ❌`);
+    console.error(`[SUMMARY] Entity: ${entity.name}`);
+    console.error(`[SUMMARY] Error:`, error);
+    console.error(`[SUMMARY] Stack:`, error.stack);
+    console.error(`========== [SUMMARY] END (WITH ERROR) ==========\n`);
     return null;
   }
 }
@@ -425,16 +432,23 @@ for (let entity of entities) {
 
   // 🧠 Generate summary for new or updated entity (SYNCHRONOUS - wait for completion)
   if (entityToSummarize) {
-    console.log(`[Entity] Generating summary for ${entityToSummarize.name} (ID: ${entityToSummarize.id})`);
+    console.log(`\n[Entity] ⏳ CALLING SUMMARY GENERATION`);
+    console.log(`[Entity] Entity object:`, {
+      id: entityToSummarize.id,
+      name: entityToSummarize.name,
+      type: entityToSummarize.type,
+      has_summary: !!entityToSummarize.summary,
+      has_updated_at: !!entityToSummarize.summary_updated_at
+    });
+    
     try {
       const summary = await generateAndSaveSummary(entityToSummarize, chatId);
-      console.log(`[Entity] Summary generation complete for ${entityToSummarize.name}`);
+      console.log(`[Entity] ✅ Summary generation returned: ${summary ? `"${summary.substring(0, 50)}..."` : "NULL"}`);
     } catch (err) {
-      console.error(`[Entity] Error generating summary for ${entityToSummarize.name}:`, err);
-      // Continue anyway - don't block entity creation
+      console.error(`[Entity] ❌ Exception in summary generation:`, err);
     }
   } else {
-    console.warn(`[Entity] No entityToSummarize for ${name}`);
+    console.warn(`[Entity] ⚠️  No entityToSummarize for ${name}`);
   }
 }
   
