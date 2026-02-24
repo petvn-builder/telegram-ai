@@ -452,7 +452,7 @@ for (let entity of entities) {
   }
 }
 
-// Send summary message
+// Send summary message with status
 const summaryMsg = `✅ Saved! Processed: ${processedCount} entities${errorCount > 0 ? `, Errors: ${errorCount}` : ''}`;
 console.log(summaryMsg);
 await sendTelegram(chatId, summaryMsg);
