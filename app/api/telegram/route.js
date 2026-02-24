@@ -18,6 +18,8 @@ async function generateAndSaveSummary(entity, chatId) {
   const SUMMARY_TTL_HOURS = 24;
 
   try {
+    console.log(`[Summary] START: Generating summary for entity: ${entity.name} (ID: ${entity.id})`);
+
     // Check if summary exists and is fresh
     const isFresh =
       entity.summary &&
@@ -29,7 +31,7 @@ async function generateAndSaveSummary(entity, chatId) {
       return entity.summary; // Use cached summary
     }
 
-    console.log(`[Summary] Generating new summary for entity: ${entity.name}`);
+    console.log(`[Summary] No fresh cache, generating new summary for: ${entity.name}`);
 
     // Fetch all related notes
     const { data: links, error: linksError } = await supabase
@@ -37,7 +39,12 @@ async function generateAndSaveSummary(entity, chatId) {
       .select("knowledge_id")
       .eq("entity_id", entity.id);
 
-    if (linksError) throw linksError;
+    if (linksError) {
+      console.error(`[Summary] Error fetching links for ${entity.name}:`, linksError);
+      throw linksError;
+    }
+
+    console.log(`[Summary] Found ${links?.length || 0} links for ${entity.name}`);
 
     const knowledgeIds = (links || []).map(l => l.knowledge_id);
 
@@ -48,14 +55,21 @@ async function generateAndSaveSummary(entity, chatId) {
         .select("content")
         .in("id", knowledgeIds);
 
-      if (notesError) throw notesError;
+      if (notesError) {
+        console.error(`[Summary] Error fetching notes for ${entity.name}:`, notesError);
+        throw notesError;
+      }
 
       notesText = (notes || [])
         .map(n => n.content)
         .join("\n");
+      
+      console.log(`[Summary] Fetched ${notes?.length || 0} notes for ${entity.name}`);
     }
 
     // Generate summary with AI
+    console.log(`[Summary] Calling OpenAI for ${entity.name}...`);
+    
     const summaryPrompt = `
 You are generating a concise knowledge summary for a person/project/topic in a personal knowledge graph.
 
@@ -71,9 +85,16 @@ Be concise and factual. Do NOT invent information.`;
 
     const summary = await askOpenAI("", summaryPrompt);
 
-    console.log(`[Summary] Generated summary for ${entity.name}: ${summary.substring(0, 100)}...`);
+    console.log(`[Summary] OpenAI response for ${entity.name}: ${summary?.substring(0, 100)}...`);
+
+    if (!summary) {
+      console.warn(`[Summary] OpenAI returned empty summary for ${entity.name}`);
+      return null;
+    }
 
     // Save to database
+    console.log(`[Summary] Saving summary to DB for ${entity.name}...`);
+    
     const { data, error } = await supabase
       .from("entities")
       .update({
@@ -88,10 +109,16 @@ Be concise and factual. Do NOT invent information.`;
       throw error;
     }
 
-    console.log(`[Summary] Successfully saved summary for entity: ${entity.name}`);
+    console.log(`[Summary] SUCCESS: Saved summary for entity: ${entity.name}`);
     return summary;
   } catch (error) {
-    console.error(`[Summary] Error in generateAndSaveSummary for entity ${entity.name}:`, error);
+    console.error(`[Summary] FAILED for entity ${entity.name}:`, error);
+    console.error(`[Summary] Error details:`, {
+      message: error.message,
+      code: error.code,
+      hint: error.hint,
+      details: error.details
+    });
     // Don't throw - allow process to continue
     return null;
   }
@@ -207,11 +234,12 @@ const { data: relatedEntities } = await supabase
 
 // 4️⃣ Get or generate summary
   try {
+    console.log(`[Entity Command] Fetching summary for ${entity.name}...`);
     const summary = await generateAndSaveSummary(entity, chatId);
 
     // 5️⃣ Format response
     let response = `🧠 ${entity.name} (${entity.type})\n\n`;
-    response += `📄 Summary:\n${summary || "(Generating summary...)"}\n\n`;
+    response += `📄 Summary:\n${summary || "(No summary generated)"}\n\n`;
 
     if (relatedEntities && relatedEntities.length > 0) {
       response += `🔗 Related:\n`;
@@ -220,10 +248,13 @@ const { data: relatedEntities } = await supabase
       }
     }
 
+    console.log(`[Entity Command] Sending response for ${entity.name}`);
     await sendTelegram(chatId, response);
+    return new Response("ok");
   } catch (error) {
-    console.error("Error displaying entity:", error);
+    console.error("[Entity Command] Error displaying entity:", error);
     await sendTelegram(chatId, `Error displaying entity: ${error.message}`);
+    return new Response("ok");
   }
 
 }
@@ -394,10 +425,16 @@ for (let entity of entities) {
 
   // 🧠 Generate summary for new or updated entity (ASYNC - don't wait)
   if (entityToSummarize) {
-    console.log(`[Entity] Triggering async summary generation for ${name}`);
-    generateAndSaveSummary(entityToSummarize, chatId).catch(err => 
-      console.error(`[Summary] Failed to generate summary for ${entityToSummarize.name}:`, err)
-    );
+    console.log(`[Entity] Triggering async summary generation for ${entityToSummarize.name} (ID: ${entityToSummarize.id})`);
+    (async () => {
+      try {
+        await generateAndSaveSummary(entityToSummarize, chatId);
+      } catch (err) {
+        console.error(`[Entity] Exception in summary generation for ${entityToSummarize.name}:`, err);
+      }
+    })();
+  } else {
+    console.warn(`[Entity] No entityToSummarize for ${name}`);
   }
 }
   
