@@ -331,7 +331,8 @@ if (!Array.isArray(entities)) {
   entities = [];
 }
 
-console.log(`[Entity] Processing ${entities.length} entities for knowledge ID: ${insertedKnowledge.id}`);
+let processedCount = 0;
+let errorCount = 0;
 
 // 4️⃣ Insert & Link entities (WITH structured fields)
 for (let entity of entities) {
@@ -339,120 +340,122 @@ for (let entity of entities) {
   const type = entity.type?.trim();
 
   if (!name || !type) {
-    console.warn(`[Entity] Skipping invalid entity: name=${name}, type=${type}`);
+    console.warn(`❌ Skipping invalid entity: name=${name}, type=${type}`);
+    errorCount++;
     continue;
   }
 
-  console.log(`[Entity] Processing: ${name} (${type})`);
+  try {
+    console.log(`📝 Processing entity: ${name}`);
+    
+    const structuredData = {
+      attributes: entity.attributes || {},
+      events: entity.events || [],
+      relationships: entity.relationships || [],
+      responsibilities: entity.responsibilities || []
+    };
 
-  const structuredData = {
-    attributes: entity.attributes || {},
-    events: entity.events || [],
-    relationships: entity.relationships || [],
-    responsibilities: entity.responsibilities || []
-  };
-
-  const { data: existingEntity, error: existError } = await supabase
-    .from("entities")
-    .select("*")
-    .eq("user_id", chatId)
-    .eq("name", name)
-    .maybeSingle();
-
-  if (existError) {
-    console.error(`[Entity] Error querying existing entity ${name}:`, existError);
-    continue;
-  }
-
-  let entityId;
-  let isNewEntity = false;
-  let entityToSummarize = null;
-
-  if (existingEntity) {
-    console.log(`[Entity] Found existing entity: ${name} (ID: ${existingEntity.id})`);
-    entityId = existingEntity.id;
-    entityToSummarize = existingEntity;
-
-    // 🔥 UPDATE structured fields if entity already exists
-    const { error: updateError } = await supabase
+    const { data: existingEntity, error: existError } = await supabase
       .from("entities")
-      .update({
-        ...structuredData,
-        summary_updated_at: null // Reset summary to force regeneration on next view
-      })
-      .eq("id", entityId);
+      .select("*")
+      .eq("user_id", chatId)
+      .eq("name", name)
+      .maybeSingle();
 
-    if (updateError) {
-      console.error(`[Entity] Error updating entity ${name}:`, updateError);
+    if (existError) {
+      console.error(`❌ Error querying entity ${name}:`, existError);
+      errorCount++;
       continue;
     }
-    console.log(`[Entity] Updated existing entity: ${name}`);
 
-  } else {
-    console.log(`[Entity] Creating new entity: ${name}`);
-    const { data: newEntity, error: insertError } = await supabase
-      .from("entities")
+    let entityId;
+    let entityToSummarize = null;
+
+    if (existingEntity) {
+      console.log(`🔄 Updating existing entity: ${name}`);
+      entityId = existingEntity.id;
+      entityToSummarize = existingEntity;
+
+      const { error: updateError } = await supabase
+        .from("entities")
+        .update({
+          ...structuredData,
+          summary_updated_at: null
+        })
+        .eq("id", entityId);
+
+      if (updateError) {
+        console.error(`❌ Error updating entity ${name}:`, updateError);
+        errorCount++;
+        continue;
+      }
+    } else {
+      console.log(`✨ Creating new entity: ${name}`);
+      const { data: newEntity, error: insertError } = await supabase
+        .from("entities")
+        .insert({
+          user_id: chatId,
+          name,
+          type,
+          ...structuredData,
+          summary: null,
+          summary_updated_at: null
+        })
+        .select()
+        .single();
+
+      if (insertError) {
+        console.error(`❌ Error creating entity ${name}:`, insertError);
+        errorCount++;
+        continue;
+      }
+
+      console.log(`✅ Created entity: ${name}`);
+      entityId = newEntity.id;
+      entityToSummarize = newEntity;
+    }
+
+    // Link knowledge to entity
+    console.log(`🔗 Linking knowledge to ${name}...`);
+    const { error: linkError } = await supabase
+      .from("knowledge_links")
       .insert({
         user_id: chatId,
-        name,
-        type,
-        ...structuredData,
-        summary: null,
-        summary_updated_at: null
-      })
-      .select()
-      .single();
+        knowledge_id: insertedKnowledge.id,
+        entity_id: entityId,
+      });
 
-    if (insertError) {
-      console.error(`[Entity] Error creating entity ${name}:`, insertError);
+    if (linkError) {
+      console.error(`❌ Error linking ${name}:`, linkError);
+      errorCount++;
       continue;
     }
 
-    console.log(`[Entity] Created new entity: ${name} (ID: ${newEntity.id})`);
-    entityId = newEntity.id;
-    isNewEntity = true;
-    entityToSummarize = newEntity;
-  }
+    console.log(`✅ Linked ${name}`);
+    processedCount++;
 
-  // 🔗 Link knowledge to entity
-  console.log(`[Entity] Creating link: knowledge ${insertedKnowledge.id} -> entity ${entityId}`);
-  const { error: linkError } = await supabase
-    .from("knowledge_links")
-    .insert({
-      user_id: chatId,
-      knowledge_id: insertedKnowledge.id,
-      entity_id: entityId,
-    });
-
-  if (linkError) {
-    console.error(`[Entity] Error creating link for ${name}:`, linkError);
-    continue;
-  }
-  console.log(`[Entity] Successfully linked ${name} to knowledge`);
-
-  // 🧠 Generate summary for new or updated entity (SYNCHRONOUS - wait for completion)
-  if (entityToSummarize) {
-    console.log(`\n[Entity] ⏳ CALLING SUMMARY GENERATION`);
-    console.log(`[Entity] Entity object:`, {
-      id: entityToSummarize.id,
-      name: entityToSummarize.name,
-      type: entityToSummarize.type,
-      has_summary: !!entityToSummarize.summary,
-      has_updated_at: !!entityToSummarize.summary_updated_at
-    });
-    
-    try {
-      const summary = await generateAndSaveSummary(entityToSummarize, chatId);
-      console.log(`[Entity] ✅ Summary generation returned: ${summary ? `"${summary.substring(0, 50)}..."` : "NULL"}`);
-    } catch (err) {
-      console.error(`[Entity] ❌ Exception in summary generation:`, err);
+    // Generate summary
+    if (entityToSummarize) {
+      console.log(`\n🧠 Generating summary for ${name}...`);
+      try {
+        const summary = await generateAndSaveSummary(entityToSummarize, chatId);
+        console.log(`✅ Summary generated for ${name}`);
+      } catch (summaryErr) {
+        console.error(`⚠️  Summary generation error for ${name}:`, summaryErr.message);
+        // Don't fail on summary error
+      }
     }
-  } else {
-    console.warn(`[Entity] ⚠️  No entityToSummarize for ${name}`);
+
+  } catch (entityErr) {
+    console.error(`❌ Unexpected error processing ${name}:`, entityErr);
+    errorCount++;
   }
 }
-  
-    await sendTelegram(chatId, "Saved and structured 🧠🔗");
+
+// Send summary message
+const summaryMsg = `✅ Saved! Processed: ${processedCount} entities${errorCount > 0 ? `, Errors: ${errorCount}` : ''}`;
+console.log(summaryMsg);
+await sendTelegram(chatId, summaryMsg);
   
     return new Response("ok");
   }
