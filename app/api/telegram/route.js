@@ -9,7 +9,71 @@ import {
   incrementUsage
 } from "@/lib/user";
 
+// ==========================================
+// GENERATE & SAVE ENTITY SUMMARY
+// ==========================================
 
+async function generateAndSaveSummary(entity, chatId) {
+  const supabase = getSupabase();
+  const SUMMARY_TTL_HOURS = 24;
+
+  // Check if summary exists and is fresh
+  const isFresh =
+    entity.summary &&
+    entity.summary_updated_at &&
+    Date.now() - new Date(entity.summary_updated_at).getTime() < SUMMARY_TTL_HOURS * 60 * 60 * 1000;
+
+  if (isFresh) {
+    return entity.summary; // Use cached summary
+  }
+
+  // Fetch all related notes
+  const { data: links } = await supabase
+    .from("knowledge_links")
+    .select("knowledge_id")
+    .eq("entity_id", entity.id);
+
+  const knowledgeIds = (links || []).map(l => l.knowledge_id);
+
+  let notesText = "";
+  if (knowledgeIds.length > 0) {
+    const { data: notes } = await supabase
+      .from("knowledge")
+      .select("content")
+      .in("id", knowledgeIds);
+
+    notesText = (notes || [])
+      .map(n => n.content)
+      .join("\n");
+  }
+
+  // Generate summary with AI
+  const summaryPrompt = `
+You are generating a concise knowledge summary for a person/project/topic in a personal knowledge graph.
+
+Entity:
+Name: ${entity.name}
+Type: ${entity.type}
+
+Related Notes:
+${notesText || "(No notes yet)"}
+
+Generate a brief summary (2-4 sentences). Focus on key facts, roles, and relationships.
+Be concise and factual. Do NOT invent information.`;
+
+  const summary = await askOpenAI("", summaryPrompt);
+
+  // Save to database
+  await supabase
+    .from("entities")
+    .update({
+      summary: summary,
+      summary_updated_at: new Date().toISOString()
+    })
+    .eq("id", entity.id);
+
+  return summary;
+}
 
 export async function POST(req) {
   const supabase = getSupabase();
@@ -119,43 +183,12 @@ const { data: relatedEntities } = await supabase
 .select("name, type")
 .in("id", relatedEntityIds);
 
-// 4️⃣ Build summary with AI
-let summaryText = entity.summary;
-const SUMMARY_TTL_HOURS = 24;
-
-// Check freshness
-const isFresh =
-  summaryText &&
-  entity.summary_updated_at &&
-  Date.now() - new Date(entity.summary_updated_at).getTime()
-    < SUMMARY_TTL_HOURS * 60 * 60 * 1000;
-if (!isFresh) {
-const notesText = (notes || [])
-.map(n => n.content)
-.join("\n");
-
-const summaryPrompt = `
-You are generating a structured knowledge page.
-
-Entity:
-Name: ${entity.name}
-Type: ${entity.type}
-
-Notes:
-${notesText}
-
-Generate:
-1. Short summary (2-4 sentences)
-2. Key insights
-3. Important facts
-Keep it concise.
-`;
-
-const summaryResponse = await askOpenAI("", summaryPrompt);
+// 4️⃣ Get or generate summary
+const summary = await generateAndSaveSummary(entity, chatId);
 
 // 5️⃣ Format response
 let response = `🧠 ${entity.name} (${entity.type})\n\n`;
-response += `📄 Summary:\n${summaryResponse}\n\n`;
+response += `📄 Summary:\n${summary}\n\n`;
 
 if (relatedEntities && relatedEntities.length > 0) {
 response += `🔗 Related:\n`;
@@ -167,16 +200,6 @@ for (let r of relatedEntities) {
 await sendTelegram(chatId, response);
 return new Response("ok");
 
-}
-
-  // 💾 SAVE SUMMARY TO DB
-  await supabase
-    .from("entities")
-    .update({
-      summary: summaryText,
-      summary_updated_at: new Date().toISOString()
-    })
-    .eq("id", entity.id);
 }
 
   // =========================
@@ -260,12 +283,13 @@ for (let entity of entities) {
 
   const { data: existingEntity } = await supabase
     .from("entities")
-    .select("id")
+    .select("*")
     .eq("user_id", chatId)
     .eq("name", name)
     .maybeSingle();
 
   let entityId;
+  let isNewEntity = false;
 
   if (existingEntity) {
     entityId = existingEntity.id;
@@ -273,7 +297,10 @@ for (let entity of entities) {
     // 🔥 UPDATE structured fields if entity already exists
     await supabase
       .from("entities")
-      .update(structuredData)
+      .update({
+        ...structuredData,
+        summary_updated_at: null // Reset summary to force regeneration on next view
+      })
       .eq("id", entityId);
 
   } else {
@@ -283,7 +310,9 @@ for (let entity of entities) {
         user_id: chatId,
         name,
         type,
-        ...structuredData
+        ...structuredData,
+        summary: null,
+        summary_updated_at: null
       })
       .select()
       .single();
@@ -294,6 +323,7 @@ for (let entity of entities) {
     }
 
     entityId = newEntity.id;
+    isNewEntity = true;
   }
 
   // 🔗 Link knowledge to entity
@@ -304,6 +334,12 @@ for (let entity of entities) {
       knowledge_id: insertedKnowledge.id,
       entity_id: entityId,
     });
+
+  // 🧠 Generate summary for new or updated entity
+  if (isNewEntity || existingEntity) {
+    const updatedEntity = existingEntity || { id: entityId, name, type, summary: null, summary_updated_at: null };
+    await generateAndSaveSummary(updatedEntity, chatId);
+  }
 }
   
     await sendTelegram(chatId, "Saved and structured 🧠🔗");
@@ -371,7 +407,7 @@ for (let item of memories || []) {
 // fetch entities once
 const { data: possibleEntities } = await supabase
   .from("entities")
-  .select("id, name, type")
+  .select("*")
   .eq("user_id", chatId);
 
 const normalizedQuestion = text.toLowerCase().trim();
@@ -390,23 +426,33 @@ for (let entity of possibleEntities || []) {
     injectedEntities < MAX_ENTITIES
   ) {
 
+    // Use cached summary if available
+    let entityContext = `${entity.name} (${entity.type})`;
+    
+    if (entity.summary) {
+      entityContext += `\nSummary: ${entity.summary}`;
+    }
+
+    graphMemory += entityContext + "\n";
+
+    // Add related notes if summary is not fresh
     const { data: links } = await supabase
       .from("knowledge_links")
       .select("knowledge_id")
       .eq("entity_id", entity.id);
 
     const knowledgeIds = (links || []).map(l => l.knowledge_id);
-    if (!knowledgeIds.length) continue;
+    if (knowledgeIds.length) {
 
-    const { data: notes } = await supabase
-      .from("knowledge")
-      .select("content")
-      .in("id", knowledgeIds);
+      const { data: notes } = await supabase
+        .from("knowledge")
+        .select("content")
+        .in("id", knowledgeIds)
+        .limit(2); // Limit to 2 most recent
 
-    graphMemory += `${entity.name} (${entity.type})\n`;
-
-    for (let note of (notes || []).slice(0, 3)) {
-      graphMemory += `- ${note.content}\n`;
+      for (let note of (notes || [])) {
+        graphMemory += `  - ${note.content}\n`;
+      }
     }
 
     graphMemory += "\n";
