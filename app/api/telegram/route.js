@@ -145,6 +145,20 @@ Be concise and factual. Only include facts from the provided notes. Do NOT inven
   }
 }
 
+// ==========================================
+// UUID LOOKUP HELPER
+// ==========================================
+
+async function getUuidForTelegramUser(telegramUserId) {
+  const { getSupabaseAdmin } = await import("@/lib/supabase/admin");
+  const { data } = await getSupabaseAdmin()
+    .from("user_identities")
+    .select("user_id")
+    .eq("telegram_user_id", String(telegramUserId))
+    .single();
+  return data?.user_id ?? null;
+}
+
 export async function POST(req) {
   const supabase = getSupabase();
   const body = await req.json();
@@ -156,6 +170,26 @@ export async function POST(req) {
   const text = message.text;
 
   if (!text) return new Response("ok");
+
+  // =========================
+  // START LINK COMMAND (account linking)
+  // =========================
+
+  if (text.startsWith("/start link_")) {
+    const rawToken = text.slice("/start link_".length).trim();
+    try {
+      const { consumeLinkToken } = await import("@/lib/telegram-link");
+      await consumeLinkToken(
+        rawToken,
+        message.from.id.toString(),
+        message.from.username || ""
+      );
+      await sendTelegram(chatId, "✅ Telegram linked! You can now use all commands.");
+    } catch (err) {
+      await sendTelegram(chatId, `❌ ${err.message}`);
+    }
+    return new Response("ok");
+  }
 
   // =========================
 // START COMMAND (NO LIMIT, NO SAVE)
@@ -200,6 +234,20 @@ Start by saving something important.
 }
 
 // =========================
+// UUID GUARD — all commands below require a linked account
+// =========================
+
+const userUuid = await getUuidForTelegramUser(message.from.id);
+if (!userUuid) {
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL || "the website";
+  await sendTelegram(
+    chatId,
+    `Please register at ${appUrl} and connect your Telegram in Settings first.`
+  );
+  return new Response("ok");
+}
+
+// =========================
 // ENTITY VIEW COMMAND
 // =========================
 
@@ -216,7 +264,7 @@ if (text.toLowerCase().startsWith("/entity")) {
   const { data: entity } = await supabase
     .from("entities")
     .select("*")
-    .eq("user_id", chatId)
+    .eq("user_id", userUuid)
     .ilike("name", name)
     .single();
 
@@ -329,7 +377,7 @@ if (knowledgeIds.length > 0) {
       await supabase
         .from("knowledge")
         .insert({
-          user_id: chatId,
+          user_id: userUuid,
           content,
           role: "note",
           embedding,
@@ -381,7 +429,7 @@ for (let entity of entities) {
     const { data: existingEntity, error: existError } = await supabase
       .from("entities")
       .select("*")
-      .eq("user_id", chatId)
+      .eq("user_id", userUuid)
       .eq("name", name)
       .maybeSingle();
 
@@ -417,7 +465,7 @@ for (let entity of entities) {
       const { data: newEntity, error: insertError } = await supabase
         .from("entities")
         .insert({
-          user_id: chatId,
+          user_id: userUuid,
           name,
           type,
           ...structuredData,
@@ -443,7 +491,7 @@ for (let entity of entities) {
     const { error: linkError } = await supabase
       .from("knowledge_links")
       .insert({
-        user_id: chatId,
+        user_id: userUuid,
         knowledge_id: insertedKnowledge.id,
         entity_id: entityId,
       });
@@ -504,7 +552,7 @@ const { data: memories, error: memoryError } = await supabase.rpc(
   "match_knowledge",
   {
     query_embedding: queryEmbedding,
-    match_user: chatId,
+    match_user: userUuid,
     match_count: 8,
   }
 );
@@ -549,7 +597,7 @@ for (let item of memories || []) {
 const { data: possibleEntities } = await supabase
   .from("entities")
   .select("*")
-  .eq("user_id", chatId);
+  .eq("user_id", userUuid);
 
 const normalizedQuestion = text.toLowerCase().trim();
 
@@ -650,13 +698,13 @@ console.log("--------------------------------------");
     .from("knowledge")
     .insert([
       {
-        user_id: chatId,
+        user_id: userUuid,
         content: text,
         role: "user",
         embedding: userEmbedding,
       },
       {
-        user_id: chatId,
+        user_id: userUuid,
         content: aiResponse,
         role: "ai",
         embedding: aiEmbedding,

@@ -1,19 +1,17 @@
-import { NextRequest, NextResponse } from "next/server"
+import { NextResponse } from "next/server"
+import { getSupabaseServer } from "@/lib/supabase/server"
 import { getSupabase } from "@/lib/supabase"
 import { buildGraph } from "@/lib/graph/buildGraph"
 
-export async function GET(req: NextRequest) {
+export async function GET() {
   try {
-    const { searchParams } = new URL(req.url)
-    const userId = searchParams.get("userId")
-
-    if (!userId) {
-      return NextResponse.json(
-        { error: "Missing userId" },
-        { status: 400 }
-      )
+    const authClient = await getSupabaseServer()
+    const { data: { user } } = await authClient.auth.getUser()
+    if (!user) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
-    
+
+    const userId = user.id
     const supabase = getSupabase()
 
     const { data: entities, error: entityError } = await supabase
@@ -31,25 +29,17 @@ export async function GET(req: NextRequest) {
     if (linkError) throw linkError
 
     const { data: notes, error: noteError } = await supabase
-    .from("knowledge")
-    .select("id, content, created_at")
-    .eq("user_id", userId)
+      .from("knowledge")
+      .select("id, content, created_at")
+      .eq("user_id", userId)
 
     if (noteError) throw noteError
 
-    const graph = buildGraph(
-         entities || [],
-        links || [],
-        notes || []
-        )
+    const graph = buildGraph(entities || [], links || [], notes || [])
 
     return NextResponse.json(graph)
-
   } catch (error) {
     console.error("Graph API error:", error)
-    return NextResponse.json(
-      { error: "Internal error" },
-      { status: 500 }
-    )
+    return NextResponse.json({ error: "Internal error" }, { status: 500 })
   }
 }
