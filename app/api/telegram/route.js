@@ -169,6 +169,8 @@ export async function POST(req) {
   const chatId = message.chat.id.toString();
   const text = message.text;
 
+  console.log("[TG] raw text:", JSON.stringify(text));
+
   if (!text) return new Response("ok");
 
   // =========================
