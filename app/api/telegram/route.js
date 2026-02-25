@@ -75,7 +75,7 @@ async function generateAndSaveSummary(entity, chatId) {
     console.log(`[SUMMARY] 🤖 Calling OpenAI...`);
     
     const summaryPrompt = `
-You are generating a concise knowledge summary for a person/project/topic in a personal knowledge graph.
+You are generating a structured knowledge summary for a person/project/topic in a personal knowledge graph.
 
 Entity:
 Name: ${entity.name}
@@ -84,8 +84,22 @@ Type: ${entity.type}
 Related Notes:
 ${notesText || "(No notes yet)"}
 
-Generate a brief summary (2-4 sentences). Focus on key facts, roles, and relationships.
-Be concise and factual. Do NOT invent information.`;
+Generate a structured summary using exactly this format:
+
+### Short Summary
+2-3 sentences describing who/what this entity is and their main role.
+
+### Key Insights
+- Key insight 1
+- Key insight 2
+- Key insight 3 (add more if relevant)
+
+### Important Facts
+- Name: ${entity.name}
+- Role: (role if known from notes, else omit this line)
+- (any other key facts from the notes)
+
+Be concise and factual. Only include facts from the provided notes. Do NOT invent information.`;
 
     const summary = await askOpenAI("", summaryPrompt);
 
@@ -333,6 +347,7 @@ if (!Array.isArray(entities)) {
 
 let processedCount = 0;
 let errorCount = 0;
+let processedEntities = [];
 
 // 4️⃣ Insert & Link entities (WITH structured fields)
 for (let entity of entities) {
@@ -433,6 +448,7 @@ for (let entity of entities) {
 
     console.log(`✅ Linked ${name}`);
     processedCount++;
+    processedEntities.push({ name, type });
 
     // Generate summary
     if (entityToSummarize) {
@@ -453,7 +469,11 @@ for (let entity of entities) {
 }
 
 // Send summary message with status
-const summaryMsg = `✅ Saved! Processed: ${processedCount} entities${errorCount > 0 ? `, Errors: ${errorCount}` : ''}`;
+let summaryMsg = `✅ Saved! Processed: ${processedCount} entities${errorCount > 0 ? `, Errors: ${errorCount}` : ''}`;
+if (processedEntities.length > 0) {
+  summaryMsg += `\n\n🏷️ Entities:\n`;
+  summaryMsg += processedEntities.map(e => `• ${e.name} (${e.type})`).join('\n');
+}
 console.log(summaryMsg);
 await sendTelegram(chatId, summaryMsg);
   
