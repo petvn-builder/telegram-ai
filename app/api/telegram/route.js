@@ -238,20 +238,28 @@ if (text.toLowerCase().startsWith("/entity")) {
     .select("content")
     .in("id", knowledgeIds);
 
-  // 3️⃣ Get related entities
-const { data: relatedLinks } = await supabase
-.from("knowledge_links")
-.select("entity_id")
-.in("knowledge_id", knowledgeIds);
+  // 3️⃣ Get related entities (entities sharing the same notes)
+let relatedEntities = [];
+if (knowledgeIds.length > 0) {
+  const { data: relatedLinks } = await supabase
+    .from("knowledge_links")
+    .select("entity_id")
+    .in("knowledge_id", knowledgeIds);
 
-const relatedEntityIds = relatedLinks
-.map(l => l.entity_id)
-.filter(id => id !== entity.id);
+  const relatedEntityIds = [...new Set(
+    (relatedLinks || [])
+      .map(l => l.entity_id)
+      .filter(id => id !== entity.id)
+  )];
 
-const { data: relatedEntities } = await supabase
-.from("entities")
-.select("name, type")
-.in("id", relatedEntityIds);
+  if (relatedEntityIds.length > 0) {
+    const { data: relatedData } = await supabase
+      .from("entities")
+      .select("name, type")
+      .in("id", relatedEntityIds);
+    relatedEntities = relatedData || [];
+  }
+}
 
 // 4️⃣ Get or generate summary
   try {
