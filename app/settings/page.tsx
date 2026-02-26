@@ -18,12 +18,12 @@ export default async function SettingsPage() {
     <div
       className="page-fade-in"
       style={{
-        minHeight: "calc(100vh - 52px)",
+        minHeight: "100vh",
         background: "var(--bg-base)",
-        padding: "48px 24px",
+        padding: "44px 40px",
       }}
     >
-      <div style={{ maxWidth: "560px", margin: "0 auto" }}>
+      <div style={{ maxWidth: "560px" }}>
 
         <h1 style={{ fontSize: "26px", fontWeight: 700, color: "var(--text-1)", margin: "0 0 32px", letterSpacing: "-0.015em" }}>
           Settings

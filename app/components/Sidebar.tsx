@@ -1,0 +1,315 @@
+"use client"
+
+import Link from "next/link"
+import { usePathname, useRouter } from "next/navigation"
+import { useEffect, useState } from "react"
+import { getSupabaseBrowser } from "@/lib/supabase/browser"
+import type { User } from "@supabase/supabase-js"
+
+const NAV_ITEMS = [
+  {
+    group: "NAVIGATION",
+    links: [
+      {
+        href: "/dashboard",
+        label: "Dashboard",
+        icon: (
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+            <rect x="3" y="3" width="7" height="7" rx="1" />
+            <rect x="14" y="3" width="7" height="7" rx="1" />
+            <rect x="3" y="14" width="7" height="7" rx="1" />
+            <rect x="14" y="14" width="7" height="7" rx="1" />
+          </svg>
+        ),
+      },
+      {
+        href: "/notes",
+        label: "Notes",
+        icon: (
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+            <polyline points="14 2 14 8 20 8" />
+            <line x1="16" y1="13" x2="8" y2="13" />
+            <line x1="16" y1="17" x2="8" y2="17" />
+            <polyline points="10 9 9 9 8 9" />
+          </svg>
+        ),
+      },
+      {
+        href: "/graph",
+        label: "Graph",
+        icon: (
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+            <circle cx="12" cy="5" r="2" />
+            <circle cx="5" cy="19" r="2" />
+            <circle cx="19" cy="19" r="2" />
+            <line x1="12" y1="7" x2="5" y2="17" />
+            <line x1="12" y1="7" x2="19" y2="17" />
+            <line x1="5" y1="17" x2="19" y2="17" />
+          </svg>
+        ),
+      },
+    ],
+  },
+  {
+    group: "ACCOUNT",
+    links: [
+      {
+        href: "/settings",
+        label: "Settings",
+        icon: (
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+            <circle cx="12" cy="12" r="3" />
+            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
+          </svg>
+        ),
+      },
+    ],
+  },
+]
+
+export default function Sidebar() {
+  const pathname = usePathname()
+  const router = useRouter()
+  const [user, setUser] = useState<User | null>(null)
+
+  useEffect(() => {
+    const supabase = getSupabaseBrowser()
+
+    supabase.auth.getUser().then(({ data }) => {
+      setUser(data.user)
+    })
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      setUser(session?.user ?? null)
+    })
+
+    return () => subscription.unsubscribe()
+  }, [])
+
+  async function handleSignOut() {
+    const supabase = getSupabaseBrowser()
+    await supabase.auth.signOut()
+    router.push("/login")
+    router.refresh()
+  }
+
+  const avatarLetter = user?.email?.[0]?.toUpperCase() ?? "?"
+
+  return (
+    <aside
+      style={{
+        position: "fixed",
+        top: 0,
+        left: 0,
+        bottom: 0,
+        width: "var(--sidebar-w)",
+        background: "var(--bg-sidebar)",
+        borderRight: "1px solid var(--border)",
+        display: "flex",
+        flexDirection: "column",
+        zIndex: 50,
+        overflow: "hidden",
+      }}
+    >
+      {/* Brand row */}
+      <div
+        style={{
+          padding: "20px 20px 16px",
+          borderBottom: "1px solid var(--border-subtle)",
+          flexShrink: 0,
+        }}
+      >
+        <Link
+          href={user ? "/dashboard" : "/"}
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: "9px",
+            textDecoration: "none",
+          }}
+        >
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" style={{ flexShrink: 0 }}>
+            <path
+              d="M12 2L20.66 7V17L12 22L3.34 17V7L12 2Z"
+              stroke="#6366f1"
+              strokeWidth="1.5"
+              strokeLinejoin="round"
+            />
+            <circle cx="12" cy="12" r="2.5" fill="#6366f1" />
+          </svg>
+          <span
+            style={{
+              fontSize: "15px",
+              fontWeight: 600,
+              color: "var(--text-1)",
+              letterSpacing: "-0.015em",
+            }}
+          >
+            Brain
+          </span>
+        </Link>
+      </div>
+
+      {/* Nav groups */}
+      <nav
+        style={{
+          flex: 1,
+          overflowY: "auto",
+          padding: "16px 10px",
+          display: "flex",
+          flexDirection: "column",
+          gap: "24px",
+        }}
+      >
+        {NAV_ITEMS.map(({ group, links }) => (
+          <div key={group}>
+            <p
+              style={{
+                fontSize: "11px",
+                fontWeight: 600,
+                letterSpacing: "0.08em",
+                textTransform: "uppercase",
+                color: "var(--text-3)",
+                margin: "0 0 6px 8px",
+              }}
+            >
+              {group}
+            </p>
+
+            <div style={{ display: "flex", flexDirection: "column", gap: "2px" }}>
+              {links.map(({ href, label, icon }) => {
+                const isActive = pathname === href || pathname.startsWith(href + "/")
+
+                return (
+                  <Link
+                    key={href}
+                    href={href}
+                    className="nav-link"
+                    data-active={isActive ? "true" : undefined}
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "10px",
+                      padding: "8px 10px",
+                      borderRadius: "7px",
+                      fontSize: "14px",
+                      fontWeight: isActive ? 500 : 400,
+                      color: isActive ? "var(--text-1)" : "var(--text-2)",
+                      textDecoration: "none",
+                      background: isActive ? "var(--accent-dim)" : "transparent",
+                      borderLeft: isActive
+                        ? "2px solid var(--accent)"
+                        : "2px solid transparent",
+                      transition: "color 0.15s, background 0.15s, border-color 0.15s",
+                    }}
+                  >
+                    <span
+                      style={{
+                        color: isActive ? "var(--accent)" : "var(--text-3)",
+                        display: "flex",
+                        alignItems: "center",
+                        flexShrink: 0,
+                        transition: "color 0.15s",
+                      }}
+                    >
+                      {icon}
+                    </span>
+                    {label}
+                  </Link>
+                )
+              })}
+            </div>
+          </div>
+        ))}
+      </nav>
+
+      {/* User section */}
+      <div
+        style={{
+          padding: "12px 14px",
+          borderTop: "1px solid var(--border)",
+          flexShrink: 0,
+        }}
+      >
+        {user ? (
+          <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+            <div
+              style={{
+                width: "30px",
+                height: "30px",
+                borderRadius: "50%",
+                background: "rgba(99,102,241,0.15)",
+                border: "1px solid rgba(99,102,241,0.25)",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                fontSize: "12px",
+                fontWeight: 600,
+                color: "#818cf8",
+                flexShrink: 0,
+              }}
+            >
+              {avatarLetter}
+            </div>
+
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <p
+                style={{
+                  fontSize: "12px",
+                  color: "var(--text-2)",
+                  margin: 0,
+                  overflow: "hidden",
+                  textOverflow: "ellipsis",
+                  whiteSpace: "nowrap",
+                }}
+              >
+                {user.email}
+              </p>
+              <button
+                onClick={handleSignOut}
+                style={{
+                  fontSize: "11px",
+                  color: "var(--text-3)",
+                  background: "transparent",
+                  border: "none",
+                  padding: 0,
+                  cursor: "pointer",
+                  transition: "color 0.15s",
+                  marginTop: "1px",
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.color = "var(--text-2)"
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.color = "var(--text-3)"
+                }}
+              >
+                Sign out
+              </button>
+            </div>
+          </div>
+        ) : (
+          <Link
+            href="/login"
+            style={{
+              display: "block",
+              fontSize: "13px",
+              color: "var(--text-2)",
+              textDecoration: "none",
+              padding: "7px 10px",
+              border: "1px solid var(--border)",
+              borderRadius: "7px",
+              textAlign: "center",
+              transition: "color 0.15s, border-color 0.15s",
+            }}
+          >
+            Sign in
+          </Link>
+        )}
+      </div>
+    </aside>
+  )
+}

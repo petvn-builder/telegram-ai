@@ -6,19 +6,42 @@
 }
 
 :root {
-  --bg-base:        #08080f;
-  --bg-surface:     #0e0e1b;
-  --bg-card:        #161624;
-  --bg-card-hover:  #1b1b2e;
-  --bg-elevated:    #1e1e30;
-  --border:         rgba(255, 255, 255, 0.09);
-  --border-accent:  rgba(99, 102, 241, 0.30);
-  --text-1:         #eeeef5;
-  --text-2:         #9696b0;
-  --text-3:         #6e6e92;
+  /* ── Surface hierarchy ────────────────────────────────── */
+  --bg-base:        #09090e;
+  --bg-sidebar:     #0c0c16;
+  --bg-surface:     #111119;
+  --bg-hover:       #161620;
+  --bg-card:        #111119;
+  --bg-card-hover:  #161620;
+  --bg-elevated:    #1b1b28;
+
+  /* ── Borders ─────────────────────────────────────────── */
+  --border:         rgba(255, 255, 255, 0.07);
+  --border-subtle:  rgba(255, 255, 255, 0.04);
+  --border-hover:   rgba(255, 255, 255, 0.12);
+  --border-accent:  rgba(99, 102, 241, 0.40);
+
+  /* ── Text ────────────────────────────────────────────── */
+  --text-1:         #f2f2fa;
+  --text-2:         #8888a8;
+  --text-3:         #55556a;
+
+  /* ── Accent ──────────────────────────────────────────── */
   --accent:         #6366f1;
+  --accent-hover:   #7577f5;
+  --accent-dim:     rgba(99, 102, 241, 0.12);
+  --accent-glow:    rgba(99, 102, 241, 0.35);
+
+  /* Legacy alias kept for graph page compatibility */
   --accent-bg:      rgba(99, 102, 241, 0.12);
-  --accent-glow:    rgba(99, 102, 241, 0.25);
+
+  /* ── Shadows ─────────────────────────────────────────── */
+  --shadow-sm:  0 1px 3px rgba(0, 0, 0, 0.30), 0 1px 2px rgba(0, 0, 0, 0.20);
+  --shadow-md:  0 4px 16px rgba(0, 0, 0, 0.45), 0 2px 6px rgba(0, 0, 0, 0.30);
+  --shadow-lg:  0 12px 40px rgba(0, 0, 0, 0.65), 0 4px 12px rgba(0, 0, 0, 0.40);
+
+  /* ── Layout ──────────────────────────────────────────── */
+  --sidebar-w: 220px;
 }
 
 html,
@@ -30,7 +53,7 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 
-/* Thin custom scrollbar */
+/* ── Thin custom scrollbar ───────────────────────────────── */
 * {
   scrollbar-width: thin;
   scrollbar-color: #252540 transparent;
@@ -50,10 +73,21 @@ body {
   background: #353558;
 }
 
-/* Detail panel slide-in */
-@keyframes slideInRight {
+/* ── Keyframes ───────────────────────────────────────────── */
+@keyframes fadeInUp {
   from {
-    transform: translateX(24px);
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes slideFromRight {
+  from {
+    transform: translateX(20px);
     opacity: 0;
   }
   to {
@@ -62,54 +96,63 @@ body {
   }
 }
 
-.panel-slide-in {
-  animation: slideInRight 0.22s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+@keyframes scaleIn {
+  from {
+    transform: scale(0.98);
+    opacity: 0;
+  }
+  to {
+    transform: scale(1);
+    opacity: 1;
+  }
 }
 
-/* Skeleton shimmer */
 @keyframes shimmer {
   0%   { background-position: -600px 0; }
-  100% { background-position: 600px 0; }
+  100% { background-position:  600px 0; }
 }
 
+/* ── Animation utility classes ───────────────────────────── */
+.page-enter {
+  animation: fadeInUp 0.30s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+/* Legacy alias */
+.page-fade-in {
+  animation: fadeInUp 0.30s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.panel-enter {
+  animation: slideFromRight 0.22s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+/* Legacy alias */
+.panel-slide-in {
+  animation: slideFromRight 0.22s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+/* ── Skeleton shimmer ────────────────────────────────────── */
 .skeleton {
   background: linear-gradient(
     90deg,
-    var(--bg-card) 25%,
-    #1e1e36 50%,
-    var(--bg-card) 75%
+    var(--bg-card)   25%,
+    #1e1e36          50%,
+    var(--bg-card)   75%
   );
   background-size: 1200px 100%;
   animation: shimmer 1.8s ease-in-out infinite;
 }
 
-/* ─── Page entrance ─────────────────────────────────────────────────────── */
-@keyframes fadeInUp {
-  from {
-    opacity: 0;
-    transform: translateY(6px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-.page-fade-in {
-  animation: fadeInUp 0.4s cubic-bezier(0.16, 1, 0.3, 1) both;
-}
-
-/* ─── Card hover lift ───────────────────────────────────────────────────── */
-/* Only handles transform + shadow. Background/border transitions stay inline. */
+/* ── Card hover lift ─────────────────────────────────────── */
 .card-lift {
-  transition: transform 0.2s ease-out, box-shadow 0.2s ease-out;
+  transition: transform 0.20s ease-out, box-shadow 0.20s ease-out;
 }
 .card-lift:hover {
-  transform: translateY(-1px);
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
+  transform: translateY(-3px);
+  box-shadow: var(--shadow-md);
 }
 
-/* ─── Nav link hover ────────────────────────────────────────────────────── */
+/* ── Sidebar nav link ────────────────────────────────────── */
 .nav-link {
   transition: color 0.15s, background 0.15s;
 }
@@ -118,7 +161,7 @@ body {
   background: rgba(255, 255, 255, 0.05) !important;
 }
 
-/* ─── Focus ring (accessibility) ────────────────────────────────────────── */
+/* ── Focus ring (accessibility) ──────────────────────────── */
 button:focus-visible,
 a:focus-visible {
   outline: 2px solid rgba(99, 102, 241, 0.55);
@@ -126,7 +169,7 @@ a:focus-visible {
   border-radius: 6px;
 }
 
-/* ─── Input placeholder contrast ────────────────────────────────────────── */
+/* ── Input placeholder contrast ──────────────────────────── */
 input::placeholder {
   color: var(--text-3);
 }

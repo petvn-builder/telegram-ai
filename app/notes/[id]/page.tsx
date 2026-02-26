@@ -60,12 +60,12 @@ export default function NoteDetailPage() {
     <div
       className="page-fade-in"
       style={{
-        minHeight: "calc(100vh - 52px)",
+        minHeight: "100vh",
         background: "var(--bg-base)",
-        padding: "40px 24px",
+        padding: "40px 40px",
       }}
     >
-      <div style={{ maxWidth: "680px", margin: "0 auto" }}>
+      <div style={{ maxWidth: "680px" }}>
 
         {/* Back */}
         <Link

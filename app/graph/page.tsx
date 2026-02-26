@@ -221,7 +221,7 @@ export default function GraphPage() {
   if (!data) {
     return (
       <div style={{
-        height: "calc(100vh - 52px)",
+        height: "100vh",
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
@@ -245,7 +245,7 @@ export default function GraphPage() {
 
   return (
     <div style={{
-      height: "calc(100vh - 52px)",
+      height: "100vh",
       display: "grid",
       gridTemplateColumns: "1fr 400px",
       background: "#0d0d14",
