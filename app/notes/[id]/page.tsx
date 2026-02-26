@@ -14,18 +14,18 @@ function formatDate(iso: string): string {
 }
 
 const ENTITY_COLORS: Record<string, { bg: string; text: string; border: string }> = {
-  person:   { bg: "rgba(59,130,246,0.10)",  text: "#60a5fa", border: "rgba(59,130,246,0.20)"  },
-  project:  { bg: "rgba(139,92,246,0.10)",  text: "#a78bfa", border: "rgba(139,92,246,0.20)"  },
-  company:  { bg: "rgba(245,158,11,0.10)",  text: "#fbbf24", border: "rgba(245,158,11,0.20)"  },
-  tool:     { bg: "rgba(16,185,129,0.10)",  text: "#34d399", border: "rgba(16,185,129,0.20)"  },
-  topic:    { bg: "rgba(99,102,241,0.10)",  text: "#818cf8", border: "rgba(99,102,241,0.20)"  },
-  goal:     { bg: "rgba(236,72,153,0.10)",  text: "#f472b6", border: "rgba(236,72,153,0.20)"  },
-  event:    { bg: "rgba(249,115,22,0.10)",  text: "#fb923c", border: "rgba(249,115,22,0.20)"  },
-  resource: { bg: "rgba(20,184,166,0.10)",  text: "#2dd4bf", border: "rgba(20,184,166,0.20)"  },
+  person:   { bg: "rgba(59,130,246,0.14)",  text: "#60a5fa", border: "rgba(59,130,246,0.28)"  },
+  project:  { bg: "rgba(139,92,246,0.14)",  text: "#a78bfa", border: "rgba(139,92,246,0.28)"  },
+  company:  { bg: "rgba(245,158,11,0.14)",  text: "#fbbf24", border: "rgba(245,158,11,0.28)"  },
+  tool:     { bg: "rgba(16,185,129,0.14)",  text: "#34d399", border: "rgba(16,185,129,0.28)"  },
+  topic:    { bg: "rgba(99,102,241,0.14)",  text: "#818cf8", border: "rgba(99,102,241,0.28)"  },
+  goal:     { bg: "rgba(236,72,153,0.14)",  text: "#f472b6", border: "rgba(236,72,153,0.28)"  },
+  event:    { bg: "rgba(249,115,22,0.14)",  text: "#fb923c", border: "rgba(249,115,22,0.28)"  },
+  resource: { bg: "rgba(20,184,166,0.14)",  text: "#2dd4bf", border: "rgba(20,184,166,0.28)"  },
 }
 
 function entityColor(type: string) {
-  return ENTITY_COLORS[type] ?? { bg: "rgba(255,255,255,0.06)", text: "#9090a8", border: "rgba(255,255,255,0.10)" }
+  return ENTITY_COLORS[type] ?? { bg: "rgba(255,255,255,0.09)", text: "var(--text-2)", border: "rgba(255,255,255,0.16)" }
 }
 
 function SkeletonLine({ width }: { width: string }) {
@@ -57,11 +57,14 @@ export default function NoteDetailPage() {
   }, [id])
 
   return (
-    <div style={{
-      minHeight: "calc(100vh - 52px)",
-      background: "var(--bg-base)",
-      padding: "40px 24px",
-    }}>
+    <div
+      className="page-fade-in"
+      style={{
+        minHeight: "calc(100vh - 52px)",
+        background: "var(--bg-base)",
+        padding: "40px 24px",
+      }}
+    >
       <div style={{ maxWidth: "680px", margin: "0 auto" }}>
 
         {/* Back */}
@@ -72,13 +75,13 @@ export default function NoteDetailPage() {
             alignItems: "center",
             gap: "6px",
             fontSize: "13px",
-            color: "var(--text-3)",
+            color: "var(--text-2)",
             textDecoration: "none",
             marginBottom: "28px",
             transition: "color 0.15s",
           }}
           onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.color = "var(--text-1)" }}
-          onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.color = "var(--text-3)" }}
+          onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.color = "var(--text-2)" }}
         >
           ← Notes
         </Link>
@@ -113,7 +116,7 @@ export default function NoteDetailPage() {
             <p style={{ fontSize: "14px", color: "#f87171", margin: "0 0 16px" }}>{error}</p>
             <Link
               href="/notes"
-              style={{ fontSize: "13px", color: "var(--text-3)", textDecoration: "none" }}
+              style={{ fontSize: "13px", color: "var(--text-2)", textDecoration: "none" }}
             >
               ← Back to Notes
             </Link>
@@ -133,7 +136,7 @@ export default function NoteDetailPage() {
             }}>
               <p style={{
                 fontSize: "11px",
-                color: "var(--text-3)",
+                color: "var(--text-2)",
                 margin: "0 0 20px",
                 letterSpacing: "0.02em",
               }}>
@@ -159,11 +162,11 @@ export default function NoteDetailPage() {
                 padding: "20px 28px",
               }}>
                 <p style={{
-                  fontSize: "10px",
+                  fontSize: "12px",
                   fontWeight: 600,
-                  letterSpacing: "0.07em",
+                  letterSpacing: "0.05em",
                   textTransform: "uppercase",
-                  color: "var(--text-3)",
+                  color: "var(--text-2)",
                   margin: "0 0 12px",
                 }}>
                   Linked Entities
@@ -189,7 +192,7 @@ export default function NoteDetailPage() {
                           textDecoration: "none",
                           transition: "filter 0.15s",
                         }}
-                        onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.filter = "brightness(1.2)" }}
+                        onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.filter = "brightness(1.15)" }}
                         onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.filter = "none" }}
                       >
                         {entity.name}

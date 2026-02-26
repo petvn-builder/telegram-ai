@@ -15,14 +15,17 @@ export default async function SettingsPage() {
     .maybeSingle()
 
   return (
-    <div style={{
-      minHeight: "calc(100vh - 52px)",
-      background: "var(--bg-base)",
-      padding: "48px 24px",
-    }}>
+    <div
+      className="page-fade-in"
+      style={{
+        minHeight: "calc(100vh - 52px)",
+        background: "var(--bg-base)",
+        padding: "48px 24px",
+      }}
+    >
       <div style={{ maxWidth: "560px", margin: "0 auto" }}>
 
-        <h1 style={{ fontSize: "22px", fontWeight: 600, color: "var(--text-1)", margin: "0 0 32px" }}>
+        <h1 style={{ fontSize: "26px", fontWeight: 700, color: "var(--text-1)", margin: "0 0 32px", letterSpacing: "-0.015em" }}>
           Settings
         </h1>
 
@@ -37,9 +40,9 @@ export default async function SettingsPage() {
           <h2 style={{
             fontSize: "11px",
             fontWeight: 600,
-            letterSpacing: "0.07em",
+            letterSpacing: "0.06em",
             textTransform: "uppercase",
-            color: "var(--text-3)",
+            color: "var(--text-2)",
             margin: "0 0 16px",
           }}>
             Account
@@ -66,7 +69,7 @@ export default async function SettingsPage() {
               <p style={{ fontSize: "13px", fontWeight: 500, color: "var(--text-1)", margin: "0 0 2px" }}>
                 {user.email}
               </p>
-              <p style={{ fontSize: "11px", color: "var(--text-3)", margin: 0 }}>
+              <p style={{ fontSize: "11px", color: "var(--text-2)", margin: 0 }}>
                 Supabase Auth · {user.app_metadata?.provider ?? "email"}
               </p>
             </div>
@@ -83,9 +86,9 @@ export default async function SettingsPage() {
           <h2 style={{
             fontSize: "11px",
             fontWeight: 600,
-            letterSpacing: "0.07em",
+            letterSpacing: "0.06em",
             textTransform: "uppercase",
-            color: "var(--text-3)",
+            color: "var(--text-2)",
             margin: "0 0 16px",
           }}>
             Telegram

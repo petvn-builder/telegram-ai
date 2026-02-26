@@ -15,6 +15,7 @@ export default function DashboardLinks() {
         <Link
           key={href}
           href={href}
+          className="card-lift"
           style={{
             background: "var(--bg-surface)",
             border: "1px solid var(--border)",
@@ -25,7 +26,7 @@ export default function DashboardLinks() {
             display: "block",
           }}
           onMouseEnter={(e) => {
-            (e.currentTarget as HTMLElement).style.borderColor = "rgba(255,255,255,0.12)"
+            (e.currentTarget as HTMLElement).style.borderColor = "rgba(255,255,255,0.14)"
             ;(e.currentTarget as HTMLElement).style.background = "var(--bg-card)"
           }}
           onMouseLeave={(e) => {
@@ -37,7 +38,7 @@ export default function DashboardLinks() {
           <p style={{ fontSize: "13px", fontWeight: 600, color: "var(--text-1)", margin: "0 0 4px" }}>
             {label}
           </p>
-          <p style={{ fontSize: "11px", color: "var(--text-3)", margin: 0 }}>{desc}</p>
+          <p style={{ fontSize: "11px", color: "var(--text-2)", margin: 0 }}>{desc}</p>
         </Link>
       ))}
     </div>

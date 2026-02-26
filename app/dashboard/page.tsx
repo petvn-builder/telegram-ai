@@ -28,16 +28,19 @@ export default async function DashboardPage() {
   const displayEmail = email.length > 32 ? email.slice(0, 29) + "…" : email
 
   return (
-    <div style={{
-      minHeight: "calc(100vh - 52px)",
-      background: "var(--bg-base)",
-      padding: "48px 24px",
-    }}>
+    <div
+      className="page-fade-in"
+      style={{
+        minHeight: "calc(100vh - 52px)",
+        background: "var(--bg-base)",
+        padding: "48px 24px",
+      }}
+    >
       <div style={{ maxWidth: "680px", margin: "0 auto" }}>
 
         {/* Header */}
         <div style={{ marginBottom: "40px" }}>
-          <h1 style={{ fontSize: "24px", fontWeight: 600, color: "var(--text-1)", margin: "0 0 6px" }}>
+          <h1 style={{ fontSize: "28px", fontWeight: 700, color: "var(--text-1)", margin: "0 0 6px", letterSpacing: "-0.02em" }}>
             Welcome back
           </h1>
           <p style={{ fontSize: "13px", color: "var(--text-2)", margin: 0 }}>{displayEmail}</p>
@@ -46,14 +49,15 @@ export default async function DashboardPage() {
         {/* Telegram status */}
         <div style={{
           background: "var(--bg-surface)",
-          border: identity ? "1px solid rgba(99,102,241,0.20)" : "1px solid var(--border)",
+          border: identity ? "1px solid var(--border-accent)" : "1px solid var(--border)",
           borderRadius: "16px",
           padding: "24px",
           marginBottom: "20px",
+          transition: "border-color 0.2s",
         }}>
           <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: "16px" }}>
             <div>
-              <p style={{ fontSize: "11px", fontWeight: 600, letterSpacing: "0.07em", textTransform: "uppercase", color: "var(--text-3)", margin: "0 0 8px" }}>
+              <p style={{ fontSize: "11px", fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: "var(--text-2)", margin: "0 0 8px" }}>
                 Telegram
               </p>
 
@@ -62,7 +66,7 @@ export default async function DashboardPage() {
                   <p style={{ fontSize: "14px", fontWeight: 500, color: "var(--text-1)", margin: "0 0 4px" }}>
                     @{identity.telegram_username}
                   </p>
-                  <p style={{ fontSize: "12px", color: "var(--text-3)", margin: 0 }}>
+                  <p style={{ fontSize: "12px", color: "var(--text-2)", margin: 0 }}>
                     Connected {formatDate(identity.created_at)}
                   </p>
                 </>
@@ -71,7 +75,7 @@ export default async function DashboardPage() {
                   <p style={{ fontSize: "14px", color: "var(--text-1)", margin: "0 0 4px" }}>
                     Not connected
                   </p>
-                  <p style={{ fontSize: "12px", color: "var(--text-3)", margin: 0 }}>
+                  <p style={{ fontSize: "12px", color: "var(--text-2)", margin: 0 }}>
                     Connect Telegram to start saving knowledge
                   </p>
                 </>

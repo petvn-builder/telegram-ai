@@ -6,18 +6,19 @@
 }
 
 :root {
-  --bg-base: #0d0d14;
-  --bg-surface: #12121a;
-  --bg-card: #1a1a26;
-  --bg-card-hover: #1f1f30;
-  --border: rgba(255, 255, 255, 0.07);
-  --border-accent: rgba(99, 102, 241, 0.25);
-  --text-1: #e8e8f0;
-  --text-2: #9090a8;
-  --text-3: #505068;
-  --accent: #6366f1;
-  --accent-bg: rgba(99, 102, 241, 0.10);
-  --accent-glow: rgba(99, 102, 241, 0.20);
+  --bg-base:        #08080f;
+  --bg-surface:     #0e0e1b;
+  --bg-card:        #161624;
+  --bg-card-hover:  #1b1b2e;
+  --bg-elevated:    #1e1e30;
+  --border:         rgba(255, 255, 255, 0.09);
+  --border-accent:  rgba(99, 102, 241, 0.30);
+  --text-1:         #eeeef5;
+  --text-2:         #9696b0;
+  --text-3:         #6e6e92;
+  --accent:         #6366f1;
+  --accent-bg:      rgba(99, 102, 241, 0.12);
+  --accent-glow:    rgba(99, 102, 241, 0.25);
 }
 
 html,
@@ -32,7 +33,7 @@ body {
 /* Thin custom scrollbar */
 * {
   scrollbar-width: thin;
-  scrollbar-color: #2a2a3d transparent;
+  scrollbar-color: #252540 transparent;
 }
 *::-webkit-scrollbar {
   width: 5px;
@@ -42,11 +43,11 @@ body {
   background: transparent;
 }
 *::-webkit-scrollbar-thumb {
-  background: #2a2a3d;
+  background: #252540;
   border-radius: 999px;
 }
 *::-webkit-scrollbar-thumb:hover {
-  background: #3a3a54;
+  background: #353558;
 }
 
 /* Detail panel slide-in */
@@ -75,9 +76,57 @@ body {
   background: linear-gradient(
     90deg,
     var(--bg-card) 25%,
-    #222236 50%,
+    #1e1e36 50%,
     var(--bg-card) 75%
   );
   background-size: 1200px 100%;
   animation: shimmer 1.8s ease-in-out infinite;
+}
+
+/* ─── Page entrance ─────────────────────────────────────────────────────── */
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.page-fade-in {
+  animation: fadeInUp 0.4s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+/* ─── Card hover lift ───────────────────────────────────────────────────── */
+/* Only handles transform + shadow. Background/border transitions stay inline. */
+.card-lift {
+  transition: transform 0.2s ease-out, box-shadow 0.2s ease-out;
+}
+.card-lift:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
+}
+
+/* ─── Nav link hover ────────────────────────────────────────────────────── */
+.nav-link {
+  transition: color 0.15s, background 0.15s;
+}
+.nav-link:not([data-active="true"]):hover {
+  color: var(--text-1) !important;
+  background: rgba(255, 255, 255, 0.05) !important;
+}
+
+/* ─── Focus ring (accessibility) ────────────────────────────────────────── */
+button:focus-visible,
+a:focus-visible {
+  outline: 2px solid rgba(99, 102, 241, 0.55);
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+
+/* ─── Input placeholder contrast ────────────────────────────────────────── */
+input::placeholder {
+  color: var(--text-3);
 }

@@ -19,18 +19,18 @@ function preview(content: string, len = 140) {
 }
 
 const ENTITY_COLORS: Record<string, { bg: string; text: string; border: string }> = {
-  person:   { bg: "rgba(59,130,246,0.10)",  text: "#60a5fa", border: "rgba(59,130,246,0.20)"  },
-  project:  { bg: "rgba(139,92,246,0.10)",  text: "#a78bfa", border: "rgba(139,92,246,0.20)"  },
-  company:  { bg: "rgba(245,158,11,0.10)",  text: "#fbbf24", border: "rgba(245,158,11,0.20)"  },
-  tool:     { bg: "rgba(16,185,129,0.10)",  text: "#34d399", border: "rgba(16,185,129,0.20)"  },
-  topic:    { bg: "rgba(99,102,241,0.10)",  text: "#818cf8", border: "rgba(99,102,241,0.20)"  },
-  goal:     { bg: "rgba(236,72,153,0.10)",  text: "#f472b6", border: "rgba(236,72,153,0.20)"  },
-  event:    { bg: "rgba(249,115,22,0.10)",  text: "#fb923c", border: "rgba(249,115,22,0.20)"  },
-  resource: { bg: "rgba(20,184,166,0.10)",  text: "#2dd4bf", border: "rgba(20,184,166,0.20)"  },
+  person:   { bg: "rgba(59,130,246,0.14)",  text: "#60a5fa", border: "rgba(59,130,246,0.28)"  },
+  project:  { bg: "rgba(139,92,246,0.14)",  text: "#a78bfa", border: "rgba(139,92,246,0.28)"  },
+  company:  { bg: "rgba(245,158,11,0.14)",  text: "#fbbf24", border: "rgba(245,158,11,0.28)"  },
+  tool:     { bg: "rgba(16,185,129,0.14)",  text: "#34d399", border: "rgba(16,185,129,0.28)"  },
+  topic:    { bg: "rgba(99,102,241,0.14)",  text: "#818cf8", border: "rgba(99,102,241,0.28)"  },
+  goal:     { bg: "rgba(236,72,153,0.14)",  text: "#f472b6", border: "rgba(236,72,153,0.28)"  },
+  event:    { bg: "rgba(249,115,22,0.14)",  text: "#fb923c", border: "rgba(249,115,22,0.28)"  },
+  resource: { bg: "rgba(20,184,166,0.14)",  text: "#2dd4bf", border: "rgba(20,184,166,0.28)"  },
 }
 
 function entityStyle(type: string) {
-  return ENTITY_COLORS[type] ?? { bg: "rgba(255,255,255,0.06)", text: "#9090a8", border: "rgba(255,255,255,0.10)" }
+  return ENTITY_COLORS[type] ?? { bg: "rgba(255,255,255,0.09)", text: "var(--text-2)", border: "rgba(255,255,255,0.16)" }
 }
 
 // ─── sub-components ──────────────────────────────────────────────────────────
@@ -41,7 +41,7 @@ function SkeletonCard() {
       background: "var(--bg-card)",
       border: "1px solid var(--border)",
       borderRadius: "12px",
-      padding: "16px",
+      padding: "18px",
       display: "flex",
       flexDirection: "column",
       gap: "10px",
@@ -92,20 +92,21 @@ function NoteCard({ note, selected, onClick }: NoteCardProps) {
       onClick={onClick}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
+      className="card-lift"
       style={{
         width: "100%",
         textAlign: "left",
         background: selected
-          ? "rgba(99,102,241,0.08)"
+          ? "rgba(99,102,241,0.12)"
           : hovered
           ? "var(--bg-card-hover)"
           : "var(--bg-card)",
         border: selected
-          ? "1px solid rgba(99,102,241,0.30)"
+          ? "1px solid rgba(99,102,241,0.35)"
           : "1px solid var(--border)",
-        borderLeft: selected ? "3px solid #6366f1" : "1px solid var(--border)",
+        borderLeft: selected ? "4px solid var(--accent)" : "1px solid var(--border)",
         borderRadius: "12px",
-        padding: "16px",
+        padding: "18px",
         cursor: "pointer",
         transition: "background 0.15s, border-color 0.15s",
         display: "flex",
@@ -123,7 +124,7 @@ function NoteCard({ note, selected, onClick }: NoteCardProps) {
       </p>
 
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "8px" }}>
-        <p style={{ fontSize: "11px", color: "var(--text-3)", margin: 0, flexShrink: 0 }}>
+        <p style={{ fontSize: "11px", color: "var(--text-2)", margin: 0, flexShrink: 0 }}>
           {formatDate(note.created_at)}
         </p>
 
@@ -329,7 +330,7 @@ export default function NotesPage() {
                   </span>
                   <span style={{
                     fontSize: "11px",
-                    color: "var(--text-3)",
+                    color: "var(--text-2)",
                     background: "var(--bg-card)",
                     border: "1px solid var(--border)",
                     borderRadius: "999px",
@@ -393,7 +394,7 @@ export default function NotesPage() {
       }}>
         {/* Header */}
         <div style={{ padding: "20px 16px 12px", borderBottom: "1px solid var(--border)" }}>
-          <h1 style={{ fontSize: "13px", fontWeight: 600, color: "var(--text-1)", margin: "0 0 12px" }}>
+          <h1 style={{ fontSize: "15px", fontWeight: 700, color: "var(--text-1)", margin: "0 0 12px", letterSpacing: "-0.01em" }}>
             Notes
           </h1>
 
@@ -438,11 +439,11 @@ export default function NotesPage() {
           {allEntities.length > 0 && (
             <>
               <p style={{
-                fontSize: "10px",
+                fontSize: "11px",
                 fontWeight: 600,
-                letterSpacing: "0.07em",
+                letterSpacing: "0.06em",
                 textTransform: "uppercase",
-                color: "var(--text-3)",
+                color: "var(--text-2)",
                 margin: "0 8px 8px",
               }}>
                 Entities
@@ -455,6 +456,16 @@ export default function NotesPage() {
                   <button
                     key={entity.id}
                     onClick={() => toggleEntity(entity.id)}
+                    onMouseEnter={(e) => {
+                      if (!active) {
+                        e.currentTarget.style.background = "rgba(255,255,255,0.04)"
+                      }
+                    }}
+                    onMouseLeave={(e) => {
+                      if (!active) {
+                        e.currentTarget.style.background = "transparent"
+                      }
+                    }}
                     style={{
                       width: "100%",
                       display: "flex",
@@ -472,32 +483,41 @@ export default function NotesPage() {
                   >
                     <span style={{
                       display: "flex",
-                      alignItems: "center",
-                      gap: "7px",
+                      flexDirection: "column",
                       minWidth: 0,
                     }}>
+                      <span style={{ display: "flex", alignItems: "center", gap: "7px" }}>
+                        <span style={{
+                          width: "6px",
+                          height: "6px",
+                          borderRadius: "50%",
+                          background: active ? s.text : "var(--text-3)",
+                          flexShrink: 0,
+                          transition: "background 0.12s",
+                        }} />
+                        <span style={{
+                          fontSize: "12px",
+                          color: active ? s.text : "var(--text-2)",
+                          overflow: "hidden",
+                          textOverflow: "ellipsis",
+                          whiteSpace: "nowrap",
+                          fontWeight: active ? 500 : 400,
+                        }}>
+                          {entity.name}
+                        </span>
+                      </span>
                       <span style={{
-                        width: "6px",
-                        height: "6px",
-                        borderRadius: "50%",
-                        background: active ? s.text : "var(--text-3)",
-                        flexShrink: 0,
-                        transition: "background 0.12s",
-                      }} />
-                      <span style={{
-                        fontSize: "12px",
-                        color: active ? s.text : "var(--text-2)",
-                        overflow: "hidden",
-                        textOverflow: "ellipsis",
-                        whiteSpace: "nowrap",
-                        fontWeight: active ? 500 : 400,
+                        fontSize: "10px",
+                        color: "var(--text-3)",
+                        paddingLeft: "13px",
+                        lineHeight: "1.4",
                       }}>
-                        {entity.name}
+                        {entity.type}
                       </span>
                     </span>
                     <span style={{
                       fontSize: "10px",
-                      color: "var(--text-3)",
+                      color: "var(--text-2)",
                       flexShrink: 0,
                       background: "var(--bg-card)",
                       border: "1px solid var(--border)",
@@ -545,7 +565,7 @@ export default function NotesPage() {
           alignItems: "center",
           justifyContent: "space-between",
         }}>
-          <span style={{ fontSize: "12px", color: "var(--text-2)" }}>Group by entity</span>
+          <span style={{ fontSize: "13px", color: "var(--text-2)" }}>Group by entity</span>
           <button
             onClick={() => setGroupByEntity((v) => !v)}
             style={{
@@ -591,7 +611,7 @@ export default function NotesPage() {
             gap: "16px",
             marginBottom: "16px",
           }}>
-            <span style={{ fontSize: "12px", color: "var(--text-3)" }}>
+            <span style={{ fontSize: "12px", color: "var(--text-2)" }}>
               {filteredNotes.length === notes.length
                 ? `${notes.length} notes`
                 : `${filteredNotes.length} of ${notes.length} notes`}
@@ -613,8 +633,9 @@ export default function NotesPage() {
             right: 0,
             bottom: 0,
             width: DETAIL_W,
-            background: "var(--bg-surface)",
+            background: "var(--bg-elevated)",
             borderLeft: "1px solid var(--border)",
+            boxShadow: "-4px 0 24px rgba(0, 0, 0, 0.4)",
             display: "flex",
             flexDirection: "column",
             zIndex: 40,
@@ -637,7 +658,7 @@ export default function NotesPage() {
                 href={`/notes/${selectedNote.id}`}
                 style={{
                   fontSize: "11px",
-                  color: "var(--text-3)",
+                  color: "var(--text-2)",
                   textDecoration: "none",
                   padding: "4px 8px",
                   borderRadius: "6px",
@@ -649,7 +670,7 @@ export default function NotesPage() {
                   ;(e.currentTarget as HTMLElement).style.borderColor = "rgba(255,255,255,0.15)"
                 }}
                 onMouseLeave={(e) => {
-                  (e.currentTarget as HTMLElement).style.color = "var(--text-3)"
+                  (e.currentTarget as HTMLElement).style.color = "var(--text-2)"
                   ;(e.currentTarget as HTMLElement).style.borderColor = "var(--border)"
                 }}
               >
@@ -667,7 +688,7 @@ export default function NotesPage() {
                   border: "none",
                   borderRadius: "6px",
                   cursor: "pointer",
-                  color: "var(--text-3)",
+                  color: "var(--text-2)",
                   fontSize: "14px",
                   transition: "background 0.12s, color 0.12s",
                 }}
@@ -677,7 +698,7 @@ export default function NotesPage() {
                 }}
                 onMouseLeave={(e) => {
                   e.currentTarget.style.background = "transparent"
-                  e.currentTarget.style.color = "var(--text-3)"
+                  e.currentTarget.style.color = "var(--text-2)"
                 }}
               >
                 ✕
@@ -706,11 +727,11 @@ export default function NotesPage() {
               flexShrink: 0,
             }}>
               <p style={{
-                fontSize: "10px",
+                fontSize: "12px",
                 fontWeight: 600,
-                letterSpacing: "0.07em",
+                letterSpacing: "0.05em",
                 textTransform: "uppercase",
-                color: "var(--text-3)",
+                color: "var(--text-2)",
                 margin: "0 0 10px",
               }}>
                 Linked Entities
@@ -736,7 +757,7 @@ export default function NotesPage() {
                         textDecoration: "none",
                         transition: "filter 0.15s",
                       }}
-                      onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.filter = "brightness(1.2)" }}
+                      onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.filter = "brightness(1.15)" }}
                       onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.filter = "none" }}
                       title={`View ${entity.name} in graph`}
                     >
