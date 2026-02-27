@@ -8,16 +8,30 @@ import NoteComposer from "./NoteComposer"
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-function formatDate(iso: string) {
-  return new Date(iso).toLocaleDateString("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  })
+function relativeTime(iso: string): string {
+  const diff = Date.now() - new Date(iso).getTime()
+  const mins = Math.floor(diff / 60000)
+  if (mins < 1) return "just now"
+  if (mins < 60) return `${mins}m ago`
+  const hrs = Math.floor(mins / 60)
+  if (hrs < 24) return `${hrs}h ago`
+  const days = Math.floor(hrs / 24)
+  if (days < 7) return `${days}d ago`
+  const weeks = Math.floor(days / 7)
+  if (weeks < 5) return `${weeks}w ago`
+  const months = Math.floor(days / 30)
+  return `${months}mo ago`
 }
 
-function preview(content: string, len = 160) {
-  return content.length > len ? content.slice(0, len).trimEnd() + "…" : content
+function titleAndBody(content: string): { title: string; body: string } {
+  const trimmed = content.trim()
+  const newlineIdx = trimmed.indexOf("\n")
+  if (newlineIdx === -1) {
+    return { title: trimmed.slice(0, 100), body: "" }
+  }
+  const title = trimmed.slice(0, newlineIdx).slice(0, 100)
+  const body = trimmed.slice(newlineIdx + 1).trim().replace(/\n+/g, " ").slice(0, 140)
+  return { title, body }
 }
 
 const ENTITY_COLORS: Record<string, { bg: string; text: string; border: string }> = {
@@ -49,70 +63,17 @@ function SkeletonCard() {
   return (
     <div
       style={{
-        background: "var(--bg-surface)",
-        border: "1px solid var(--border)",
-        borderRadius: "12px",
-        padding: "20px",
+        padding: "16px 0",
+        borderBottom: "1px solid var(--border-subtle)",
         display: "flex",
         flexDirection: "column",
-        gap: "12px",
+        gap: "8px",
       }}
     >
-      <div style={{ display: "flex", gap: "6px" }}>
-        <div className="skeleton" style={{ height: "20px", borderRadius: "999px", width: "64px" }} />
-        <div className="skeleton" style={{ height: "20px", borderRadius: "999px", width: "80px" }} />
-      </div>
-      <div style={{ display: "flex", flexDirection: "column", gap: "7px" }}>
-        <div className="skeleton" style={{ height: "13px", borderRadius: "6px", width: "95%" }} />
-        <div className="skeleton" style={{ height: "13px", borderRadius: "6px", width: "80%" }} />
-        <div className="skeleton" style={{ height: "13px", borderRadius: "6px", width: "65%" }} />
-      </div>
-      <div className="skeleton" style={{ height: "12px", borderRadius: "6px", width: "90px" }} />
+      <div className="skeleton" style={{ height: "14px", borderRadius: "6px", width: "70%" }} />
+      <div className="skeleton" style={{ height: "12px", borderRadius: "6px", width: "90%" }} />
+      <div className="skeleton" style={{ height: "11px", borderRadius: "6px", width: "120px" }} />
     </div>
-  )
-}
-
-function EntityBadge({ entity }: { entity: Entity }) {
-  const s = entityStyle(entity.type)
-  return (
-    <span
-      style={{
-        display: "inline-flex",
-        alignItems: "center",
-        gap: "4px",
-        padding: "3px 9px",
-        borderRadius: "999px",
-        fontSize: "11px",
-        fontWeight: 500,
-        background: s.bg,
-        color: s.text,
-        border: `1px solid ${s.border}`,
-        whiteSpace: "nowrap",
-      }}
-    >
-      {entity.name}
-    </span>
-  )
-}
-
-function SpaceBadge({ space }: { space: Space }) {
-  return (
-    <span
-      style={{
-        display: "inline-flex",
-        alignItems: "center",
-        padding: "3px 8px",
-        borderRadius: "999px",
-        fontSize: "11px",
-        fontWeight: 500,
-        background: SPACE_STYLE.bg,
-        color: SPACE_STYLE.text,
-        border: `1px solid ${SPACE_STYLE.border}`,
-        whiteSpace: "nowrap",
-      }}
-    >
-      @{space.name}
-    </span>
   )
 }
 
@@ -120,103 +81,88 @@ interface NoteCardProps {
   note: NoteWithEntities
   selected: boolean
   onClick: () => void
+  isLast: boolean
 }
 
-function NoteCard({ note, selected, onClick }: NoteCardProps) {
+function NoteCard({ note, selected, onClick, isLast }: NoteCardProps) {
   const [hovered, setHovered] = useState(false)
+  const { title, body } = titleAndBody(note.content)
+  const spaceName = note.spaces?.[0]?.name ?? null
 
   return (
     <button
       onClick={onClick}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
-      className="card-lift"
       style={{
         width: "100%",
         textAlign: "left",
-        background: selected
-          ? "var(--accent-dim)"
-          : hovered
-          ? "var(--bg-hover)"
-          : "var(--bg-surface)",
-        border: selected
-          ? "1px solid var(--border-accent)"
-          : "1px solid var(--border)",
-        borderLeft: selected
-          ? "2px solid var(--accent)"
-          : hovered
-          ? "2px solid var(--border-hover)"
-          : "2px solid transparent",
-        borderRadius: "12px",
-        padding: "20px",
+        background: selected ? "var(--accent-dim)" : hovered ? "var(--bg-surface)" : "transparent",
+        borderLeft: selected ? "2px solid var(--accent)" : "2px solid transparent",
+        borderBottom: isLast ? "none" : "1px solid var(--border-subtle)",
+        borderTop: "none",
+        borderRight: "none",
+        borderRadius: selected ? "0 6px 6px 0" : "0",
+        padding: "16px 12px 16px 14px",
         cursor: "pointer",
-        transition: "background 0.15s, border-color 0.15s",
+        transition: "background 0.12s, border-color 0.12s",
         display: "flex",
         flexDirection: "column",
-        gap: "12px",
+        gap: "5px",
       }}
     >
-      {/* Space badges — very top */}
-      {note.spaces && note.spaces.length > 0 && (
-        <div style={{ display: "flex", flexWrap: "wrap", gap: "4px" }}>
-          {note.spaces.map((s) => (
-            <SpaceBadge key={s.id} space={s} />
-          ))}
-        </div>
-      )}
-
-      {/* Entity badges */}
-      {note.entities.length > 0 && (
-        <div style={{ display: "flex", flexWrap: "wrap", gap: "5px" }}>
-          {note.entities.slice(0, 4).map((e) => (
-            <EntityBadge key={e.id} entity={e} />
-          ))}
-          {note.entities.length > 4 && (
-            <span
-              style={{
-                fontSize: "11px",
-                color: "var(--text-3)",
-                padding: "3px 6px",
-                alignSelf: "center",
-              }}
-            >
-              +{note.entities.length - 4}
-            </span>
-          )}
-        </div>
-      )}
-
-      {/* Preview text */}
+      {/* Title */}
       <p
         style={{
           fontSize: "14px",
-          lineHeight: 1.65,
-          color: "var(--text-1)",
+          fontWeight: 500,
+          lineHeight: 1.4,
+          color: selected ? "var(--text-1)" : hovered ? "var(--text-1)" : "var(--text-1)",
           margin: 0,
+          overflow: "hidden",
+          textOverflow: "ellipsis",
+          whiteSpace: "nowrap",
         }}
       >
-        {preview(note.content)}
+        {title || "Untitled"}
       </p>
 
-      {/* Footer: date + action */}
+      {/* Body preview */}
+      {body && (
+        <p
+          style={{
+            fontSize: "13px",
+            lineHeight: 1.5,
+            color: "var(--text-2)",
+            margin: 0,
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+            whiteSpace: "nowrap",
+          }}
+        >
+          {body}
+        </p>
+      )}
+
+      {/* Metadata row */}
       <div
         style={{
           display: "flex",
           alignItems: "center",
-          justifyContent: "space-between",
+          gap: "5px",
+          marginTop: "2px",
         }}
       >
-        <span style={{ fontSize: "12px", color: "var(--text-2)" }}>
-          {formatDate(note.created_at)}
-        </span>
-        <span
-          style={{
-            fontSize: "12px",
-            color: selected ? "var(--accent)" : "var(--text-3)",
-            transition: "color 0.15s",
-          }}
-        >
-          Open ↗
+        {spaceName && (
+          <>
+            <span style={{ fontSize: "11px", color: "#818cf8", fontWeight: 500 }}>
+              @{spaceName}
+            </span>
+            <span style={{ fontSize: "11px", color: "var(--text-3)" }}>·</span>
+          </>
+        )}
+        <span style={{ fontSize: "11px", color: "var(--text-3)" }}>
+          {relativeTime(note.created_at)}
         </span>
       </div>
     </button>
@@ -245,8 +191,6 @@ function NotesPageInner() {
   const [error, setError] = useState<string | null>(null)
   const [selectedNote, setSelectedNote] = useState<NoteWithEntities | null>(null)
   const [searchQuery, setSearchQuery] = useState("")
-  const [selectedEntityIds, setSelectedEntityIds] = useState<Set<string>>(new Set())
-  const [groupByEntity, setGroupByEntity] = useState(false)
   const [showComposer, setShowComposer] = useState(false)
   const [editMode, setEditMode] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(false)
@@ -272,7 +216,6 @@ function NotesPageInner() {
       })
       .then((data: NoteWithEntities[]) => {
         setNotes(data)
-        // Derive space name from first note's spaces
         if (activeSpaceId && data.length > 0) {
           const space = data[0].spaces?.find((s) => s.id === activeSpaceId)
           if (space) setActiveSpaceName(space.name)
@@ -282,7 +225,6 @@ function NotesPageInner() {
       .finally(() => setLoading(false))
   }, [activeSpaceId])
 
-  // Fetch space name separately if no notes yet (empty space)
   useEffect(() => {
     if (!activeSpaceId || activeSpaceName) return
     fetch("/api/spaces")
@@ -294,60 +236,12 @@ function NotesPageInner() {
       .catch(() => {})
   }, [activeSpaceId, activeSpaceName])
 
-  const allEntities = useMemo(() => {
-    const map = new Map<string, { entity: Entity; count: number }>()
-    for (const note of notes) {
-      for (const entity of note.entities) {
-        if (map.has(entity.id)) {
-          map.get(entity.id)!.count++
-        } else {
-          map.set(entity.id, { entity, count: 1 })
-        }
-      }
-    }
-    return [...map.values()].sort((a, b) => b.count - a.count)
-  }, [notes])
-
   const filteredNotes = useMemo(() => {
-    return notes.filter((note) => {
-      const matchesSearch =
-        searchQuery === "" ||
-        note.content.toLowerCase().includes(searchQuery.toLowerCase())
-      const matchesEntity =
-        selectedEntityIds.size === 0 ||
-        note.entities.some((e) => selectedEntityIds.has(e.id))
-      return matchesSearch && matchesEntity
-    })
-  }, [notes, searchQuery, selectedEntityIds])
-
-  const groupedNotes = useMemo(() => {
-    if (!groupByEntity) return null
-    const groups = new Map<string, { entity: Entity; notes: NoteWithEntities[] }>()
-    const ungrouped: NoteWithEntities[] = []
-
-    for (const note of filteredNotes) {
-      if (note.entities.length === 0) {
-        ungrouped.push(note)
-      } else {
-        for (const entity of note.entities) {
-          if (!groups.has(entity.id)) {
-            groups.set(entity.id, { entity, notes: [] })
-          }
-          groups.get(entity.id)!.notes.push(note)
-        }
-      }
-    }
-    return { groups: [...groups.values()], ungrouped }
-  }, [filteredNotes, groupByEntity])
-
-  function toggleEntity(id: string) {
-    setSelectedEntityIds((prev) => {
-      const next = new Set(prev)
-      if (next.has(id)) next.delete(id)
-      else next.add(id)
-      return next
-    })
-  }
+    return notes.filter((note) =>
+      searchQuery === "" ||
+      note.content.toLowerCase().includes(searchQuery.toLowerCase())
+    )
+  }, [notes, searchQuery])
 
   function handleNoteClick(note: NoteWithEntities) {
     setSelectedNote((prev) => (prev?.id === note.id ? null : note))
@@ -387,7 +281,7 @@ function NotesPageInner() {
   // ── Render helpers ────────────────────────────────────────────────────────
 
   function renderCards(items: NoteWithEntities[]) {
-    return items.map((note) => {
+    return items.map((note, idx) => {
       const isNew = note.id === justAddedId.current
       return (
         <div
@@ -399,6 +293,7 @@ function NotesPageInner() {
             note={note}
             selected={selectedNote?.id === note.id}
             onClick={() => handleNoteClick(note)}
+            isLast={idx === items.length - 1}
           />
         </div>
       )
@@ -408,7 +303,7 @@ function NotesPageInner() {
   function renderMain() {
     if (loading) {
       return (
-        <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+        <div style={{ display: "flex", flexDirection: "column" }}>
           <SkeletonCard />
           <SkeletonCard />
           <SkeletonCard />
@@ -447,15 +342,15 @@ function NotesPageInner() {
             color: "var(--text-3)",
           }}
         >
-          <span style={{ fontSize: "32px" }}>◌</span>
+          <span style={{ fontSize: "28px" }}>◌</span>
           <p style={{ fontSize: "14px", margin: 0, color: "var(--text-2)" }}>
-            {searchQuery || selectedEntityIds.size > 0
-              ? "No notes match your filter"
+            {searchQuery
+              ? "No notes match your search"
               : activeSpaceId
               ? `No notes in ${activeSpaceName ? `@${activeSpaceName}` : "this space"} yet`
               : "No notes saved yet"}
           </p>
-          {!searchQuery && selectedEntityIds.size === 0 && !activeSpaceId && (
+          {!searchQuery && !activeSpaceId && (
             <p style={{ fontSize: "13px", margin: 0, color: "var(--text-3)" }}>
               Use{" "}
               <code
@@ -475,78 +370,8 @@ function NotesPageInner() {
       )
     }
 
-    if (groupByEntity && groupedNotes) {
-      return (
-        <div style={{ display: "flex", flexDirection: "column", gap: "28px" }}>
-          {groupedNotes.groups.map(({ entity, notes: groupNotes }) => {
-            const s = entityStyle(entity.type)
-            return (
-              <div key={entity.id}>
-                <div
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: "8px",
-                    marginBottom: "12px",
-                  }}
-                >
-                  <span
-                    style={{
-                      fontSize: "11px",
-                      fontWeight: 600,
-                      letterSpacing: "0.07em",
-                      textTransform: "uppercase",
-                      color: s.text,
-                    }}
-                  >
-                    {entity.name}
-                  </span>
-                  <span
-                    style={{
-                      fontSize: "11px",
-                      color: "var(--text-2)",
-                      background: "var(--bg-surface)",
-                      border: "1px solid var(--border)",
-                      borderRadius: "999px",
-                      padding: "0 7px",
-                      lineHeight: "18px",
-                    }}
-                  >
-                    {groupNotes.length}
-                  </span>
-                </div>
-                <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
-                  {renderCards(groupNotes)}
-                </div>
-              </div>
-            )
-          })}
-          {groupedNotes.ungrouped.length > 0 && (
-            <div>
-              <div style={{ marginBottom: "12px" }}>
-                <span
-                  style={{
-                    fontSize: "11px",
-                    fontWeight: 600,
-                    letterSpacing: "0.07em",
-                    textTransform: "uppercase",
-                    color: "var(--text-3)",
-                  }}
-                >
-                  Unlinked
-                </span>
-              </div>
-              <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
-                {renderCards(groupedNotes.ungrouped)}
-              </div>
-            </div>
-          )}
-        </div>
-      )
-    }
-
     return (
-      <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+      <div style={{ display: "flex", flexDirection: "column" }}>
         {renderCards(filteredNotes)}
       </div>
     )
@@ -582,12 +407,12 @@ function NotesPageInner() {
               display: "flex",
               alignItems: "center",
               justifyContent: "space-between",
-              gap: "16px",
+              gap: "12px",
               marginBottom: "20px",
             }}
           >
-            <div style={{ display: "flex", alignItems: "baseline", gap: "10px" }}>
-              {/* Breadcrumb */}
+            {/* Title / breadcrumb */}
+            <div style={{ display: "flex", alignItems: "baseline", gap: "8px" }}>
               {activeSpaceId ? (
                 <div style={{ display: "flex", alignItems: "baseline", gap: "6px" }}>
                   <Link
@@ -610,15 +435,11 @@ function NotesPageInner() {
                     style={{
                       fontSize: "20px",
                       fontWeight: 600,
-                      color: "var(--text-1)",
+                      color: SPACE_STYLE.text,
                       letterSpacing: "-0.015em",
                     }}
                   >
-                    {activeSpaceName ? (
-                      <span style={{ color: SPACE_STYLE.text }}>@{activeSpaceName}</span>
-                    ) : (
-                      "Space"
-                    )}
+                    {activeSpaceName ? `@${activeSpaceName}` : "Space"}
                   </span>
                 </div>
               ) : (
@@ -653,219 +474,95 @@ function NotesPageInner() {
               )}
             </div>
 
-            {/* New Note button */}
-            <button
-              onClick={() => {
-                if (showComposer) {
-                  composerTopRef.current?.querySelector("textarea")?.focus()
-                  return
-                }
-                setShowComposer(true)
-              }}
-              style={{
-                display: "inline-flex",
-                alignItems: "center",
-                gap: "6px",
-                padding: "7px 14px",
-                borderRadius: "8px",
-                fontSize: "13px",
-                fontWeight: 500,
-                background: "var(--accent)",
-                color: "#fff",
-                border: "none",
-                cursor: "pointer",
-                flexShrink: 0,
-                transition: "opacity 0.15s",
-              }}
-              onMouseEnter={(e) => { e.currentTarget.style.opacity = "0.88" }}
-              onMouseLeave={(e) => { e.currentTarget.style.opacity = "1" }}
-            >
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
-                <line x1="12" y1="5" x2="12" y2="19" />
-                <line x1="5" y1="12" x2="19" y2="12" />
-              </svg>
-              New Note
-            </button>
+            {/* Right controls: search + new note */}
+            <div style={{ display: "flex", alignItems: "center", gap: "8px", flexShrink: 0 }}>
+              {/* Search */}
+              <div style={{ position: "relative" }}>
+                <span
+                  style={{
+                    position: "absolute",
+                    left: "9px",
+                    top: "50%",
+                    transform: "translateY(-50%)",
+                    color: "var(--text-3)",
+                    fontSize: "14px",
+                    pointerEvents: "none",
+                    lineHeight: 1,
+                  }}
+                >
+                  ⌕
+                </span>
+                <input
+                  type="text"
+                  placeholder="Search…"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  style={{
+                    width: "180px",
+                    background: "var(--bg-surface)",
+                    border: "1px solid var(--border)",
+                    borderRadius: "7px",
+                    padding: "7px 10px 7px 28px",
+                    fontSize: "13px",
+                    color: "var(--text-1)",
+                    outline: "none",
+                    transition: "border-color 0.15s",
+                    boxSizing: "border-box",
+                  }}
+                  onFocus={(e) => { e.currentTarget.style.borderColor = "var(--border-accent)" }}
+                  onBlur={(e) => { e.currentTarget.style.borderColor = "var(--border)" }}
+                />
+              </div>
 
-            {/* Search */}
-            <div style={{ position: "relative", flexShrink: 0 }}>
-              <span
+              {/* New note (+) button */}
+              <button
+                onClick={() => {
+                  if (showComposer) {
+                    composerTopRef.current?.querySelector("textarea")?.focus()
+                    return
+                  }
+                  setShowComposer(true)
+                }}
+                title="New note"
                 style={{
-                  position: "absolute",
-                  left: "10px",
-                  top: "50%",
-                  transform: "translateY(-50%)",
-                  color: "var(--text-3)",
-                  fontSize: "14px",
-                  pointerEvents: "none",
-                  lineHeight: 1,
+                  width: "30px",
+                  height: "30px",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  background: "transparent",
+                  border: "1px solid var(--border)",
+                  borderRadius: "7px",
+                  cursor: "pointer",
+                  color: "var(--text-2)",
+                  transition: "color 0.12s, border-color 0.12s, background 0.12s",
+                  flexShrink: 0,
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.color = "var(--text-1)"
+                  e.currentTarget.style.borderColor = "var(--border-hover)"
+                  e.currentTarget.style.background = "var(--bg-surface)"
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.color = "var(--text-2)"
+                  e.currentTarget.style.borderColor = "var(--border)"
+                  e.currentTarget.style.background = "transparent"
                 }}
               >
-                ⌕
-              </span>
-              <input
-                type="text"
-                placeholder="Search notes…"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                style={{
-                  width: "220px",
-                  background: "var(--bg-surface)",
-                  border: "1px solid var(--border)",
-                  borderRadius: "8px",
-                  padding: "8px 12px 8px 30px",
-                  fontSize: "13px",
-                  color: "var(--text-1)",
-                  outline: "none",
-                  transition: "border-color 0.15s, width 0.2s",
-                  boxSizing: "border-box",
-                }}
-                onFocus={(e) => {
-                  e.currentTarget.style.borderColor = "var(--border-accent)"
-                  e.currentTarget.style.width = "260px"
-                }}
-                onBlur={(e) => {
-                  e.currentTarget.style.borderColor = "var(--border)"
-                  e.currentTarget.style.width = "220px"
-                }}
-              />
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+                  <line x1="12" y1="5" x2="12" y2="19" />
+                  <line x1="5" y1="12" x2="19" y2="12" />
+                </svg>
+              </button>
             </div>
           </div>
-
-          {/* Filter chips row */}
-          {allEntities.length > 0 && (
-            <div
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: "6px",
-                overflowX: "auto",
-                paddingBottom: "16px",
-                scrollbarWidth: "none",
-              }}
-            >
-              {/* All chip */}
-              <button
-                onClick={() => setSelectedEntityIds(new Set())}
-                style={{
-                  flexShrink: 0,
-                  padding: "5px 13px",
-                  borderRadius: "999px",
-                  fontSize: "12px",
-                  fontWeight: selectedEntityIds.size === 0 ? 600 : 400,
-                  color: selectedEntityIds.size === 0 ? "var(--text-1)" : "var(--text-2)",
-                  background: selectedEntityIds.size === 0 ? "var(--accent-dim)" : "var(--bg-surface)",
-                  border: selectedEntityIds.size === 0
-                    ? "1px solid var(--border-accent)"
-                    : "1px solid var(--border)",
-                  cursor: "pointer",
-                  transition: "all 0.15s",
-                  whiteSpace: "nowrap",
-                }}
-              >
-                All
-              </button>
-
-              {/* Entity chips */}
-              {allEntities.map(({ entity, count }) => {
-                const active = selectedEntityIds.has(entity.id)
-                const s = entityStyle(entity.type)
-                return (
-                  <button
-                    key={entity.id}
-                    onClick={() => toggleEntity(entity.id)}
-                    style={{
-                      flexShrink: 0,
-                      display: "inline-flex",
-                      alignItems: "center",
-                      gap: "5px",
-                      padding: "5px 11px",
-                      borderRadius: "999px",
-                      fontSize: "12px",
-                      fontWeight: active ? 600 : 400,
-                      color: active ? s.text : "var(--text-2)",
-                      background: active ? s.bg : "var(--bg-surface)",
-                      border: active ? `1px solid ${s.border}` : "1px solid var(--border)",
-                      cursor: "pointer",
-                      transition: "all 0.15s",
-                      whiteSpace: "nowrap",
-                    }}
-                  >
-                    {entity.name}
-                    <span
-                      style={{
-                        fontSize: "10px",
-                        color: active ? s.text : "var(--text-3)",
-                        opacity: 0.75,
-                      }}
-                    >
-                      {count}
-                    </span>
-                  </button>
-                )
-              })}
-
-              {/* Divider */}
-              <div
-                style={{
-                  flexShrink: 0,
-                  width: "1px",
-                  height: "20px",
-                  background: "var(--border)",
-                  margin: "0 4px",
-                }}
-              />
-
-              {/* Group toggle */}
-              <button
-                onClick={() => setGroupByEntity((v) => !v)}
-                style={{
-                  flexShrink: 0,
-                  display: "inline-flex",
-                  alignItems: "center",
-                  gap: "6px",
-                  padding: "5px 11px",
-                  borderRadius: "999px",
-                  fontSize: "12px",
-                  fontWeight: groupByEntity ? 600 : 400,
-                  color: groupByEntity ? "var(--text-1)" : "var(--text-2)",
-                  background: groupByEntity ? "var(--bg-hover)" : "var(--bg-surface)",
-                  border: groupByEntity
-                    ? "1px solid var(--border-hover)"
-                    : "1px solid var(--border)",
-                  cursor: "pointer",
-                  transition: "all 0.15s",
-                  whiteSpace: "nowrap",
-                }}
-              >
-                <svg
-                  width="11"
-                  height="11"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                >
-                  <line x1="8" y1="6" x2="21" y2="6" />
-                  <line x1="8" y1="12" x2="21" y2="12" />
-                  <line x1="8" y1="18" x2="21" y2="18" />
-                  <line x1="3" y1="6" x2="3.01" y2="6" />
-                  <line x1="3" y1="12" x2="3.01" y2="12" />
-                  <line x1="3" y1="18" x2="3.01" y2="18" />
-                </svg>
-                Group
-              </button>
-            </div>
-          )}
 
           {/* Divider line */}
           <div
             style={{
               height: "1px",
               background: "var(--border-subtle)",
-              marginBottom: "20px",
+              marginBottom: "0",
             }}
           />
         </div>
@@ -878,12 +575,12 @@ function NotesPageInner() {
             padding: "0 28px 28px",
           }}
         >
-          <div style={{ maxWidth: "660px" }}>
+          <div style={{ maxWidth: "720px" }}>
             {showComposer && (
               <div
                 ref={composerTopRef}
                 style={{
-                  marginBottom: "10px",
+                  padding: "20px 0 0",
                   animation: "scaleIn 160ms cubic-bezier(0.16,1,0.3,1) both",
                 }}
               >
@@ -934,8 +631,8 @@ function NotesPageInner() {
               flexShrink: 0,
             }}
           >
-            <span style={{ fontSize: "12px", color: "var(--text-2)" }}>
-              {formatDate(selectedNote.created_at)}
+            <span style={{ fontSize: "12px", color: "var(--text-3)" }}>
+              {relativeTime(selectedNote.created_at)}
             </span>
             <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
               {!editMode && (
@@ -1077,9 +774,9 @@ function NotesPageInner() {
                         style={{
                           display: "inline-flex",
                           alignItems: "center",
-                          padding: "3px 9px",
+                          padding: "2px 8px",
                           borderRadius: "999px",
-                          fontSize: "12px",
+                          fontSize: "11px",
                           fontWeight: 500,
                           background: SPACE_STYLE.bg,
                           color: SPACE_STYLE.text,
@@ -1122,14 +819,14 @@ function NotesPageInner() {
               <p
                 style={{
                   fontSize: "11px",
-                  fontWeight: 600,
-                  letterSpacing: "0.08em",
+                  fontWeight: 500,
+                  letterSpacing: "0.04em",
                   textTransform: "uppercase",
                   color: "var(--text-3)",
                   margin: "0 0 10px",
                 }}
               >
-                Linked Entities
+                Linked
               </p>
               <div style={{ display: "flex", flexWrap: "wrap", gap: "6px" }}>
                 {selectedNote.entities.map((entity) => {
@@ -1142,7 +839,7 @@ function NotesPageInner() {
                         display: "inline-flex",
                         alignItems: "center",
                         gap: "5px",
-                        padding: "4px 10px",
+                        padding: "3px 9px",
                         borderRadius: "999px",
                         fontSize: "12px",
                         fontWeight: 500,
@@ -1161,7 +858,7 @@ function NotesPageInner() {
                       title={`View ${entity.name} in graph`}
                     >
                       {entity.name}
-                      <span style={{ opacity: 0.6, fontSize: "10px" }}>{entity.type}</span>
+                      <span style={{ opacity: 0.5, fontSize: "10px" }}>{entity.type}</span>
                     </Link>
                   )
                 })}
@@ -1180,7 +877,7 @@ function NotesPageInner() {
                   transition: "opacity 0.15s",
                 }}
                 onMouseEnter={(e) => {
-                  ;(e.currentTarget as HTMLElement).style.opacity = "0.75"
+                  ;(e.currentTarget as HTMLElement).style.opacity = "0.7"
                 }}
                 onMouseLeave={(e) => {
                   ;(e.currentTarget as HTMLElement).style.opacity = "1"

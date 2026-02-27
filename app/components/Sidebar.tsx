@@ -7,71 +7,50 @@ import { getSupabaseBrowser } from "@/lib/supabase/browser"
 import type { User } from "@supabase/supabase-js"
 import type { Space } from "@/app/notes/types"
 
-const NAV_ITEMS = [
+const PRIMARY_LINKS = [
   {
-    group: "NAVIGATION",
-    links: [
-      {
-        href: "/dashboard",
-        label: "Dashboard",
-        icon: (
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
-            <rect x="3" y="3" width="7" height="7" rx="1" />
-            <rect x="14" y="3" width="7" height="7" rx="1" />
-            <rect x="3" y="14" width="7" height="7" rx="1" />
-            <rect x="14" y="14" width="7" height="7" rx="1" />
-          </svg>
-        ),
-      },
-      {
-        href: "/notes",
-        label: "Notes",
-        icon: (
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-            <polyline points="14 2 14 8 20 8" />
-            <line x1="16" y1="13" x2="8" y2="13" />
-            <line x1="16" y1="17" x2="8" y2="17" />
-            <polyline points="10 9 9 9 8 9" />
-          </svg>
-        ),
-      },
-      {
-        href: "/graph",
-        label: "Graph",
-        icon: (
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
-            <circle cx="12" cy="5" r="2" />
-            <circle cx="5" cy="19" r="2" />
-            <circle cx="19" cy="19" r="2" />
-            <line x1="12" y1="7" x2="5" y2="17" />
-            <line x1="12" y1="7" x2="19" y2="17" />
-            <line x1="5" y1="17" x2="19" y2="17" />
-          </svg>
-        ),
-      },
-    ],
+    href: "/notes",
+    label: "Notes",
+    icon: (
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+        <polyline points="14 2 14 8 20 8" />
+        <line x1="16" y1="13" x2="8" y2="13" />
+        <line x1="16" y1="17" x2="8" y2="17" />
+        <polyline points="10 9 9 9 8 9" />
+      </svg>
+    ),
   },
   {
-    group: "ACCOUNT",
-    links: [
-      {
-        href: "/settings",
-        label: "Settings",
-        icon: (
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
-            <circle cx="12" cy="12" r="3" />
-            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
-          </svg>
-        ),
-      },
-    ],
+    href: "/graph",
+    label: "Graph",
+    icon: (
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+        <circle cx="12" cy="5" r="2" />
+        <circle cx="5" cy="19" r="2" />
+        <circle cx="19" cy="19" r="2" />
+        <line x1="12" y1="7" x2="5" y2="17" />
+        <line x1="12" y1="7" x2="19" y2="17" />
+        <line x1="5" y1="17" x2="19" y2="17" />
+      </svg>
+    ),
   },
 ]
 
+const SETTINGS_LINK = {
+  href: "/settings",
+  label: "Settings",
+  icon: (
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="12" cy="12" r="3" />
+      <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
+    </svg>
+  ),
+}
+
 function SunIcon() {
   return (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
       <circle cx="12" cy="12" r="4" />
       <line x1="12" y1="2" x2="12" y2="4" />
       <line x1="12" y1="20" x2="12" y2="22" />
@@ -87,9 +66,58 @@ function SunIcon() {
 
 function MoonIcon() {
   return (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
       <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
     </svg>
+  )
+}
+
+function NavLink({ href, label, icon, isActive }: { href: string; label: string; icon: React.ReactNode; isActive: boolean }) {
+  return (
+    <Link
+      href={href}
+      className="nav-link"
+      data-active={isActive ? "true" : undefined}
+      style={{
+        display: "flex",
+        alignItems: "center",
+        gap: "9px",
+        padding: "7px 10px",
+        borderRadius: "7px",
+        fontSize: "14px",
+        fontWeight: isActive ? 500 : 400,
+        color: isActive ? "var(--text-1)" : "var(--text-2)",
+        textDecoration: "none",
+        background: isActive ? "rgba(99,102,241,0.08)" : "transparent",
+        borderLeft: isActive ? "2px solid var(--accent)" : "2px solid transparent",
+        transition: "color 0.15s, background 0.15s, border-color 0.15s",
+      }}
+    >
+      <span
+        style={{
+          color: isActive ? "var(--accent)" : "var(--text-3)",
+          display: "flex",
+          alignItems: "center",
+          flexShrink: 0,
+          transition: "color 0.15s",
+        }}
+      >
+        {icon}
+      </span>
+      {label}
+    </Link>
+  )
+}
+
+function Divider() {
+  return (
+    <div
+      style={{
+        height: "1px",
+        background: "var(--border-subtle)",
+        margin: "6px 8px",
+      }}
+    />
   )
 }
 
@@ -142,7 +170,6 @@ function SidebarInner() {
     return () => subscription.unsubscribe()
   }, [])
 
-  // Load spaces when user is available
   useEffect(() => {
     if (!user) return
     fetch("/api/spaces")
@@ -187,7 +214,7 @@ function SidebarInner() {
         }}
       >
         <Link
-          href={user ? "/dashboard" : "/"}
+          href={user ? "/notes" : "/"}
           style={{
             display: "flex",
             alignItems: "center",
@@ -239,203 +266,140 @@ function SidebarInner() {
         </button>
       </div>
 
-      {/* Nav groups */}
+      {/* Nav */}
       <nav
         style={{
           flex: 1,
           overflowY: "auto",
-          padding: "16px 10px",
+          padding: "12px 10px",
           display: "flex",
           flexDirection: "column",
-          gap: "24px",
+          gap: "2px",
         }}
       >
-        {/* Static nav items */}
-        {NAV_ITEMS.map(({ group, links }) => (
-          <div key={group}>
-            <p
-              style={{
-                fontSize: "11px",
-                fontWeight: 600,
-                letterSpacing: "0.08em",
-                textTransform: "uppercase",
-                color: "var(--text-3)",
-                margin: "0 0 6px 8px",
-              }}
-            >
-              {group}
-            </p>
+        {/* Primary links: Notes, Graph */}
+        {PRIMARY_LINKS.map(({ href, label, icon }) => {
+          const isActive = pathname === href || pathname.startsWith(href + "/")
+          return (
+            <NavLink key={href} href={href} label={label} icon={icon} isActive={isActive} />
+          )
+        })}
 
-            <div style={{ display: "flex", flexDirection: "column", gap: "2px" }}>
-              {links.map(({ href, label, icon }) => {
-                const isActive = pathname === href || pathname.startsWith(href + "/")
-
-                return (
-                  <Link
-                    key={href}
-                    href={href}
-                    className="nav-link"
-                    data-active={isActive ? "true" : undefined}
-                    style={{
-                      display: "flex",
-                      alignItems: "center",
-                      gap: "10px",
-                      padding: "8px 10px",
-                      borderRadius: "7px",
-                      fontSize: "14px",
-                      fontWeight: isActive ? 500 : 400,
-                      color: isActive ? "var(--text-1)" : "var(--text-2)",
-                      textDecoration: "none",
-                      background: isActive ? "var(--accent-dim)" : "transparent",
-                      borderLeft: isActive
-                        ? "2px solid var(--accent)"
-                        : "2px solid transparent",
-                      transition: "color 0.15s, background 0.15s, border-color 0.15s",
-                    }}
-                  >
-                    <span
-                      style={{
-                        color: isActive ? "var(--accent)" : "var(--text-3)",
-                        display: "flex",
-                        alignItems: "center",
-                        flexShrink: 0,
-                        transition: "color 0.15s",
-                      }}
-                    >
-                      {icon}
-                    </span>
-                    {label}
-                  </Link>
-                )
-              })}
+        {/* Spaces section */}
+        {spaces.length > 0 && (
+          <>
+            <div style={{ margin: "8px 0" }}>
+              <Divider />
             </div>
 
-            {/* Spaces section — inject after NAVIGATION group */}
-            {group === "NAVIGATION" && spaces.length > 0 && (
-              <div style={{ marginTop: "20px" }}>
-                {/* Divider */}
-                <div
-                  style={{
-                    height: "1px",
-                    background: "var(--border-subtle)",
-                    margin: "0 8px 16px",
-                  }}
-                />
+            <button
+              onClick={() => setSpacesOpen((v) => !v)}
+              style={{
+                width: "100%",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                padding: "5px 10px",
+                background: "transparent",
+                border: "none",
+                cursor: "pointer",
+                color: "var(--text-3)",
+                borderRadius: "6px",
+                transition: "color 0.15s",
+              }}
+              onMouseEnter={(e) => { e.currentTarget.style.color = "var(--text-2)" }}
+              onMouseLeave={(e) => { e.currentTarget.style.color = "var(--text-3)" }}
+            >
+              <span style={{ fontSize: "12px", fontWeight: 500, letterSpacing: "0.01em" }}>
+                Spaces
+              </span>
+              <svg
+                width="11"
+                height="11"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2.5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                style={{
+                  transform: spacesOpen ? "rotate(0deg)" : "rotate(-90deg)",
+                  transition: "transform 0.15s",
+                }}
+              >
+                <polyline points="6 9 12 15 18 9" />
+              </svg>
+            </button>
 
-                {/* Section header */}
-                <button
-                  onClick={() => setSpacesOpen((v) => !v)}
-                  style={{
-                    width: "100%",
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "space-between",
-                    padding: "0 8px",
-                    marginBottom: spacesOpen ? "6px" : "0",
-                    background: "transparent",
-                    border: "none",
-                    cursor: "pointer",
-                    color: "var(--text-3)",
-                    transition: "color 0.15s",
-                  }}
-                  onMouseEnter={(e) => { e.currentTarget.style.color = "var(--text-2)" }}
-                  onMouseLeave={(e) => { e.currentTarget.style.color = "var(--text-3)" }}
-                >
-                  <span style={{ fontSize: "11px", fontWeight: 600, letterSpacing: "0.08em", textTransform: "uppercase" }}>
-                    Spaces
-                  </span>
-                  <svg
-                    width="11"
-                    height="11"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2.5"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    style={{
-                      transform: spacesOpen ? "rotate(0deg)" : "rotate(-90deg)",
-                      transition: "transform 0.15s",
-                    }}
-                  >
-                    <polyline points="6 9 12 15 18 9" />
-                  </svg>
-                </button>
-
-                {/* Space links */}
-                {spacesOpen && (
-                  <div style={{ display: "flex", flexDirection: "column", gap: "1px" }}>
-                    {spaces.map((space) => {
-                      const isActiveSpace = pathname === "/notes" && activeSpaceId === space.id
-                      return (
-                        <Link
-                          key={space.id}
-                          href={`/notes?space=${space.id}`}
-                          style={{
-                            display: "flex",
-                            alignItems: "center",
-                            justifyContent: "space-between",
-                            padding: "7px 10px 7px 12px",
-                            borderRadius: "7px",
-                            fontSize: "13px",
-                            fontWeight: isActiveSpace ? 500 : 400,
-                            color: isActiveSpace ? "var(--text-1)" : "var(--text-2)",
-                            textDecoration: "none",
-                            background: isActiveSpace ? "rgba(99,102,241,0.10)" : "transparent",
-                            borderLeft: isActiveSpace
-                              ? "2px solid #6366f1"
-                              : "2px solid transparent",
-                            transition: "color 0.15s, background 0.15s, border-color 0.15s",
-                          }}
-                          onMouseEnter={(e) => {
-                            if (!isActiveSpace) {
-                              ;(e.currentTarget as HTMLElement).style.color = "var(--text-1)"
-                              ;(e.currentTarget as HTMLElement).style.background = "var(--bg-hover)"
-                            }
-                          }}
-                          onMouseLeave={(e) => {
-                            if (!isActiveSpace) {
-                              ;(e.currentTarget as HTMLElement).style.color = "var(--text-2)"
-                              ;(e.currentTarget as HTMLElement).style.background = "transparent"
-                            }
-                          }}
-                        >
-                          <span style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-                            <span
-                              style={{
-                                fontSize: "11px",
-                                color: isActiveSpace ? "#818cf8" : "var(--text-3)",
-                                fontWeight: 600,
-                                transition: "color 0.15s",
-                              }}
-                            >
-                              @
-                            </span>
-                            {space.name}
-                          </span>
-                          <span
-                            style={{
-                              fontSize: "11px",
-                              color: "var(--text-3)",
-                              background: "var(--bg-surface)",
-                              border: "1px solid var(--border)",
-                              borderRadius: "999px",
-                              padding: "0 6px",
-                              lineHeight: "17px",
-                              flexShrink: 0,
-                            }}
-                          >
-                            {space.note_count}
-                          </span>
-                        </Link>
-                      )
-                    })}
-                  </div>
-                )}
+            {spacesOpen && (
+              <div style={{ display: "flex", flexDirection: "column", gap: "1px" }}>
+                {spaces.map((space) => {
+                  const isActiveSpace = pathname === "/notes" && activeSpaceId === space.id
+                  return (
+                    <Link
+                      key={space.id}
+                      href={`/notes?space=${space.id}`}
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "5px",
+                        padding: "7px 10px 7px 12px",
+                        borderRadius: "7px",
+                        fontSize: "13px",
+                        fontWeight: isActiveSpace ? 500 : 400,
+                        color: isActiveSpace ? "var(--text-1)" : "var(--text-2)",
+                        textDecoration: "none",
+                        background: isActiveSpace ? "rgba(99,102,241,0.08)" : "transparent",
+                        borderLeft: isActiveSpace ? "2px solid #6366f1" : "2px solid transparent",
+                        transition: "color 0.15s, background 0.15s, border-color 0.15s",
+                      }}
+                      onMouseEnter={(e) => {
+                        if (!isActiveSpace) {
+                          ;(e.currentTarget as HTMLElement).style.color = "var(--text-1)"
+                          ;(e.currentTarget as HTMLElement).style.background = "var(--bg-hover)"
+                        }
+                      }}
+                      onMouseLeave={(e) => {
+                        if (!isActiveSpace) {
+                          ;(e.currentTarget as HTMLElement).style.color = "var(--text-2)"
+                          ;(e.currentTarget as HTMLElement).style.background = "transparent"
+                        }
+                      }}
+                    >
+                      <span
+                        style={{
+                          fontSize: "11px",
+                          color: isActiveSpace ? "#818cf8" : "var(--text-3)",
+                          fontWeight: 600,
+                          transition: "color 0.15s",
+                          flexShrink: 0,
+                        }}
+                      >
+                        @
+                      </span>
+                      <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                        {space.name}
+                      </span>
+                    </Link>
+                  )
+                })}
               </div>
             )}
-          </div>
-        ))}
+          </>
+        )}
+
+        {/* Divider before Settings */}
+        <div style={{ margin: "8px 0" }}>
+          <Divider />
+        </div>
+
+        {/* Settings */}
+        <NavLink
+          href={SETTINGS_LINK.href}
+          label={SETTINGS_LINK.label}
+          icon={SETTINGS_LINK.icon}
+          isActive={pathname === SETTINGS_LINK.href}
+        />
       </nav>
 
       {/* User section */}
@@ -450,15 +414,15 @@ function SidebarInner() {
           <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
             <div
               style={{
-                width: "30px",
-                height: "30px",
+                width: "28px",
+                height: "28px",
                 borderRadius: "50%",
-                background: "rgba(99,102,241,0.15)",
-                border: "1px solid rgba(99,102,241,0.25)",
+                background: "rgba(99,102,241,0.12)",
+                border: "1px solid rgba(99,102,241,0.20)",
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "center",
-                fontSize: "12px",
+                fontSize: "11px",
                 fontWeight: 600,
                 color: "#818cf8",
                 flexShrink: 0,
@@ -492,12 +456,8 @@ function SidebarInner() {
                   transition: "color 0.15s",
                   marginTop: "1px",
                 }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.color = "var(--text-2)"
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.color = "var(--text-3)"
-                }}
+                onMouseEnter={(e) => { e.currentTarget.style.color = "var(--text-2)" }}
+                onMouseLeave={(e) => { e.currentTarget.style.color = "var(--text-3)" }}
               >
                 Sign out
               </button>

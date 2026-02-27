@@ -3,36 +3,13 @@
 import { useEffect, useRef, useState } from "react"
 import type { NoteWithEntities, Space } from "./types"
 
-// ── Entity styling ────────────────────────────────────────────────────────────
-
-const ENTITY_COLORS: Record<string, { bg: string; text: string; border: string }> = {
-  person:   { bg: "rgba(59,130,246,0.14)",  text: "#60a5fa", border: "rgba(59,130,246,0.28)" },
-  project:  { bg: "rgba(139,92,246,0.14)",  text: "#a78bfa", border: "rgba(139,92,246,0.28)" },
-  company:  { bg: "rgba(245,158,11,0.14)",  text: "#fbbf24", border: "rgba(245,158,11,0.28)" },
-  tool:     { bg: "rgba(16,185,129,0.14)",  text: "#34d399", border: "rgba(16,185,129,0.28)" },
-  topic:    { bg: "rgba(99,102,241,0.14)",  text: "#818cf8", border: "rgba(99,102,241,0.28)" },
-  goal:     { bg: "rgba(236,72,153,0.14)",  text: "#f472b6", border: "rgba(236,72,153,0.28)" },
-  event:    { bg: "rgba(249,115,22,0.14)",  text: "#fb923c", border: "rgba(249,115,22,0.28)" },
-  resource: { bg: "rgba(20,184,166,0.14)",  text: "#2dd4bf", border: "rgba(20,184,166,0.28)" },
-}
-
-const SPACE_STYLE = { bg: "rgba(99,102,241,0.12)", text: "#818cf8", border: "rgba(99,102,241,0.30)" }
-
-function entityStyle(type: string) {
-  return ENTITY_COLORS[type] ?? {
-    bg: "rgba(255,255,255,0.09)",
-    text: "var(--text-2)",
-    border: "rgba(255,255,255,0.16)",
-  }
-}
-
-// ── Spinner icon ──────────────────────────────────────────────────────────────
+const SPACE_STYLE = { bg: "rgba(99,102,241,0.10)", text: "#818cf8", border: "rgba(99,102,241,0.22)" }
 
 function Spinner() {
   return (
     <svg
-      width="14"
-      height="14"
+      width="13"
+      height="13"
       viewBox="0 0 24 24"
       fill="none"
       stroke="currentColor"
@@ -46,17 +23,13 @@ function Spinner() {
   )
 }
 
-// ── Types ─────────────────────────────────────────────────────────────────────
-
 type DropdownOption =
   | { type: "space"; space: Space }
   | { type: "create"; name: string }
 
-// ── Props ─────────────────────────────────────────────────────────────────────
-
 interface NoteComposerProps {
   initialValue?: string
-  initialEntities?: { name: string; type: string }[]
+  initialEntities?: { name: string; type: string }[] // kept for API compatibility
   initialSpaces?: Space[]
   mode: "create" | "edit"
   noteId?: string
@@ -64,11 +37,9 @@ interface NoteComposerProps {
   onCancel: () => void
 }
 
-// ── Component ─────────────────────────────────────────────────────────────────
-
 export default function NoteComposer({
   initialValue = "",
-  initialEntities = [],
+  initialEntities: _initialEntities = [],
   initialSpaces = [],
   mode,
   noteId,
@@ -77,8 +48,8 @@ export default function NoteComposer({
 }: NoteComposerProps) {
   const [value, setValue] = useState(initialValue)
   const [saving, setSaving] = useState(false)
+  const [saveStatus, setSaveStatus] = useState<"idle" | "saving" | "saved">("idle")
   const [error, setError] = useState<string | null>(null)
-  const [detectedEntities, setDetectedEntities] = useState<{ name: string; type: string }[]>(initialEntities)
   const [availableSpaces, setAvailableSpaces] = useState<Space[]>([])
   const [assignedSpaces, setAssignedSpaces] = useState<string[]>(() =>
     initialSpaces.map((s) => s.name)
@@ -89,7 +60,8 @@ export default function NoteComposer({
 
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const spaceInputRef = useRef<HTMLInputElement>(null)
-  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const savedNoteIdRef = useRef<string | null>(noteId ?? null)
 
   // Auto-focus on mount
   useEffect(() => {
@@ -104,7 +76,7 @@ export default function NoteComposer({
     ta.style.height = ta.scrollHeight + "px"
   }, [value])
 
-  // Load available spaces for autocomplete
+  // Load available spaces
   useEffect(() => {
     fetch("/api/spaces")
       .then((r) => r.ok ? r.json() : [])
@@ -112,35 +84,24 @@ export default function NoteComposer({
       .catch(() => {})
   }, [])
 
-  // Debounced entity extraction preview
+  // Auto-save for edit mode
   useEffect(() => {
-    if (debounceRef.current) clearTimeout(debounceRef.current)
-    if (value.trim().length < 20) return
-
-    debounceRef.current = setTimeout(async () => {
-      try {
-        const res = await fetch("/api/notes/extract", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ content: value }),
-        })
-        if (!res.ok) return
-        const data = await res.json()
-        if (Array.isArray(data.entities)) setDetectedEntities(data.entities)
-      } catch {}
-    }, 400)
-
+    if (mode !== "edit") return
+    if (!value.trim()) return
+    setSaveStatus("idle")
+    if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current)
+    autoSaveTimerRef.current = setTimeout(() => { doSave(true) }, 1500)
     return () => {
-      if (debounceRef.current) clearTimeout(debounceRef.current)
+      if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current)
     }
-  }, [value])
+  }, [value, assignedSpaces, mode]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Reset dropdown index when space input changes
+  // Reset dropdown index when input changes
   useEffect(() => {
     setSpaceDropdownIndex(0)
   }, [spaceInput])
 
-  // ── Space helpers ────────────────────────────────────────────────────────────
+  // ── Space helpers ─────────────────────────────────────────────────────────
 
   function getSpaceQuery(input: string): string {
     return (input.startsWith("@") ? input.slice(1) : input).toLowerCase().trim()
@@ -178,16 +139,21 @@ export default function NoteComposer({
     setAssignedSpaces((prev) => prev.filter((s) => s !== name))
   }
 
-  // ── Handlers ─────────────────────────────────────────────────────────────────
+  // ── Save logic ────────────────────────────────────────────────────────────
 
-  async function handleSave() {
-    if (saving || !value.trim()) return
-    setSaving(true)
+  async function doSave(isAutoSave = false) {
+    if (!value.trim()) return
+    if (isAutoSave) {
+      setSaveStatus("saving")
+    } else {
+      setSaving(true)
+    }
     setError(null)
 
     try {
-      const url = mode === "edit" && noteId ? `/api/notes/${noteId}` : "/api/notes"
-      const method = mode === "edit" ? "PUT" : "POST"
+      const currentNoteId = savedNoteIdRef.current
+      const url = currentNoteId ? `/api/notes/${currentNoteId}` : "/api/notes"
+      const method = currentNoteId ? "PUT" : "POST"
 
       const res = await fetch(url, {
         method,
@@ -201,9 +167,33 @@ export default function NoteComposer({
       }
 
       const note = await res.json()
-      onSave({ ...note, spaces: note.spaces ?? [], entities: note.entities ?? [] })
+      const fullNote: NoteWithEntities = {
+        ...note,
+        spaces: note.spaces ?? [],
+        entities: note.entities ?? [],
+      }
+
+      if (!savedNoteIdRef.current) {
+        savedNoteIdRef.current = note.id
+      }
+
+      if (isAutoSave) {
+        setSaveStatus("saved")
+        onSave(fullNote) // update list but parent handles whether to close
+        setTimeout(() => setSaveStatus("idle"), 2500)
+      } else {
+        onSave(fullNote)
+      }
     } catch (err: any) {
       setError(err.message ?? "Something went wrong")
+      if (isAutoSave) {
+        setSaveStatus("idle")
+      } else {
+        setSaving(false)
+      }
+    }
+
+    if (!isAutoSave) {
       setSaving(false)
     }
   }
@@ -211,7 +201,8 @@ export default function NoteComposer({
   function onKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
     if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
       e.preventDefault()
-      handleSave()
+      if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current)
+      doSave(false)
     }
     if (e.key === "Escape") {
       e.preventDefault()
@@ -243,7 +234,6 @@ export default function NoteComposer({
         return
       }
     }
-    // Enter with no dropdown — add free-form space name
     if (e.key === "Enter" && spaceInput.trim()) {
       e.preventDefault()
       const name = getSpaceQuery(spaceInput)
@@ -264,50 +254,15 @@ export default function NoteComposer({
     <div
       style={{
         background: "var(--bg-surface)",
-        border: "1px solid var(--border-accent)",
-        borderLeft: "2px solid var(--accent)",
+        border: "1px solid var(--border)",
         borderRadius: "12px",
         padding: "20px",
         display: "flex",
         flexDirection: "column",
         gap: "14px",
-        boxShadow: "var(--shadow-sm)",
+        boxShadow: "var(--shadow-md)",
       }}
     >
-      {/* Entity chips */}
-      <div style={{ display: "flex", flexWrap: "wrap", gap: "5px", alignItems: "center", minHeight: "24px" }}>
-        {detectedEntities.length > 0 ? (
-          detectedEntities.map((e, i) => {
-            const s = entityStyle(e.type)
-            return (
-              <span
-                key={i}
-                style={{
-                  display: "inline-flex",
-                  alignItems: "center",
-                  gap: "4px",
-                  padding: "3px 9px",
-                  borderRadius: "999px",
-                  fontSize: "11px",
-                  fontWeight: 500,
-                  background: s.bg,
-                  color: s.text,
-                  border: `1px solid ${s.border}`,
-                  whiteSpace: "nowrap",
-                }}
-              >
-                {e.name}
-                <span style={{ opacity: 0.6, fontSize: "10px" }}>{e.type}</span>
-              </span>
-            )
-          })
-        ) : (
-          <span style={{ fontSize: "11px", color: "var(--text-3)" }}>
-            {value.trim().length > 20 ? "Detecting entities…" : "Entities will appear as you write"}
-          </span>
-        )}
-      </div>
-
       {/* Textarea */}
       <textarea
         ref={textareaRef}
@@ -318,23 +273,20 @@ export default function NoteComposer({
         rows={4}
         style={{
           width: "100%",
-          background: "var(--bg-base)",
-          border: "1px solid var(--border)",
-          borderRadius: "8px",
-          padding: "12px",
-          fontSize: "14px",
-          lineHeight: 1.65,
+          background: "transparent",
+          border: "none",
+          borderRadius: "0",
+          padding: "0",
+          fontSize: "15px",
+          lineHeight: 1.7,
           color: "var(--text-1)",
           resize: "none",
           outline: "none",
           fontFamily: "inherit",
           overflowY: "hidden",
           boxSizing: "border-box",
-          transition: "border-color 0.15s",
-          minHeight: "96px",
+          minHeight: "120px",
         }}
-        onFocus={(e) => { e.currentTarget.style.borderColor = "var(--border-accent)" }}
-        onBlur={(e) => { e.currentTarget.style.borderColor = "var(--border)" }}
       />
 
       {/* Inline error */}
@@ -356,11 +308,10 @@ export default function NoteComposer({
       >
         <span
           style={{
-            fontSize: "10px",
-            fontWeight: 600,
+            fontSize: "11px",
+            fontWeight: 500,
             color: "var(--text-3)",
-            textTransform: "uppercase",
-            letterSpacing: "0.07em",
+            letterSpacing: "0.02em",
           }}
         >
           Spaces
@@ -372,7 +323,7 @@ export default function NoteComposer({
               flexWrap: "wrap",
               alignItems: "center",
               gap: "6px",
-              minHeight: "28px",
+              minHeight: "26px",
             }}
           >
             {assignedSpaces.map((name) => (
@@ -383,8 +334,8 @@ export default function NoteComposer({
                 style={{
                   display: "inline-flex",
                   alignItems: "center",
-                  gap: "5px",
-                  padding: "3px 9px",
+                  gap: "4px",
+                  padding: "2px 8px",
                   borderRadius: "999px",
                   fontSize: "12px",
                   fontWeight: 500,
@@ -398,8 +349,8 @@ export default function NoteComposer({
                 onMouseEnter={(e) => { e.currentTarget.style.filter = "brightness(1.2)" }}
                 onMouseLeave={(e) => { e.currentTarget.style.filter = "none" }}
               >
-                {name}
-                <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" style={{ opacity: 0.6 }}>
+                @{name}
+                <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" style={{ opacity: 0.5 }}>
                   <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
                 </svg>
               </button>
@@ -415,10 +366,10 @@ export default function NoteComposer({
               onKeyDown={onSpaceInputKeyDown}
               onFocus={() => { if (spaceInput.trim()) setSpaceDropdownVisible(true) }}
               onBlur={() => setTimeout(() => setSpaceDropdownVisible(false), 150)}
-              placeholder={assignedSpaces.length === 0 ? "Type @spaceName to add a space" : "@spaceName…"}
+              placeholder={assignedSpaces.length === 0 ? "Add a space…" : "@spaceName…"}
               style={{
                 flex: 1,
-                minWidth: "160px",
+                minWidth: "120px",
                 background: "transparent",
                 border: "none",
                 outline: "none",
@@ -527,43 +478,73 @@ export default function NoteComposer({
           disabled={saving}
           style={{
             fontSize: "13px",
-            color: "var(--text-2)",
+            color: "var(--text-3)",
             background: "transparent",
             border: "none",
             cursor: saving ? "not-allowed" : "pointer",
-            padding: "6px 0",
+            padding: "5px 0",
             opacity: saving ? 0.5 : 1,
             transition: "color 0.15s",
           }}
-          onMouseEnter={(e) => { if (!saving) e.currentTarget.style.color = "var(--text-1)" }}
-          onMouseLeave={(e) => { e.currentTarget.style.color = "var(--text-2)" }}
+          onMouseEnter={(e) => { if (!saving) e.currentTarget.style.color = "var(--text-2)" }}
+          onMouseLeave={(e) => { e.currentTarget.style.color = "var(--text-3)" }}
         >
           Cancel
         </button>
 
-        <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-          <span style={{ fontSize: "11px", color: "var(--text-3)" }}>⌘↵ to save</span>
-          <button
-            onClick={handleSave}
-            disabled={saving || isEmpty}
-            style={{
-              display: "inline-flex",
-              alignItems: "center",
-              gap: "6px",
-              padding: "7px 16px",
-              borderRadius: "8px",
-              fontSize: "13px",
-              fontWeight: 500,
-              background: saving || isEmpty ? "var(--accent-dim)" : "var(--accent)",
-              color: saving || isEmpty ? "var(--text-3)" : "#fff",
-              border: "none",
-              cursor: saving || isEmpty ? "not-allowed" : "pointer",
-              transition: "background 0.15s, color 0.15s",
-            }}
-          >
-            {saving && <Spinner />}
-            {mode === "edit" ? "Save Changes" : "Save"}
-          </button>
+        <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+          {/* Status indicator (edit mode) or Save button (create mode) */}
+          {mode === "edit" ? (
+            <span
+              style={{
+                fontSize: "12px",
+                color: saveStatus === "saved" ? "var(--text-2)" : "var(--text-3)",
+                display: "flex",
+                alignItems: "center",
+                gap: "5px",
+                transition: "color 0.2s",
+              }}
+            >
+              {saveStatus === "saving" && <Spinner />}
+              {saveStatus === "saving" && "Saving…"}
+              {saveStatus === "saved" && "· Saved"}
+            </span>
+          ) : (
+            <button
+              onClick={() => {
+                if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current)
+                doSave(false)
+              }}
+              disabled={saving || isEmpty}
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: "6px",
+                padding: "6px 14px",
+                borderRadius: "7px",
+                fontSize: "13px",
+                fontWeight: 500,
+                background: "transparent",
+                color: saving || isEmpty ? "var(--text-3)" : "var(--text-2)",
+                border: `1px solid ${saving || isEmpty ? "var(--border)" : "var(--border-hover)"}`,
+                cursor: saving || isEmpty ? "not-allowed" : "pointer",
+                transition: "color 0.15s, border-color 0.15s",
+              }}
+              onMouseEnter={(e) => {
+                if (!saving && !isEmpty) {
+                  e.currentTarget.style.color = "var(--text-1)"
+                }
+              }}
+              onMouseLeave={(e) => {
+                if (!saving && !isEmpty) {
+                  e.currentTarget.style.color = "var(--text-2)"
+                }
+              }}
+            >
+              {saving && <Spinner />}
+              Save
+            </button>
+          )}
         </div>
       </div>
     </div>
