@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react"
 import Link from "next/link"
 import type { Entity, NoteWithEntities } from "./types"
+import NoteComposer from "./NoteComposer"
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -201,7 +202,11 @@ export default function NotesPage() {
   const [searchQuery, setSearchQuery] = useState("")
   const [selectedEntityIds, setSelectedEntityIds] = useState<Set<string>>(new Set())
   const [groupByEntity, setGroupByEntity] = useState(false)
+  const [showComposer, setShowComposer] = useState(false)
+  const [editMode, setEditMode] = useState(false)
   const detailRef = useRef<HTMLDivElement>(null)
+  const composerTopRef = useRef<HTMLDivElement>(null)
+  const justAddedId = useRef<string | null>(null)
 
   useEffect(() => {
     fetch("/api/notes")
@@ -279,19 +284,28 @@ export default function NotesPage() {
       void detailRef.current.offsetWidth
       detailRef.current.classList.add("panel-slide-in")
     }
+    setEditMode(false)
   }, [selectedNote?.id])
 
   // ── Render helpers ────────────────────────────────────────────────────────
 
   function renderCards(items: NoteWithEntities[]) {
-    return items.map((note) => (
-      <NoteCard
-        key={note.id}
-        note={note}
-        selected={selectedNote?.id === note.id}
-        onClick={() => handleNoteClick(note)}
-      />
-    ))
+    return items.map((note) => {
+      const isNew = note.id === justAddedId.current
+      return (
+        <div
+          key={note.id}
+          style={isNew ? { animation: "fadeInUp 180ms ease-out both" } : undefined}
+          onAnimationEnd={() => { if (isNew) justAddedId.current = null }}
+        >
+          <NoteCard
+            note={note}
+            selected={selectedNote?.id === note.id}
+            onClick={() => handleNoteClick(note)}
+          />
+        </div>
+      )
+    })
   }
 
   function renderMain() {
@@ -504,6 +518,40 @@ export default function NotesPage() {
               )}
             </div>
 
+            {/* New Note button */}
+            <button
+              onClick={() => {
+                if (showComposer) {
+                  composerTopRef.current?.querySelector("textarea")?.focus()
+                  return
+                }
+                setShowComposer(true)
+              }}
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: "6px",
+                padding: "7px 14px",
+                borderRadius: "8px",
+                fontSize: "13px",
+                fontWeight: 500,
+                background: "var(--accent)",
+                color: "#fff",
+                border: "none",
+                cursor: "pointer",
+                flexShrink: 0,
+                transition: "opacity 0.15s",
+              }}
+              onMouseEnter={(e) => { e.currentTarget.style.opacity = "0.88" }}
+              onMouseLeave={(e) => { e.currentTarget.style.opacity = "1" }}
+            >
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+                <line x1="12" y1="5" x2="12" y2="19" />
+                <line x1="5" y1="12" x2="19" y2="12" />
+              </svg>
+              New Note
+            </button>
+
             {/* Search */}
             <div style={{ position: "relative", flexShrink: 0 }}>
               <span
@@ -696,6 +744,26 @@ export default function NotesPage() {
           }}
         >
           <div style={{ maxWidth: "660px" }}>
+            {showComposer && (
+              <div
+                ref={composerTopRef}
+                style={{
+                  marginBottom: "10px",
+                  animation: "scaleIn 160ms cubic-bezier(0.16,1,0.3,1) both",
+                }}
+              >
+                <NoteComposer
+                  mode="create"
+                  onSave={(note) => {
+                    justAddedId.current = note.id
+                    setShowComposer(false)
+                    setNotes((prev) => [note, ...prev])
+                    setSelectedNote(note)
+                  }}
+                  onCancel={() => setShowComposer(false)}
+                />
+              </div>
+            )}
             {renderMain()}
           </div>
         </div>
@@ -735,6 +803,31 @@ export default function NotesPage() {
               {formatDate(selectedNote.created_at)}
             </span>
             <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+              {!editMode && (
+                <button
+                  onClick={() => setEditMode(true)}
+                  style={{
+                    fontSize: "12px",
+                    color: "var(--text-2)",
+                    background: "transparent",
+                    padding: "5px 10px",
+                    borderRadius: "7px",
+                    border: "1px solid var(--border)",
+                    cursor: "pointer",
+                    transition: "color 0.12s, border-color 0.12s",
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.color = "var(--text-1)"
+                    e.currentTarget.style.borderColor = "var(--border-hover)"
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.color = "var(--text-2)"
+                    e.currentTarget.style.borderColor = "var(--border)"
+                  }}
+                >
+                  Edit
+                </button>
+              )}
               <Link
                 href={`/notes/${selectedNote.id}`}
                 style={{
@@ -791,21 +884,36 @@ export default function NotesPage() {
 
           {/* Content */}
           <div style={{ flex: 1, overflowY: "auto", padding: "24px" }}>
-            <p
-              style={{
-                fontSize: "15px",
-                lineHeight: 1.75,
-                color: "var(--text-1)",
-                whiteSpace: "pre-wrap",
-                margin: 0,
-              }}
-            >
-              {selectedNote.content}
-            </p>
+            {editMode ? (
+              <NoteComposer
+                mode="edit"
+                noteId={selectedNote.id}
+                initialValue={selectedNote.content}
+                initialEntities={selectedNote.entities}
+                onSave={(updated) => {
+                  setEditMode(false)
+                  setNotes((prev) => prev.map((n) => n.id === updated.id ? updated : n))
+                  setSelectedNote(updated)
+                }}
+                onCancel={() => setEditMode(false)}
+              />
+            ) : (
+              <p
+                style={{
+                  fontSize: "15px",
+                  lineHeight: 1.75,
+                  color: "var(--text-1)",
+                  whiteSpace: "pre-wrap",
+                  margin: 0,
+                }}
+              >
+                {selectedNote.content}
+              </p>
+            )}
           </div>
 
           {/* Entities footer */}
-          {selectedNote.entities.length > 0 && (
+          {!editMode && selectedNote.entities.length > 0 && (
             <div
               style={{
                 padding: "16px 24px 20px",
