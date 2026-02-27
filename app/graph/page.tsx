@@ -74,7 +74,7 @@ const ENTITY_COLORS: Record<string, { bg: string; text: string; border: string }
 }
 
 function entityStyle(type: string) {
-  return ENTITY_COLORS[type] ?? { bg: "rgba(255,255,255,0.06)", text: "#9090a8", border: "rgba(255,255,255,0.12)" }
+  return ENTITY_COLORS[type] ?? { bg: "rgba(128,128,160,0.10)", text: "var(--text-2)", border: "var(--border)" }
 }
 
 // ─── small components ────────────────────────────────────────────────────────
@@ -86,10 +86,10 @@ function Stat({ label, value }: { label: string; value: number }) {
       alignItems: "center",
       justifyContent: "space-between",
       padding: "8px 0",
-      borderBottom: "1px solid rgba(255,255,255,0.05)",
+      borderBottom: "1px solid var(--border-subtle)",
     }}>
-      <span style={{ fontSize: "12px", color: "#9090a8" }}>{label}</span>
-      <span style={{ fontSize: "13px", fontWeight: 600, color: "#e8e8f0" }}>{value}</span>
+      <span style={{ fontSize: "12px", color: "var(--text-2)" }}>{label}</span>
+      <span style={{ fontSize: "13px", fontWeight: 600, color: "var(--text-1)" }}>{value}</span>
     </div>
   )
 }
@@ -105,15 +105,15 @@ function LinkedNoteCard({ note, onFocus }: { note: GraphNode; onFocus: () => voi
       style={{
         width: "100%",
         textAlign: "left",
-        background: hovered ? "#1f1f30" : "#1a1a26",
-        border: "1px solid rgba(255,255,255,0.07)",
+        background: hovered ? "var(--bg-hover)" : "var(--bg-elevated)",
+        border: "1px solid var(--border)",
         borderRadius: "10px",
         padding: "12px 14px",
         cursor: "pointer",
         transition: "background 0.15s",
         fontSize: "12px",
         lineHeight: 1.6,
-        color: "#c8c8d8",
+        color: "var(--text-2)",
       }}
     >
       {content.length > 120 ? content.slice(0, 120).trimEnd() + "…" : content || "—"}
@@ -128,7 +128,20 @@ export default function GraphPage() {
   const [panel, setPanel] = useState<PanelMode>({ kind: "idle" })
   const [hoveredNote, setHoveredNote] = useState<GraphNode | null>(null)
   const [hoverPos, setHoverPos] = useState({ x: 0, y: 0 })
+  const [theme, setTheme] = useState<"dark" | "light">("dark")
   const fgRef = useRef<any>(null)
+
+  // Sync theme from html[data-theme]
+  useEffect(() => {
+    const html = document.documentElement
+    const initial = (html.getAttribute("data-theme") ?? localStorage.getItem("theme") ?? "dark") as "dark" | "light"
+    setTheme(initial)
+    const observer = new MutationObserver(() => {
+      setTheme((html.getAttribute("data-theme") ?? "dark") as "dark" | "light")
+    })
+    observer.observe(html, { attributes: true, attributeFilter: ["data-theme"] })
+    return () => observer.disconnect()
+  }, [])
 
   // Track cursor globally
   useEffect(() => {
@@ -193,7 +206,6 @@ export default function GraphPage() {
         setPanel({ kind: "idle" })
       }
     } else if (node.type === "entity" && data) {
-      // Collect linked notes from graph link data
       const linkedNoteIds = new Set<string>()
       for (const link of data.links) {
         const src = typeof link.source === "object" ? link.source.id : link.source
@@ -217,6 +229,13 @@ export default function GraphPage() {
     }
   }
 
+  // Theme-dependent canvas values
+  const isLight = theme === "light"
+  const canvasBg        = isLight ? "#f5f5fb" : "#0d0d14"
+  const linkColor       = isLight ? "rgba(0,0,0,0.08)"           : "rgba(255,255,255,0.06)"
+  const particleColor   = isLight ? "rgba(99,102,241,0.6)"       : "rgba(99,102,241,0.5)"
+  const nodeLabelColor  = isLight ? "#1a1a2e"                    : "#c8c8d8"
+
   // Loading screen
   if (!data) {
     return (
@@ -225,7 +244,7 @@ export default function GraphPage() {
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
-        background: "#0d0d14",
+        background: "var(--bg-base)",
         flexDirection: "column",
         gap: "12px",
       }}>
@@ -237,7 +256,7 @@ export default function GraphPage() {
           borderRadius: "50%",
           animation: "spin 0.8s linear infinite",
         }} />
-        <p style={{ fontSize: "13px", color: "#505068", margin: 0 }}>Loading graph…</p>
+        <p style={{ fontSize: "13px", color: "var(--text-3)", margin: 0 }}>Loading graph…</p>
         <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
       </div>
     )
@@ -248,7 +267,7 @@ export default function GraphPage() {
       height: "100vh",
       display: "grid",
       gridTemplateColumns: "1fr 400px",
-      background: "#0d0d14",
+      background: "var(--bg-base)",
       position: "relative",
     }}>
 
@@ -265,21 +284,21 @@ export default function GraphPage() {
               padding: "7px 12px",
               fontSize: "12px",
               fontWeight: 500,
-              color: "#9090a8",
-              background: "rgba(18,18,26,0.85)",
-              border: "1px solid rgba(255,255,255,0.08)",
+              color: "var(--text-2)",
+              background: isLight ? "rgba(245,245,251,0.88)" : "rgba(18,18,26,0.85)",
+              border: "1px solid var(--border)",
               borderRadius: "8px",
               textDecoration: "none",
               backdropFilter: "blur(12px)",
               transition: "color 0.15s, border-color 0.15s",
             }}
             onMouseEnter={(e) => {
-              (e.currentTarget as HTMLElement).style.color = "#e8e8f0"
-              ;(e.currentTarget as HTMLElement).style.borderColor = "rgba(255,255,255,0.16)"
+              (e.currentTarget as HTMLElement).style.color = "var(--text-1)"
+              ;(e.currentTarget as HTMLElement).style.borderColor = "var(--border-hover)"
             }}
             onMouseLeave={(e) => {
-              (e.currentTarget as HTMLElement).style.color = "#9090a8"
-              ;(e.currentTarget as HTMLElement).style.borderColor = "rgba(255,255,255,0.08)"
+              (e.currentTarget as HTMLElement).style.color = "var(--text-2)"
+              ;(e.currentTarget as HTMLElement).style.borderColor = "var(--border)"
             }}
           >
             ☰ All Notes
@@ -290,14 +309,14 @@ export default function GraphPage() {
           ref={fgRef}
           graphData={data}
           nodeAutoColorBy="type"
-          backgroundColor="#0d0d14"
+          backgroundColor={canvasBg}
           nodeVal={(node: any) => Math.sqrt(node.size || 1)}
           nodeRelSize={4}
           linkWidth={(link: any) => (link.weight || 1) * 0.5}
-          linkColor={() => "rgba(255,255,255,0.06)"}
+          linkColor={() => linkColor}
           linkDirectionalParticles={2}
           linkDirectionalParticleSpeed={0.004}
-          linkDirectionalParticleColor={() => "rgba(99,102,241,0.5)"}
+          linkDirectionalParticleColor={() => particleColor}
           cooldownTicks={100}
           d3VelocityDecay={0.3}
           nodeCanvasObjectMode={() => "after"}
@@ -306,7 +325,7 @@ export default function GraphPage() {
             const label = node.label || node.id
             const fontSize = Math.max(11, 14 / globalScale)
             ctx.font = `500 ${fontSize}px -apple-system, sans-serif`
-            ctx.fillStyle = "#c8c8d8"
+            ctx.fillStyle = nodeLabelColor
             ctx.textAlign = "center"
             ctx.textBaseline = "middle"
             ctx.fillText(label, node.x, node.y + Math.sqrt(node.size || 1) * 5 + fontSize)
@@ -318,8 +337,8 @@ export default function GraphPage() {
 
       {/* ── RIGHT PANEL ── */}
       <div style={{
-        background: "#12121a",
-        borderLeft: "1px solid rgba(255,255,255,0.07)",
+        background: "var(--bg-surface)",
+        borderLeft: "1px solid var(--border)",
         display: "flex",
         flexDirection: "column",
         overflow: "hidden",
@@ -327,10 +346,10 @@ export default function GraphPage() {
         {/* Panel header */}
         <div style={{
           padding: "20px 24px 16px",
-          borderBottom: "1px solid rgba(255,255,255,0.07)",
+          borderBottom: "1px solid var(--border)",
           flexShrink: 0,
         }}>
-          <h2 style={{ fontSize: "13px", fontWeight: 600, color: "#e8e8f0", margin: 0 }}>
+          <h2 style={{ fontSize: "13px", fontWeight: 600, color: "var(--text-1)", margin: 0 }}>
             {panel.kind === "entity"
               ? panel.entityLabel
               : panel.kind === "note" || panel.kind === "note-loading"
@@ -338,7 +357,7 @@ export default function GraphPage() {
               : "Knowledge Graph"}
           </h2>
           {panel.kind === "idle" && (
-            <p style={{ fontSize: "12px", color: "#505068", margin: "6px 0 0" }}>
+            <p style={{ fontSize: "12px", color: "var(--text-3)", margin: "6px 0 0" }}>
               Click any node to explore
             </p>
           )}
@@ -366,13 +385,13 @@ export default function GraphPage() {
 
           {panel.kind === "note" && (
             <>
-              <p style={{ fontSize: "11px", color: "#505068", margin: "0 0 16px" }}>
+              <p style={{ fontSize: "11px", color: "var(--text-3)", margin: "0 0 16px" }}>
                 {formatDate(panel.note.createdAt)}
               </p>
               <p style={{
                 fontSize: "13px",
                 lineHeight: 1.75,
-                color: "#e8e8f0",
+                color: "var(--text-1)",
                 whiteSpace: "pre-wrap",
                 margin: "0 0 24px",
               }}>
@@ -386,7 +405,7 @@ export default function GraphPage() {
                     fontWeight: 600,
                     letterSpacing: "0.07em",
                     textTransform: "uppercase",
-                    color: "#505068",
+                    color: "var(--text-3)",
                     margin: "0 0 10px",
                   }}>
                     Linked Entities
@@ -435,7 +454,7 @@ export default function GraphPage() {
           {panel.kind === "entity" && (
             <>
               {panel.notes.length === 0 ? (
-                <p style={{ fontSize: "13px", color: "#505068" }}>
+                <p style={{ fontSize: "13px", color: "var(--text-3)" }}>
                   No notes linked to this entity.
                 </p>
               ) : (
@@ -445,7 +464,7 @@ export default function GraphPage() {
                     fontWeight: 600,
                     letterSpacing: "0.07em",
                     textTransform: "uppercase",
-                    color: "#505068",
+                    color: "var(--text-3)",
                     margin: "0 0 12px",
                   }}>
                     {panel.notes.length} Linked Note{panel.notes.length !== 1 ? "s" : ""}
@@ -474,22 +493,22 @@ export default function GraphPage() {
         {(panel.kind === "note" || panel.kind === "entity") && (
           <div style={{
             padding: "12px 24px",
-            borderTop: "1px solid rgba(255,255,255,0.07)",
+            borderTop: "1px solid var(--border)",
             flexShrink: 0,
           }}>
             <button
               onClick={() => setPanel({ kind: "idle" })}
               style={{
                 fontSize: "12px",
-                color: "#505068",
+                color: "var(--text-3)",
                 background: "transparent",
                 border: "none",
                 cursor: "pointer",
                 padding: 0,
                 transition: "color 0.12s",
               }}
-              onMouseEnter={(e) => { e.currentTarget.style.color = "#9090a8" }}
-              onMouseLeave={(e) => { e.currentTarget.style.color = "#505068" }}
+              onMouseEnter={(e) => { e.currentTarget.style.color = "var(--text-2)" }}
+              onMouseLeave={(e) => { e.currentTarget.style.color = "var(--text-3)" }}
             >
               ← Back
             </button>
@@ -503,18 +522,18 @@ export default function GraphPage() {
           position: "fixed",
           top: hoverPos.y + 16,
           left: hoverPos.x + 16,
-          background: "#1a1a26",
+          background: "var(--bg-elevated)",
           padding: "12px 16px",
           borderRadius: "10px",
-          boxShadow: "0 16px 48px rgba(0,0,0,0.6)",
+          boxShadow: "var(--shadow-lg)",
           maxWidth: "320px",
           fontSize: "13px",
           lineHeight: 1.6,
           zIndex: 1000,
           pointerEvents: "none",
           whiteSpace: "pre-wrap",
-          border: "1px solid rgba(255,255,255,0.08)",
-          color: "#e8e8f0",
+          border: "1px solid var(--border)",
+          color: "var(--text-1)",
         }}>
           {hoveredNote.content
             ? hoveredNote.content.slice(0, 160) + (hoveredNote.content.length > 160 ? "…" : "")
