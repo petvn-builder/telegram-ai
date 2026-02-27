@@ -1,6 +1,6 @@
 import { createEmbedding } from "@/lib/embeddings";
 import { askOpenAI } from "@/lib/openai";
-import { getSupabase } from "@/lib/supabase";
+import { getSupabaseAdmin } from "@/lib/supabase/admin";
 
 import {
   getOrCreateUser,
@@ -14,7 +14,7 @@ import {
 // ==========================================
 
 async function generateAndSaveSummary(entity, chatId) {
-  const supabase = getSupabase();
+  const supabase = getSupabaseAdmin();
   const SUMMARY_TTL_HOURS = 24;
 
   console.log(`\n========== [SUMMARY] START ==========`);
@@ -150,7 +150,6 @@ Be concise and factual. Only include facts from the provided notes. Do NOT inven
 // ==========================================
 
 async function getUuidForTelegramUser(telegramUserId) {
-  const { getSupabaseAdmin } = await import("@/lib/supabase/admin");
   const { data } = await getSupabaseAdmin()
     .from("user_identities")
     .select("user_id")
@@ -160,7 +159,7 @@ async function getUuidForTelegramUser(telegramUserId) {
 }
 
 export async function POST(req) {
-  const supabase = getSupabase();
+  const supabase = getSupabaseAdmin();
   const body = await req.json();
   const message = body.message;
 

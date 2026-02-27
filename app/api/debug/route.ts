@@ -1,12 +1,12 @@
 import { NextRequest, NextResponse } from "next/server"
-import { getSupabase } from "@/lib/supabase"
+import { getSupabaseAdmin } from "@/lib/supabase/admin"
 
 export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url)
     const userId = searchParams.get("userId") || "1264094635"
 
-    const supabase = getSupabase()
+    const supabase = getSupabaseAdmin()
 
     // Get all entities for user
     const { data: entities, error: entError } = await supabase

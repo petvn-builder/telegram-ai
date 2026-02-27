@@ -1,18 +1,16 @@
 import { NextResponse } from "next/server"
 import { getSupabaseServer } from "@/lib/supabase/server"
-import { getSupabase } from "@/lib/supabase"
 import type { NoteWithEntities, Entity } from "@/app/notes/types"
 
 export async function GET() {
   try {
-    const authClient = await getSupabaseServer()
-    const { data: { user } } = await authClient.auth.getUser()
+    const supabase = await getSupabaseServer()
+    const { data: { user } } = await supabase.auth.getUser()
     if (!user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
     const userId = user.id
-    const supabase = getSupabase()
 
     // 1. Fetch all notes for this user
     const { data: notes, error: notesError } = await supabase
