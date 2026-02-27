@@ -1,10 +1,11 @@
 "use client"
 
 import Link from "next/link"
-import { usePathname, useRouter } from "next/navigation"
-import { useEffect, useState } from "react"
+import { usePathname, useRouter, useSearchParams } from "next/navigation"
+import { Suspense, useEffect, useState } from "react"
 import { getSupabaseBrowser } from "@/lib/supabase/browser"
 import type { User } from "@supabase/supabase-js"
+import type { Space } from "@/app/notes/types"
 
 const NAV_ITEMS = [
   {
@@ -93,10 +94,23 @@ function MoonIcon() {
 }
 
 export default function Sidebar() {
+  return (
+    <Suspense>
+      <SidebarInner />
+    </Suspense>
+  )
+}
+
+function SidebarInner() {
   const pathname = usePathname()
+  const searchParams = useSearchParams()
   const router = useRouter()
   const [user, setUser] = useState<User | null>(null)
   const [theme, setTheme] = useState<"dark" | "light">("dark")
+  const [spaces, setSpaces] = useState<Space[]>([])
+  const [spacesOpen, setSpacesOpen] = useState(true)
+
+  const activeSpaceId = searchParams.get("space")
 
   useEffect(() => {
     const saved = localStorage.getItem("theme") as "dark" | "light" | null
@@ -127,6 +141,15 @@ export default function Sidebar() {
 
     return () => subscription.unsubscribe()
   }, [])
+
+  // Load spaces when user is available
+  useEffect(() => {
+    if (!user) return
+    fetch("/api/spaces")
+      .then((r) => r.ok ? r.json() : [])
+      .then((data: Space[]) => setSpaces(data))
+      .catch(() => {})
+  }, [user])
 
   async function handleSignOut() {
     const supabase = getSupabaseBrowser()
@@ -227,6 +250,7 @@ export default function Sidebar() {
           gap: "24px",
         }}
       >
+        {/* Static nav items */}
         {NAV_ITEMS.map(({ group, links }) => (
           <div key={group}>
             <p
@@ -285,6 +309,131 @@ export default function Sidebar() {
                 )
               })}
             </div>
+
+            {/* Spaces section — inject after NAVIGATION group */}
+            {group === "NAVIGATION" && spaces.length > 0 && (
+              <div style={{ marginTop: "20px" }}>
+                {/* Divider */}
+                <div
+                  style={{
+                    height: "1px",
+                    background: "var(--border-subtle)",
+                    margin: "0 8px 16px",
+                  }}
+                />
+
+                {/* Section header */}
+                <button
+                  onClick={() => setSpacesOpen((v) => !v)}
+                  style={{
+                    width: "100%",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    padding: "0 8px",
+                    marginBottom: spacesOpen ? "6px" : "0",
+                    background: "transparent",
+                    border: "none",
+                    cursor: "pointer",
+                    color: "var(--text-3)",
+                    transition: "color 0.15s",
+                  }}
+                  onMouseEnter={(e) => { e.currentTarget.style.color = "var(--text-2)" }}
+                  onMouseLeave={(e) => { e.currentTarget.style.color = "var(--text-3)" }}
+                >
+                  <span style={{ fontSize: "11px", fontWeight: 600, letterSpacing: "0.08em", textTransform: "uppercase" }}>
+                    Spaces
+                  </span>
+                  <svg
+                    width="11"
+                    height="11"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2.5"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    style={{
+                      transform: spacesOpen ? "rotate(0deg)" : "rotate(-90deg)",
+                      transition: "transform 0.15s",
+                    }}
+                  >
+                    <polyline points="6 9 12 15 18 9" />
+                  </svg>
+                </button>
+
+                {/* Space links */}
+                {spacesOpen && (
+                  <div style={{ display: "flex", flexDirection: "column", gap: "1px" }}>
+                    {spaces.map((space) => {
+                      const isActiveSpace = pathname === "/notes" && activeSpaceId === space.id
+                      return (
+                        <Link
+                          key={space.id}
+                          href={`/notes?space=${space.id}`}
+                          style={{
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "space-between",
+                            padding: "7px 10px 7px 12px",
+                            borderRadius: "7px",
+                            fontSize: "13px",
+                            fontWeight: isActiveSpace ? 500 : 400,
+                            color: isActiveSpace ? "var(--text-1)" : "var(--text-2)",
+                            textDecoration: "none",
+                            background: isActiveSpace ? "rgba(99,102,241,0.10)" : "transparent",
+                            borderLeft: isActiveSpace
+                              ? "2px solid #6366f1"
+                              : "2px solid transparent",
+                            transition: "color 0.15s, background 0.15s, border-color 0.15s",
+                          }}
+                          onMouseEnter={(e) => {
+                            if (!isActiveSpace) {
+                              ;(e.currentTarget as HTMLElement).style.color = "var(--text-1)"
+                              ;(e.currentTarget as HTMLElement).style.background = "var(--bg-hover)"
+                            }
+                          }}
+                          onMouseLeave={(e) => {
+                            if (!isActiveSpace) {
+                              ;(e.currentTarget as HTMLElement).style.color = "var(--text-2)"
+                              ;(e.currentTarget as HTMLElement).style.background = "transparent"
+                            }
+                          }}
+                        >
+                          <span style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                            <span
+                              style={{
+                                fontSize: "11px",
+                                color: isActiveSpace ? "#818cf8" : "var(--text-3)",
+                                fontWeight: 600,
+                                transition: "color 0.15s",
+                              }}
+                            >
+                              @
+                            </span>
+                            {space.name}
+                          </span>
+                          <span
+                            style={{
+                              fontSize: "11px",
+                              color: "var(--text-3)",
+                              background: "var(--bg-surface)",
+                              border: "1px solid var(--border)",
+                              borderRadius: "999px",
+                              padding: "0 6px",
+                              lineHeight: "17px",
+                              flexShrink: 0,
+                            }}
+                          >
+                            {space.note_count}
+                          </span>
+                        </Link>
+                      )
+                    })}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         ))}
       </nav>

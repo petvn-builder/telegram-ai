@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useRef, useState } from "react"
-import type { NoteWithEntities } from "./types"
+import type { NoteWithEntities, Space } from "./types"
 
 // ── Entity styling (mirrors page.tsx) ────────────────────────────────────────
 
@@ -16,12 +16,27 @@ const ENTITY_COLORS: Record<string, { bg: string; text: string; border: string }
   resource: { bg: "rgba(20,184,166,0.14)",  text: "#2dd4bf", border: "rgba(20,184,166,0.28)" },
 }
 
+const SPACE_STYLE = { bg: "rgba(99,102,241,0.12)", text: "#818cf8", border: "rgba(99,102,241,0.30)" }
+
 function entityStyle(type: string) {
   return ENTITY_COLORS[type] ?? {
     bg: "rgba(255,255,255,0.09)",
     text: "var(--text-2)",
     border: "rgba(255,255,255,0.16)",
   }
+}
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+function getSpacesFromText(text: string): string[] {
+  const matches = [...text.matchAll(/(^|\s)@([a-zA-Z0-9_-]+)/g)]
+  return [...new Set(matches.map((m) => m[2].toLowerCase()))]
+}
+
+function detectActiveSpaceQuery(text: string, cursor: number): string | null {
+  const before = text.slice(0, cursor)
+  const match = before.match(/(^|\s)@([a-zA-Z0-9_-]*)$/)
+  return match ? match[2] : null
 }
 
 // ── Spinner icon ──────────────────────────────────────────────────────────────
@@ -49,6 +64,7 @@ function Spinner() {
 interface NoteComposerProps {
   initialValue?: string
   initialEntities?: { name: string; type: string }[]
+  initialSpaces?: Space[]
   mode: "create" | "edit"
   noteId?: string
   onSave: (note: NoteWithEntities) => void
@@ -60,15 +76,26 @@ interface NoteComposerProps {
 export default function NoteComposer({
   initialValue = "",
   initialEntities = [],
+  initialSpaces = [],
   mode,
   noteId,
   onSave,
   onCancel,
 }: NoteComposerProps) {
-  const [value, setValue] = useState(initialValue)
+  const [value, setValue] = useState(() => {
+    // In edit mode, reconstruct text with @space tokens for editing
+    if (mode === "edit" && initialSpaces.length > 0) {
+      const tokens = initialSpaces.map((s) => `@${s.name}`).join(" ")
+      return initialValue ? `${initialValue}\n${tokens}` : tokens
+    }
+    return initialValue
+  })
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [detectedEntities, setDetectedEntities] = useState<{ name: string; type: string }[]>(initialEntities)
+  const [availableSpaces, setAvailableSpaces] = useState<Space[]>([])
+  const [spaceQuery, setSpaceQuery] = useState<string | null>(null)
+  const [dropdownIndex, setDropdownIndex] = useState(0)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
@@ -84,6 +111,14 @@ export default function NoteComposer({
     ta.style.height = "auto"
     ta.style.height = ta.scrollHeight + "px"
   }, [value])
+
+  // Load available spaces for autocomplete
+  useEffect(() => {
+    fetch("/api/spaces")
+      .then((r) => r.ok ? r.json() : [])
+      .then((data: Space[]) => setAvailableSpaces(data))
+      .catch(() => {})
+  }, [])
 
   // Debounced entity extraction preview
   useEffect(() => {
@@ -108,6 +143,60 @@ export default function NoteComposer({
     }
   }, [value])
 
+  // Reset dropdown index when query changes
+  useEffect(() => {
+    setDropdownIndex(0)
+  }, [spaceQuery])
+
+  // Spaces detected in current text
+  const detectedSpaces = getSpacesFromText(value)
+
+  // Autocomplete dropdown options
+  const dropdownOptions: Array<{ type: "space"; space: Space } | { type: "create"; name: string }> = (() => {
+    if (spaceQuery === null) return []
+    const q = spaceQuery.toLowerCase()
+    const filtered = availableSpaces.filter((s) => s.name.includes(q) && !detectedSpaces.includes(s.name))
+    const options: Array<{ type: "space"; space: Space } | { type: "create"; name: string }> = filtered.map((s) => ({ type: "space" as const, space: s }))
+    const exactMatch = availableSpaces.some((s) => s.name === q) || detectedSpaces.includes(q)
+    if (q.length > 0 && !exactMatch) {
+      options.push({ type: "create" as const, name: q })
+    }
+    return options
+  })()
+
+  function selectDropdownOption(option: typeof dropdownOptions[number]) {
+    const ta = textareaRef.current
+    if (!ta) return
+    const cursor = ta.selectionStart
+    const before = value.slice(0, cursor)
+    const after = value.slice(cursor)
+    // Replace the trailing @partial with @completedName
+    const newBefore = before.replace(/(^|\s)@([a-zA-Z0-9_-]*)$/, (_, prefix) => `${prefix}@${option.type === "space" ? option.space.name : option.name}`)
+    const newValue = newBefore + after
+    setValue(newValue)
+    setSpaceQuery(null)
+    // Restore cursor after React re-render
+    requestAnimationFrame(() => {
+      ta.focus()
+      ta.setSelectionRange(newBefore.length, newBefore.length)
+    })
+    // Add newly created space to available list optimistically
+    if (option.type === "create") {
+      setAvailableSpaces((prev) => [
+        ...prev,
+        { id: `temp-${option.name}`, name: option.name, note_count: 0 },
+      ])
+    }
+  }
+
+  function handleChange(e: React.ChangeEvent<HTMLTextAreaElement>) {
+    const newValue = e.target.value
+    setValue(newValue)
+    const cursor = e.target.selectionStart
+    const query = detectActiveSpaceQuery(newValue, cursor)
+    setSpaceQuery(query)
+  }
+
   async function handleSave() {
     if (saving || !value.trim()) return
     setSaving(true)
@@ -129,7 +218,7 @@ export default function NoteComposer({
       }
 
       const note = await res.json()
-      onSave(note)
+      onSave({ ...note, spaces: note.spaces ?? [], entities: note.entities ?? [] })
     } catch (err: any) {
       setError(err.message ?? "Something went wrong")
       setSaving(false)
@@ -137,6 +226,31 @@ export default function NoteComposer({
   }
 
   function onKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
+    // Dropdown navigation
+    if (spaceQuery !== null && dropdownOptions.length > 0) {
+      if (e.key === "ArrowDown") {
+        e.preventDefault()
+        setDropdownIndex((i) => Math.min(i + 1, dropdownOptions.length - 1))
+        return
+      }
+      if (e.key === "ArrowUp") {
+        e.preventDefault()
+        setDropdownIndex((i) => Math.max(i - 1, 0))
+        return
+      }
+      if (e.key === "Enter" || e.key === "Tab") {
+        e.preventDefault()
+        const opt = dropdownOptions[dropdownIndex]
+        if (opt) selectDropdownOption(opt)
+        return
+      }
+      if (e.key === "Escape") {
+        e.preventDefault()
+        setSpaceQuery(null)
+        return
+      }
+    }
+
     if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
       e.preventDefault()
       handleSave()
@@ -148,6 +262,7 @@ export default function NoteComposer({
   }
 
   const isEmpty = !value.trim()
+  const showDropdown = spaceQuery !== null && dropdownOptions.length > 0
 
   return (
     <div
@@ -163,8 +278,36 @@ export default function NoteComposer({
         boxShadow: "var(--shadow-sm)",
       }}
     >
-      {/* Entity chips preview */}
-      <div style={{ minHeight: "24px", display: "flex", flexWrap: "wrap", gap: "5px", alignItems: "center" }}>
+      {/* Top row: space pills + entity chips */}
+      <div style={{ display: "flex", flexWrap: "wrap", gap: "5px", alignItems: "center", minHeight: "24px" }}>
+        {/* Space pills (derived from text) */}
+        {detectedSpaces.map((name) => (
+          <span
+            key={name}
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: "4px",
+              padding: "3px 9px",
+              borderRadius: "999px",
+              fontSize: "11px",
+              fontWeight: 500,
+              background: SPACE_STYLE.bg,
+              color: SPACE_STYLE.text,
+              border: `1px solid ${SPACE_STYLE.border}`,
+              whiteSpace: "nowrap",
+            }}
+          >
+            @{name}
+          </span>
+        ))}
+
+        {/* Divider between spaces and entities */}
+        {detectedSpaces.length > 0 && detectedEntities.length > 0 && (
+          <div style={{ width: "1px", height: "16px", background: "var(--border)", margin: "0 3px", flexShrink: 0 }} />
+        )}
+
+        {/* Entity chips */}
         {detectedEntities.length > 0 ? (
           detectedEntities.map((e, i) => {
             const s = entityStyle(e.type)
@@ -190,41 +333,125 @@ export default function NoteComposer({
               </span>
             )
           })
-        ) : (
+        ) : detectedSpaces.length === 0 ? (
           <span style={{ fontSize: "11px", color: "var(--text-3)" }}>
-            {value.trim().length > 20 ? "Detecting entities…" : "Entities will appear as you type"}
+            {value.trim().length > 20 ? "Detecting entities…" : "Type @space to assign · entities appear as you write"}
           </span>
-        )}
+        ) : null}
       </div>
 
       {/* Textarea */}
-      <textarea
-        ref={textareaRef}
-        value={value}
-        onChange={(e) => setValue(e.target.value)}
-        onKeyDown={onKeyDown}
-        placeholder="Write a note…"
-        rows={4}
-        style={{
-          width: "100%",
-          background: "var(--bg-base)",
-          border: "1px solid var(--border)",
-          borderRadius: "8px",
-          padding: "12px",
-          fontSize: "14px",
-          lineHeight: 1.65,
-          color: "var(--text-1)",
-          resize: "none",
-          outline: "none",
-          fontFamily: "inherit",
-          overflowY: "hidden",
-          boxSizing: "border-box",
-          transition: "border-color 0.15s",
-          minHeight: "96px",
-        }}
-        onFocus={(e) => { e.currentTarget.style.borderColor = "var(--border-accent)" }}
-        onBlur={(e) => { e.currentTarget.style.borderColor = "var(--border)" }}
-      />
+      <div style={{ position: "relative" }}>
+        <textarea
+          ref={textareaRef}
+          value={value}
+          onChange={handleChange}
+          onKeyDown={onKeyDown}
+          placeholder="Write a note… use @space to organize"
+          rows={4}
+          style={{
+            width: "100%",
+            background: "var(--bg-base)",
+            border: "1px solid var(--border)",
+            borderRadius: "8px",
+            padding: "12px",
+            fontSize: "14px",
+            lineHeight: 1.65,
+            color: "var(--text-1)",
+            resize: "none",
+            outline: "none",
+            fontFamily: "inherit",
+            overflowY: "hidden",
+            boxSizing: "border-box",
+            transition: "border-color 0.15s",
+            minHeight: "96px",
+          }}
+          onFocus={(e) => { e.currentTarget.style.borderColor = "var(--border-accent)" }}
+          onBlur={(e) => {
+            e.currentTarget.style.borderColor = "var(--border)"
+            // Delay hiding dropdown so clicks register
+            setTimeout(() => setSpaceQuery(null), 150)
+          }}
+        />
+
+        {/* Autocomplete dropdown */}
+        {showDropdown && (
+          <div
+            style={{
+              position: "absolute",
+              top: "calc(100% + 4px)",
+              left: 0,
+              right: 0,
+              background: "var(--bg-elevated)",
+              border: "1px solid var(--border)",
+              borderRadius: "8px",
+              boxShadow: "var(--shadow-lg)",
+              zIndex: 100,
+              overflow: "hidden",
+            }}
+          >
+            {dropdownOptions.map((opt, i) => {
+              const isActive = i === dropdownIndex
+              if (opt.type === "space") {
+                return (
+                  <button
+                    key={opt.space.id}
+                    onMouseDown={(e) => { e.preventDefault(); selectDropdownOption(opt) }}
+                    onMouseEnter={() => setDropdownIndex(i)}
+                    style={{
+                      width: "100%",
+                      textAlign: "left",
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "8px",
+                      padding: "9px 12px",
+                      fontSize: "13px",
+                      color: isActive ? "var(--text-1)" : "var(--text-2)",
+                      background: isActive ? "var(--bg-hover)" : "transparent",
+                      border: "none",
+                      cursor: "pointer",
+                      transition: "background 0.1s",
+                    }}
+                  >
+                    <span style={{ color: SPACE_STYLE.text, fontSize: "12px", fontWeight: 500 }}>@{opt.space.name}</span>
+                    <span style={{ fontSize: "11px", color: "var(--text-3)", marginLeft: "auto" }}>
+                      {opt.space.note_count} {opt.space.note_count === 1 ? "note" : "notes"}
+                    </span>
+                  </button>
+                )
+              }
+              return (
+                <button
+                  key={`create-${opt.name}`}
+                  onMouseDown={(e) => { e.preventDefault(); selectDropdownOption(opt) }}
+                  onMouseEnter={() => setDropdownIndex(i)}
+                  style={{
+                    width: "100%",
+                    textAlign: "left",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "8px",
+                    padding: "9px 12px",
+                    fontSize: "13px",
+                    color: isActive ? "var(--text-1)" : "var(--text-2)",
+                    background: isActive ? "var(--bg-hover)" : "transparent",
+                    border: "none",
+                    borderTop: dropdownOptions.length > 1 ? "1px solid var(--border-subtle)" : "none",
+                    cursor: "pointer",
+                    transition: "background 0.1s",
+                  }}
+                >
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+                    <line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" />
+                  </svg>
+                  <span>Create </span>
+                  <span style={{ color: SPACE_STYLE.text, fontWeight: 500 }}>@{opt.name}</span>
+                </button>
+              )
+            })}
+          </div>
+        )}
+      </div>
 
       {/* Inline error */}
       {error && (
@@ -261,9 +488,7 @@ export default function NoteComposer({
         </button>
 
         <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-          <span style={{ fontSize: "11px", color: "var(--text-3)" }}>
-            {mode === "edit" ? "⌘↵ to save" : "⌘↵ to save"}
-          </span>
+          <span style={{ fontSize: "11px", color: "var(--text-3)" }}>⌘↵ to save</span>
           <button
             onClick={handleSave}
             disabled={saving || isEmpty}

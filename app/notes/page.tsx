@@ -1,8 +1,9 @@
 "use client"
 
-import { useEffect, useMemo, useRef, useState } from "react"
+import { Suspense, useEffect, useMemo, useRef, useState } from "react"
+import { useSearchParams, useRouter } from "next/navigation"
 import Link from "next/link"
-import type { Entity, NoteWithEntities } from "./types"
+import type { Entity, Space, NoteWithEntities } from "./types"
 import NoteComposer from "./NoteComposer"
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -29,6 +30,8 @@ const ENTITY_COLORS: Record<string, { bg: string; text: string; border: string }
   event:    { bg: "rgba(249,115,22,0.14)",  text: "#fb923c", border: "rgba(249,115,22,0.28)" },
   resource: { bg: "rgba(20,184,166,0.14)",  text: "#2dd4bf", border: "rgba(20,184,166,0.28)" },
 }
+
+const SPACE_STYLE = { bg: "rgba(99,102,241,0.12)", text: "#818cf8", border: "rgba(99,102,241,0.30)" }
 
 function entityStyle(type: string) {
   return (
@@ -92,6 +95,27 @@ function EntityBadge({ entity }: { entity: Entity }) {
   )
 }
 
+function SpaceBadge({ space }: { space: Space }) {
+  return (
+    <span
+      style={{
+        display: "inline-flex",
+        alignItems: "center",
+        padding: "3px 8px",
+        borderRadius: "999px",
+        fontSize: "11px",
+        fontWeight: 500,
+        background: SPACE_STYLE.bg,
+        color: SPACE_STYLE.text,
+        border: `1px solid ${SPACE_STYLE.border}`,
+        whiteSpace: "nowrap",
+      }}
+    >
+      @{space.name}
+    </span>
+  )
+}
+
 interface NoteCardProps {
   note: NoteWithEntities
   selected: boolean
@@ -132,7 +156,16 @@ function NoteCard({ note, selected, onClick }: NoteCardProps) {
         gap: "12px",
       }}
     >
-      {/* Entity badges — TOP */}
+      {/* Space badges — very top */}
+      {note.spaces && note.spaces.length > 0 && (
+        <div style={{ display: "flex", flexWrap: "wrap", gap: "4px" }}>
+          {note.spaces.map((s) => (
+            <SpaceBadge key={s.id} space={s} />
+          ))}
+        </div>
+      )}
+
+      {/* Entity badges */}
       {note.entities.length > 0 && (
         <div style={{ display: "flex", flexWrap: "wrap", gap: "5px" }}>
           {note.entities.slice(0, 4).map((e) => (
@@ -195,6 +228,18 @@ function NoteCard({ note, selected, onClick }: NoteCardProps) {
 const DETAIL_W = 400
 
 export default function NotesPage() {
+  return (
+    <Suspense>
+      <NotesPageInner />
+    </Suspense>
+  )
+}
+
+function NotesPageInner() {
+  const searchParams = useSearchParams()
+  const router = useRouter()
+  const activeSpaceId = searchParams.get("space")
+
   const [notes, setNotes] = useState<NoteWithEntities[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -206,21 +251,48 @@ export default function NotesPage() {
   const [editMode, setEditMode] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [deleting, setDeleting] = useState(false)
+  const [activeSpaceName, setActiveSpaceName] = useState<string | null>(null)
   const detailRef = useRef<HTMLDivElement>(null)
   const composerTopRef = useRef<HTMLDivElement>(null)
   const justAddedId = useRef<string | null>(null)
   const confirmDeleteTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useEffect(() => {
-    fetch("/api/notes")
+    setLoading(true)
+    setNotes([])
+    setSelectedNote(null)
+    setActiveSpaceName(null)
+
+    const url = activeSpaceId ? `/api/notes?spaceId=${activeSpaceId}` : "/api/notes"
+
+    fetch(url)
       .then((r) => {
         if (!r.ok) throw new Error("Failed to load notes")
         return r.json()
       })
-      .then((data: NoteWithEntities[]) => setNotes(data))
+      .then((data: NoteWithEntities[]) => {
+        setNotes(data)
+        // Derive space name from first note's spaces
+        if (activeSpaceId && data.length > 0) {
+          const space = data[0].spaces?.find((s) => s.id === activeSpaceId)
+          if (space) setActiveSpaceName(space.name)
+        }
+      })
       .catch((e: Error) => setError(e.message))
       .finally(() => setLoading(false))
-  }, [])
+  }, [activeSpaceId])
+
+  // Fetch space name separately if no notes yet (empty space)
+  useEffect(() => {
+    if (!activeSpaceId || activeSpaceName) return
+    fetch("/api/spaces")
+      .then((r) => r.ok ? r.json() : [])
+      .then((spaces: { id: string; name: string }[]) => {
+        const found = spaces.find((s) => s.id === activeSpaceId)
+        if (found) setActiveSpaceName(found.name)
+      })
+      .catch(() => {})
+  }, [activeSpaceId, activeSpaceName])
 
   const allEntities = useMemo(() => {
     const map = new Map<string, { entity: Entity; count: number }>()
@@ -379,9 +451,11 @@ export default function NotesPage() {
           <p style={{ fontSize: "14px", margin: 0, color: "var(--text-2)" }}>
             {searchQuery || selectedEntityIds.size > 0
               ? "No notes match your filter"
+              : activeSpaceId
+              ? `No notes in ${activeSpaceName ? `@${activeSpaceName}` : "this space"} yet`
               : "No notes saved yet"}
           </p>
-          {!searchQuery && selectedEntityIds.size === 0 && (
+          {!searchQuery && selectedEntityIds.size === 0 && !activeSpaceId && (
             <p style={{ fontSize: "13px", margin: 0, color: "var(--text-3)" }}>
               Use{" "}
               <code
@@ -513,17 +587,53 @@ export default function NotesPage() {
             }}
           >
             <div style={{ display: "flex", alignItems: "baseline", gap: "10px" }}>
-              <h1
-                style={{
-                  fontSize: "20px",
-                  fontWeight: 600,
-                  color: "var(--text-1)",
-                  margin: 0,
-                  letterSpacing: "-0.015em",
-                }}
-              >
-                Notes
-              </h1>
+              {/* Breadcrumb */}
+              {activeSpaceId ? (
+                <div style={{ display: "flex", alignItems: "baseline", gap: "6px" }}>
+                  <Link
+                    href="/notes"
+                    style={{
+                      fontSize: "20px",
+                      fontWeight: 600,
+                      color: "var(--text-3)",
+                      textDecoration: "none",
+                      letterSpacing: "-0.015em",
+                      transition: "color 0.15s",
+                    }}
+                    onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.color = "var(--text-2)" }}
+                    onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.color = "var(--text-3)" }}
+                  >
+                    Notes
+                  </Link>
+                  <span style={{ fontSize: "16px", color: "var(--text-3)" }}>/</span>
+                  <span
+                    style={{
+                      fontSize: "20px",
+                      fontWeight: 600,
+                      color: "var(--text-1)",
+                      letterSpacing: "-0.015em",
+                    }}
+                  >
+                    {activeSpaceName ? (
+                      <span style={{ color: SPACE_STYLE.text }}>@{activeSpaceName}</span>
+                    ) : (
+                      "Space"
+                    )}
+                  </span>
+                </div>
+              ) : (
+                <h1
+                  style={{
+                    fontSize: "20px",
+                    fontWeight: 600,
+                    color: "var(--text-1)",
+                    margin: 0,
+                    letterSpacing: "-0.015em",
+                  }}
+                >
+                  Notes
+                </h1>
+              )}
               {!loading && notes.length > 0 && (
                 <span
                   style={{
@@ -947,6 +1057,7 @@ export default function NotesPage() {
                 noteId={selectedNote.id}
                 initialValue={selectedNote.content}
                 initialEntities={selectedNote.entities}
+                initialSpaces={selectedNote.spaces}
                 onSave={(updated) => {
                   setEditMode(false)
                   setNotes((prev) => prev.map((n) => n.id === updated.id ? updated : n))
@@ -955,17 +1066,47 @@ export default function NotesPage() {
                 onCancel={() => setEditMode(false)}
               />
             ) : (
-              <p
-                style={{
-                  fontSize: "15px",
-                  lineHeight: 1.75,
-                  color: "var(--text-1)",
-                  whiteSpace: "pre-wrap",
-                  margin: 0,
-                }}
-              >
-                {selectedNote.content}
-              </p>
+              <>
+                {/* Space badges in detail view */}
+                {selectedNote.spaces && selectedNote.spaces.length > 0 && (
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: "5px", marginBottom: "16px" }}>
+                    {selectedNote.spaces.map((s) => (
+                      <Link
+                        key={s.id}
+                        href={`/notes?space=${s.id}`}
+                        style={{
+                          display: "inline-flex",
+                          alignItems: "center",
+                          padding: "3px 9px",
+                          borderRadius: "999px",
+                          fontSize: "12px",
+                          fontWeight: 500,
+                          background: SPACE_STYLE.bg,
+                          color: SPACE_STYLE.text,
+                          border: `1px solid ${SPACE_STYLE.border}`,
+                          textDecoration: "none",
+                          transition: "filter 0.15s",
+                        }}
+                        onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.filter = "brightness(1.2)" }}
+                        onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.filter = "none" }}
+                      >
+                        @{s.name}
+                      </Link>
+                    ))}
+                  </div>
+                )}
+                <p
+                  style={{
+                    fontSize: "15px",
+                    lineHeight: 1.75,
+                    color: "var(--text-1)",
+                    whiteSpace: "pre-wrap",
+                    margin: 0,
+                  }}
+                >
+                  {selectedNote.content}
+                </p>
+              </>
             )}
           </div>
 

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { getSupabaseServer } from "@/lib/supabase/server"
 import { getSupabaseAdmin } from "@/lib/supabase/admin"
 import type { NoteDetail } from "@/app/notes/types"
+import { extractSpaceTokens, syncNoteSpaces } from "@/app/api/notes/route"
 
 // Shared entity upsert + link helper
 async function upsertEntitiesAndLink(
@@ -114,6 +115,7 @@ export async function DELETE(
 
     const db = getSupabaseAdmin()
     await db.from("knowledge_links").delete().eq("knowledge_id", id).eq("user_id", user.id)
+    // note_spaces rows removed via CASCADE on knowledge(id)
     const { error: deleteError } = await db
       .from("knowledge")
       .delete()
@@ -143,8 +145,11 @@ export async function PUT(
     if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
 
     const body = await req.json()
-    const content = (body.content ?? "").trim()
-    if (!content) return NextResponse.json({ error: "Empty content" }, { status: 400 })
+    const rawContent = (body.content ?? "").trim()
+    if (!rawContent) return NextResponse.json({ error: "Empty content" }, { status: 400 })
+
+    const { spaceNames, cleanContent } = extractSpaceTokens(rawContent)
+    const content = cleanContent || rawContent
 
     const db = getSupabaseAdmin()
     const { createEmbedding } = await import("@/lib/embeddings")
@@ -165,7 +170,7 @@ export async function PUT(
       return NextResponse.json({ error: "Update failed" }, { status: 500 })
     }
 
-    // Delete old links then re-extract
+    // Delete old entity links then re-extract
     await db.from("knowledge_links").delete().eq("knowledge_id", id)
 
     const rawEntities = await extractEntities(content)
@@ -173,11 +178,14 @@ export async function PUT(
       db, user.id, id, Array.isArray(rawEntities) ? rawEntities : []
     )
 
+    const spaces = await syncNoteSpaces(db, user.id, id, spaceNames)
+
     return NextResponse.json({
       id: knowledge.id,
       content: knowledge.content,
       created_at: knowledge.created_at,
       entities,
+      spaces,
     })
   } catch (error) {
     console.error("Note PUT error:", error)

@@ -1,9 +1,115 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getSupabaseServer } from "@/lib/supabase/server"
 import { getSupabaseAdmin } from "@/lib/supabase/admin"
-import type { NoteWithEntities, Entity } from "@/app/notes/types"
+import type { NoteWithEntities, Entity, Space } from "@/app/notes/types"
 
-export async function GET() {
+// ── Space token parsing ───────────────────────────────────────────────────────
+
+export function extractSpaceTokens(content: string): { spaceNames: string[]; cleanContent: string } {
+  const spaceNames: string[] = []
+  const cleanContent = content
+    .replace(/(^|\s)@([a-zA-Z0-9_-]+)/g, (_, prefix: string, name: string) => {
+      spaceNames.push(name.toLowerCase())
+      return prefix
+    })
+    .replace(/[ \t]+/g, " ")
+    .trim()
+  return { spaceNames: [...new Set(spaceNames)], cleanContent }
+}
+
+// ── Sync note ↔ spaces ────────────────────────────────────────────────────────
+
+export async function syncNoteSpaces(
+  db: ReturnType<typeof getSupabaseAdmin>,
+  userId: string,
+  noteId: string,
+  spaceNames: string[]
+): Promise<Space[]> {
+  if (spaceNames.length === 0) {
+    // Remove all space links for this note
+    await db.from("note_spaces").delete().eq("note_id", noteId)
+    return []
+  }
+
+  // Upsert each space, collect IDs
+  const spaceIds: string[] = []
+  const spaceResults: Space[] = []
+
+  for (const name of spaceNames) {
+    const { data } = await db
+      .from("spaces")
+      .upsert({ user_id: userId, name }, { onConflict: "user_id,name" })
+      .select("id, name")
+      .single()
+
+    if (data) {
+      spaceIds.push(data.id)
+      spaceResults.push({ id: data.id, name: data.name, note_count: 0 })
+    }
+  }
+
+  // Replace note's space links
+  await db.from("note_spaces").delete().eq("note_id", noteId)
+
+  if (spaceIds.length > 0) {
+    await db.from("note_spaces").insert(
+      spaceIds.map((space_id) => ({ note_id: noteId, space_id }))
+    )
+  }
+
+  return spaceResults
+}
+
+// ── Fetch spaces for a set of note IDs ───────────────────────────────────────
+
+async function fetchSpacesForNotes(
+  db: ReturnType<typeof getSupabaseAdmin>,
+  noteIds: string[]
+): Promise<Map<string, Space[]>> {
+  if (noteIds.length === 0) return new Map()
+
+  const { data: noteSpaceRows } = await db
+    .from("note_spaces")
+    .select("note_id, space_id")
+    .in("note_id", noteIds)
+
+  if (!noteSpaceRows || noteSpaceRows.length === 0) return new Map()
+
+  const uniqueSpaceIds = [...new Set(noteSpaceRows.map((r) => r.space_id))]
+
+  const { data: spaceRows } = await db
+    .from("spaces")
+    .select("id, name")
+    .in("id", uniqueSpaceIds)
+
+  const spaceMap = new Map<string, { id: string; name: string }>()
+  for (const s of spaceRows ?? []) spaceMap.set(s.id, s)
+
+  // Count notes per space across all notes (for note_count)
+  const spaceNoteCount = new Map<string, number>()
+  for (const r of noteSpaceRows) {
+    spaceNoteCount.set(r.space_id, (spaceNoteCount.get(r.space_id) ?? 0) + 1)
+  }
+
+  // Build note_id → spaces[]
+  const result = new Map<string, Space[]>()
+  for (const r of noteSpaceRows) {
+    const space = spaceMap.get(r.space_id)
+    if (!space) continue
+    if (!result.has(r.note_id)) result.set(r.note_id, [])
+    result.get(r.note_id)!.push({
+      id: space.id,
+      name: space.name,
+      note_count: spaceNoteCount.get(r.space_id) ?? 0,
+    })
+  }
+
+  return result
+}
+
+// ── GET /api/notes ─────────────────────────────────────────────────────────
+
+export async function GET(req: NextRequest) {
   try {
     const authClient = await getSupabaseServer()
     const { data: { user } } = await authClient.auth.getUser()
@@ -13,32 +119,63 @@ export async function GET() {
 
     const userId = user.id
     const db = getSupabaseAdmin()
+    const { searchParams } = new URL(req.url)
+    const spaceId = searchParams.get("spaceId")
 
-    // 1. Fetch all notes for this user
-    const { data: notes, error: notesError } = await db
+    let noteIds: string[] | null = null
+
+    // If filtering by space, get the note IDs in that space first
+    if (spaceId) {
+      // Verify space belongs to user
+      const { data: space } = await db
+        .from("spaces")
+        .select("id")
+        .eq("id", spaceId)
+        .eq("user_id", userId)
+        .maybeSingle()
+
+      if (!space) return NextResponse.json([])
+
+      const { data: nsRows } = await db
+        .from("note_spaces")
+        .select("note_id")
+        .eq("space_id", spaceId)
+
+      noteIds = (nsRows ?? []).map((r) => r.note_id)
+      if (noteIds.length === 0) return NextResponse.json([])
+    }
+
+    // 1. Fetch notes
+    let query = db
       .from("knowledge")
       .select("id, content, created_at")
       .eq("role", "note")
       .eq("user_id", userId)
       .order("created_at", { ascending: false })
 
+    if (noteIds !== null) {
+      query = query.in("id", noteIds)
+    }
+
+    const { data: notes, error: notesError } = await query
+
     if (notesError) throw notesError
     if (!notes || notes.length === 0) return NextResponse.json([])
 
-    const noteIds = notes.map((n) => n.id)
+    const fetchedNoteIds = notes.map((n) => n.id)
 
-    // 2. Fetch all links for those notes
+    // 2. Fetch links
     const { data: links, error: linksError } = await db
       .from("knowledge_links")
       .select("knowledge_id, entity_id")
       .eq("user_id", userId)
-      .in("knowledge_id", noteIds)
+      .in("knowledge_id", fetchedNoteIds)
 
     if (linksError) throw linksError
 
     const entityIds = [...new Set((links ?? []).map((l) => l.entity_id))]
 
-    // 3. Fetch entities (skip if none)
+    // 3. Fetch entities
     let entityMap = new Map<string, Entity>()
     if (entityIds.length > 0) {
       const { data: entities, error: entitiesError } = await db
@@ -63,12 +200,16 @@ export async function GET() {
       noteEntityIndex.get(link.knowledge_id)!.push(entity)
     }
 
-    // 5. Assemble response
+    // 5. Fetch spaces for notes
+    const noteSpacesIndex = await fetchSpacesForNotes(db, fetchedNoteIds)
+
+    // 6. Assemble response
     const result: NoteWithEntities[] = notes.map((note) => ({
       id: note.id,
       content: note.content,
       created_at: note.created_at,
       entities: noteEntityIndex.get(note.id) ?? [],
+      spaces: noteSpacesIndex.get(note.id) ?? [],
     }))
 
     return NextResponse.json(result)
@@ -145,8 +286,11 @@ export async function POST(req: NextRequest) {
     if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
 
     const body = await req.json()
-    const content = (body.content ?? "").trim()
-    if (!content) return NextResponse.json({ error: "Empty content" }, { status: 400 })
+    const rawContent = (body.content ?? "").trim()
+    if (!rawContent) return NextResponse.json({ error: "Empty content" }, { status: 400 })
+
+    const { spaceNames, cleanContent } = extractSpaceTokens(rawContent)
+    const content = cleanContent || rawContent
 
     const db = getSupabaseAdmin()
     const { createEmbedding } = await import("@/lib/embeddings")
@@ -170,11 +314,14 @@ export async function POST(req: NextRequest) {
       db, user.id, knowledge.id, Array.isArray(rawEntities) ? rawEntities : []
     )
 
+    const spaces = await syncNoteSpaces(db, user.id, knowledge.id, spaceNames)
+
     return NextResponse.json({
       id: knowledge.id,
       content: knowledge.content,
       created_at: knowledge.created_at,
       entities,
+      spaces,
     })
   } catch (error) {
     console.error("Notes POST error:", error)
