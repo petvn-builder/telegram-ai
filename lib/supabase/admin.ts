@@ -1,4 +1,4 @@
-import { createClient } from "@supabase/supabase-js"
+import { createClient, SupabaseClient } from "@supabase/supabase-js"
 
 /**
  * Returns a Supabase client using the service role key.
@@ -7,9 +7,9 @@ import { createClient } from "@supabase/supabase-js"
  *
  * Singleton pattern: safe for long-lived server processes.
  */
-let _admin: ReturnType<typeof createClient> | null = null
+let _admin: SupabaseClient | null = null
 
-export function getSupabaseAdmin() {
+export function getSupabaseAdmin(): SupabaseClient {
   if (_admin) return _admin
 
   const url = process.env.SUPABASE_URL

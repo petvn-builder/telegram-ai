@@ -44,7 +44,7 @@ export async function GET(req: NextRequest) {
 
     if (linkError) throw linkError
 
-    const entityIds = (links ?? []).map((l: { entity_id: string }) => l.entity_id)
+    const entityIds = (links ?? []).map((l) => l.entity_id)
 
     // 3️⃣ Fetch related entities
     const { data: entities, error: entityError } = await db
