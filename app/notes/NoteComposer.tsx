@@ -278,36 +278,8 @@ export default function NoteComposer({
         boxShadow: "var(--shadow-sm)",
       }}
     >
-      {/* Top row: space pills + entity chips */}
+      {/* Entity chips */}
       <div style={{ display: "flex", flexWrap: "wrap", gap: "5px", alignItems: "center", minHeight: "24px" }}>
-        {/* Space pills (derived from text) */}
-        {detectedSpaces.map((name) => (
-          <span
-            key={name}
-            style={{
-              display: "inline-flex",
-              alignItems: "center",
-              gap: "4px",
-              padding: "3px 9px",
-              borderRadius: "999px",
-              fontSize: "11px",
-              fontWeight: 500,
-              background: SPACE_STYLE.bg,
-              color: SPACE_STYLE.text,
-              border: `1px solid ${SPACE_STYLE.border}`,
-              whiteSpace: "nowrap",
-            }}
-          >
-            @{name}
-          </span>
-        ))}
-
-        {/* Divider between spaces and entities */}
-        {detectedSpaces.length > 0 && detectedEntities.length > 0 && (
-          <div style={{ width: "1px", height: "16px", background: "var(--border)", margin: "0 3px", flexShrink: 0 }} />
-        )}
-
-        {/* Entity chips */}
         {detectedEntities.length > 0 ? (
           detectedEntities.map((e, i) => {
             const s = entityStyle(e.type)
@@ -333,11 +305,11 @@ export default function NoteComposer({
               </span>
             )
           })
-        ) : detectedSpaces.length === 0 ? (
+        ) : (
           <span style={{ fontSize: "11px", color: "var(--text-3)" }}>
-            {value.trim().length > 20 ? "Detecting entities…" : "Type @space to assign · entities appear as you write"}
+            {value.trim().length > 20 ? "Detecting entities…" : "Entities will appear as you write"}
           </span>
-        ) : null}
+        )}
       </div>
 
       {/* Textarea */}
@@ -347,7 +319,7 @@ export default function NoteComposer({
           value={value}
           onChange={handleChange}
           onKeyDown={onKeyDown}
-          placeholder="Write a note… use @space to organize"
+          placeholder="Write a note…"
           rows={4}
           style={{
             width: "100%",
@@ -450,6 +422,50 @@ export default function NoteComposer({
               )
             })}
           </div>
+        )}
+      </div>
+
+      {/* Spaces section */}
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: "6px",
+          flexWrap: "wrap",
+          paddingTop: "2px",
+        }}
+      >
+        {detectedSpaces.length > 0 ? (
+          <>
+            {detectedSpaces.map((name) => (
+              <span
+                key={name}
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  padding: "2px 8px",
+                  borderRadius: "999px",
+                  fontSize: "11px",
+                  fontWeight: 500,
+                  background: SPACE_STYLE.bg,
+                  color: SPACE_STYLE.text,
+                  border: `1px solid ${SPACE_STYLE.border}`,
+                  whiteSpace: "nowrap",
+                }}
+              >
+                @{name}
+              </span>
+            ))}
+            <span style={{ fontSize: "11px", color: "var(--text-3)" }}>
+              · type @space to add more
+            </span>
+          </>
+        ) : (
+          <span style={{ fontSize: "11px", color: "var(--text-3)" }}>
+            Type{" "}
+            <span style={{ color: SPACE_STYLE.text, fontWeight: 500 }}>@space</span>
+            {" "}to organize this note
+          </span>
         )}
       </div>
 
