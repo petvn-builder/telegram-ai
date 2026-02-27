@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState, useRef } from "react"
+import { useEffect, useState, useRef, useMemo, useCallback } from "react"
 import dynamic from "next/dynamic"
 import Link from "next/link"
 import * as d3 from "d3-force"
@@ -17,7 +17,9 @@ interface GraphNode {
   id: string
   label?: string
   type: "entity" | "note"
+  entityType?: string
   size: number
+  mentionCount?: number
   content?: string
   x?: number
   y?: number
@@ -52,15 +54,21 @@ type PanelMode =
   | { kind: "note"; note: NoteDetail }
   | { kind: "entity"; entityId: string; entityLabel: string; notes: GraphNode[] }
 
-// ─── helpers ─────────────────────────────────────────────────────────────────
+// ─── canvas color map (CSS vars can't be read in canvas context) ──────────────
 
-function formatDate(iso: string) {
-  return new Date(iso).toLocaleDateString("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  })
+const ENTITY_FILL: Record<string, [number, number, number]> = {
+  person:   [59, 130, 246],
+  project:  [139, 92, 246],
+  company:  [245, 158, 11],
+  tool:     [16, 185, 129],
+  topic:    [99, 102, 241],
+  goal:     [236, 72, 153],
+  event:    [249, 115, 22],
+  resource: [20, 184, 166],
 }
+const DEFAULT_FILL: [number, number, number] = [128, 128, 160]
+
+// ─── CSS entity colors (for DOM panels) ──────────────────────────────────────
 
 const ENTITY_COLORS: Record<string, { bg: string; text: string; border: string }> = {
   person:   { bg: "rgba(59,130,246,0.12)",  text: "#60a5fa", border: "rgba(59,130,246,0.25)"  },
@@ -75,6 +83,16 @@ const ENTITY_COLORS: Record<string, { bg: string; text: string; border: string }
 
 function entityStyle(type: string) {
   return ENTITY_COLORS[type] ?? { bg: "rgba(128,128,160,0.10)", text: "var(--text-2)", border: "var(--border)" }
+}
+
+// ─── helpers ─────────────────────────────────────────────────────────────────
+
+function formatDate(iso: string) {
+  return new Date(iso).toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  })
 }
 
 // ─── small components ────────────────────────────────────────────────────────
@@ -131,6 +149,11 @@ export default function GraphPage() {
   const [theme, setTheme] = useState<"dark" | "light">("dark")
   const fgRef = useRef<any>(null)
 
+  // Refs for canvas interaction (avoids re-renders during animation loop)
+  const hoveredNodeIdRef = useRef<string | null>(null)
+  const clickedEntityIdRef = useRef<string | null>(null)
+  const adjacencyRef = useRef<Map<string, Set<string>>>(new Map())
+
   // Sync theme from html[data-theme]
   useEffect(() => {
     const html = document.documentElement
@@ -161,21 +184,66 @@ export default function GraphPage() {
     })
   }, [])
 
+  // Build adjacency map when data changes
+  useEffect(() => {
+    if (!data) return
+    const adj = new Map<string, Set<string>>()
+    for (const link of data.links) {
+      const src = typeof link.source === "object" ? (link.source as any).id : link.source as string
+      const tgt = typeof link.target === "object" ? (link.target as any).id : link.target as string
+      if (!adj.has(src)) adj.set(src, new Set())
+      if (!adj.has(tgt)) adj.set(tgt, new Set())
+      adj.get(src)!.add(tgt)
+      adj.get(tgt)!.add(src)
+    }
+    adjacencyRef.current = adj
+  }, [data])
+
+  // Sync clickedEntityIdRef when panel changes
+  useEffect(() => {
+    clickedEntityIdRef.current = panel.kind === "entity" ? panel.entityId : null
+  }, [panel])
+
+  // Memoize percentile thresholds
+  const { maxMentionCount, p70Threshold, top10Threshold } = useMemo(() => {
+    if (!data) return { maxMentionCount: 1, p70Threshold: 0, top10Threshold: 0 }
+    const counts = data.nodes
+      .filter(n => n.type === "entity")
+      .map(n => (n as any).mentionCount || 0)
+      .sort((a: number, b: number) => a - b)
+    const max = Math.max(1, ...counts)
+    const p70 = counts[Math.floor(counts.length * 0.7)] ?? 0
+    const top10 = counts[Math.floor(counts.length * 0.9)] ?? 0
+    return { maxMentionCount: max, p70Threshold: p70, top10Threshold: top10 }
+  }, [data])
+
+  // Normalized log-scale node size (min=14, max=42 for entities; 5 for notes)
+  const computeNodeSize = useCallback((node: any): number => {
+    if (node.type === "note") return 5
+    const mc = node.mentionCount || 0
+    return 14 + (Math.log(mc + 1) / Math.log(maxMentionCount + 1)) * 28
+  }, [maxMentionCount])
+
   // Configure physics + auto-zoom
   useEffect(() => {
     if (!data || !fgRef.current) return
     const fg = fgRef.current
-    fg.d3Force("charge")?.strength(-400)
-    fg.d3Force("link")?.distance(160)
+    fg.d3Force("charge")?.strength(-600)
+    fg.d3Force("link")?.distance((link: any) => {
+      const s = typeof link.source === "object" ? computeNodeSize(link.source) : 14
+      const t = typeof link.target === "object" ? computeNodeSize(link.target) : 14
+      return 80 + (s + t) * 1.5
+    })
     fg.d3Force(
       "collision",
-      d3.forceCollide((node: any) => Math.sqrt(node.size || 1) * 10)
+      d3.forceCollide((node: any) => computeNodeSize(node) / 2 + 6)
     )
     setTimeout(() => fg.zoomToFit(400, 80), 300)
-  }, [data])
+  }, [data, computeNodeSize])
 
   // Hover
   async function handleNodeHover(node: any) {
+    hoveredNodeIdRef.current = node?.id ?? null
     if (!node || node.type !== "note") {
       setHoveredNote(null)
       return
@@ -231,10 +299,9 @@ export default function GraphPage() {
 
   // Theme-dependent canvas values
   const isLight = theme === "light"
-  const canvasBg        = isLight ? "#f5f5fb" : "#0d0d14"
-  const linkColor       = isLight ? "rgba(0,0,0,0.08)"           : "rgba(255,255,255,0.06)"
-  const particleColor   = isLight ? "rgba(99,102,241,0.6)"       : "rgba(99,102,241,0.5)"
-  const nodeLabelColor  = isLight ? "#1a1a2e"                    : "#c8c8d8"
+  const canvasBg      = isLight ? "#f5f5fb" : "#0d0d14"
+  const linkColorBase = isLight ? "rgba(0,0,0,0.08)" : "rgba(255,255,255,0.06)"
+  const particleColor = isLight ? "rgba(99,102,241,0.6)" : "rgba(99,102,241,0.5)"
 
   // Loading screen
   if (!data) {
@@ -308,27 +375,97 @@ export default function GraphPage() {
         <ForceGraph2D
           ref={fgRef}
           graphData={data}
-          nodeAutoColorBy="type"
           backgroundColor={canvasBg}
-          nodeVal={(node: any) => Math.sqrt(node.size || 1)}
+          nodeVal={(node: any) => {
+            const r = computeNodeSize(node) / 2
+            return (r / 4) ** 2
+          }}
           nodeRelSize={4}
           linkWidth={(link: any) => (link.weight || 1) * 0.5}
-          linkColor={() => linkColor}
+          linkColor={(link: any) => {
+            const src = typeof link.source === "object" ? (link.source as any).id : link.source
+            const tgt = typeof link.target === "object" ? (link.target as any).id : link.target
+            const activeId = hoveredNodeIdRef.current ?? clickedEntityIdRef.current
+            if (activeId) {
+              if (src === activeId || tgt === activeId)
+                return isLight ? "rgba(99,102,241,0.40)" : "rgba(99,102,241,0.35)"
+              return isLight ? "rgba(0,0,0,0.02)" : "rgba(255,255,255,0.01)"
+            }
+            return linkColorBase
+          }}
           linkDirectionalParticles={2}
           linkDirectionalParticleSpeed={0.004}
           linkDirectionalParticleColor={() => particleColor}
           cooldownTicks={100}
           d3VelocityDecay={0.3}
-          nodeCanvasObjectMode={() => "after"}
+          nodeCanvasObjectMode={() => "replace"}
           nodeCanvasObject={(node: any, ctx, globalScale) => {
-            if (node.type !== "entity") return
-            const label = node.label || node.id
-            const fontSize = Math.max(11, 14 / globalScale)
-            ctx.font = `500 ${fontSize}px -apple-system, sans-serif`
-            ctx.fillStyle = nodeLabelColor
-            ctx.textAlign = "center"
-            ctx.textBaseline = "middle"
-            ctx.fillText(label, node.x, node.y + Math.sqrt(node.size || 1) * 5 + fontSize)
+            const { x, y } = node
+            const isEntity = node.type === "entity"
+            const mc = (node.mentionCount || 0) as number
+            const size = computeNodeSize(node)
+            const r = size / 2
+
+            // Determine active/faded state
+            const hovId = hoveredNodeIdRef.current
+            const clkId = clickedEntityIdRef.current
+            const activeId = hovId ?? clkId
+            const isActive = node.id === activeId
+            const isConnected = !!activeId && !!adjacencyRef.current.get(activeId)?.has(node.id)
+            const isFaded = !!activeId && !isActive && !isConnected
+            const dimAlpha = hovId ? 0.15 : 0.08
+
+            // Per-entity opacity based on mention frequency
+            const normalized = isEntity && maxMentionCount > 1
+              ? Math.log(mc + 1) / Math.log(maxMentionCount + 1)
+              : 0.5
+            const baseAlpha = isEntity ? 0.55 + normalized * 0.35 : 0.50
+            const alpha = isFaded ? dimAlpha : baseAlpha
+
+            // Slightly scale up hovered node
+            const drawR = (isActive && !!hovId) ? r * 1.08 : r
+
+            // Glow ring for top-10% entities
+            const isTop10 = isEntity && top10Threshold > 0 && mc >= top10Threshold
+            if (isTop10 && !isFaded) {
+              ctx.beginPath()
+              ctx.arc(x, y, drawR + 4, 0, 2 * Math.PI)
+              ctx.strokeStyle = `rgba(99,102,241,${0.35 * alpha})`
+              ctx.lineWidth = 1.2
+              ctx.stroke()
+            }
+
+            // Main circle
+            const [cr, cg, cb] = isEntity
+              ? (ENTITY_FILL[node.entityType as string] ?? DEFAULT_FILL)
+              : DEFAULT_FILL
+            ctx.beginPath()
+            ctx.arc(x, y, drawR, 0, 2 * Math.PI)
+            ctx.fillStyle = `rgba(${cr},${cg},${cb},${alpha})`
+            ctx.fill()
+
+            // Label (entity nodes only, skip if radius too small)
+            if (isEntity && drawR >= 7) {
+              const rawFont = Math.min(size * 0.42, 16)
+              const fontSize = Math.max(9, rawFont / Math.max(1, globalScale))
+              const weight = mc >= p70Threshold ? 600 : 500
+              ctx.font = `${weight} ${fontSize}px -apple-system, BlinkMacSystemFont, sans-serif`
+              ctx.textAlign = "center"
+              ctx.textBaseline = "top"
+              if (size >= 28 && !isLight) {
+                ctx.shadowColor = "rgba(0,0,0,0.35)"
+                ctx.shadowBlur = 2
+                ctx.shadowOffsetY = 1
+              }
+              const labelAlpha = isFaded ? dimAlpha : Math.min(1, alpha + 0.15)
+              ctx.fillStyle = isLight
+                ? `rgba(26,26,46,${labelAlpha})`
+                : `rgba(200,200,215,${labelAlpha})`
+              ctx.fillText(node.label || node.id, x, y + drawR + 3)
+              ctx.shadowColor = "transparent"
+              ctx.shadowBlur = 0
+              ctx.shadowOffsetY = 0
+            }
           }}
           onNodeHover={handleNodeHover}
           onNodeClick={handleNodeClick}
@@ -372,6 +509,41 @@ export default function GraphPage() {
               <Stat label="Entities" value={data.nodes.filter((n) => n.type === "entity").length} />
               <Stat label="Notes" value={data.nodes.filter((n) => n.type === "note").length} />
               <Stat label="Connections" value={data.links.length} />
+
+              {/* Visual legend */}
+              <div style={{
+                marginTop: "12px",
+                padding: "14px",
+                background: "var(--bg-elevated)",
+                borderRadius: "10px",
+              }}>
+                <p style={{
+                  fontSize: "10px",
+                  fontWeight: 600,
+                  letterSpacing: "0.07em",
+                  textTransform: "uppercase",
+                  color: "var(--text-3)",
+                  margin: "0 0 10px",
+                }}>
+                  Node Size
+                </p>
+                {[
+                  { label: "Frequently mentioned", r: 14 },
+                  { label: "Moderate mentions",    r: 9  },
+                  { label: "Rare mentions",        r: 5  },
+                ].map(({ label, r }) => (
+                  <div key={label} style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "7px" }}>
+                    <div style={{
+                      width: r * 2,
+                      height: r * 2,
+                      borderRadius: "50%",
+                      background: "rgba(99,102,241,0.45)",
+                      flexShrink: 0,
+                    }} />
+                    <span style={{ fontSize: "12px", color: "var(--text-2)" }}>{label}</span>
+                  </div>
+                ))}
+              </div>
             </div>
           )}
 

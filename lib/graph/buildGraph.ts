@@ -18,7 +18,9 @@ type EntityRow = {
     id: string
     label?: string
     type: "entity" | "note"
+    entityType?: string
     size: number
+    mentionCount?: number
   }
   
   export type GraphLink = {
@@ -71,7 +73,9 @@ type EntityRow = {
         id: entity.id,
         label: entity.name,
         type: "entity",
-        size: 6 + Math.log(mentionCount + 1) * 4
+        entityType: entity.type,
+        mentionCount,
+        size: 6 + Math.log(mentionCount + 1) * 4,
       })
     }
   
