@@ -261,6 +261,26 @@ export default function NoteComposer({
     }
   }
 
+  function focusAndAddAt() {
+    const ta = textareaRef.current
+    if (!ta) return
+    const newValue = value.trimEnd() ? value.trimEnd() + " @" : "@"
+    setValue(newValue)
+    setSpaceQuery("")
+    requestAnimationFrame(() => {
+      ta.focus()
+      ta.setSelectionRange(newValue.length, newValue.length)
+    })
+  }
+
+  function removeSpace(name: string) {
+    const newValue = value
+      .replace(new RegExp(`(^|\\s)@${name}(?=\\s|$)`, "gi"), (_, pre) => pre)
+      .replace(/[ \t]+/g, " ")
+      .trim()
+    setValue(newValue)
+  }
+
   const isEmpty = !value.trim()
   const showDropdown = spaceQuery !== null && dropdownOptions.length > 0
 
@@ -425,50 +445,6 @@ export default function NoteComposer({
         )}
       </div>
 
-      {/* Spaces section */}
-      <div
-        style={{
-          display: "flex",
-          alignItems: "center",
-          gap: "6px",
-          flexWrap: "wrap",
-          paddingTop: "2px",
-        }}
-      >
-        {detectedSpaces.length > 0 ? (
-          <>
-            {detectedSpaces.map((name) => (
-              <span
-                key={name}
-                style={{
-                  display: "inline-flex",
-                  alignItems: "center",
-                  padding: "2px 8px",
-                  borderRadius: "999px",
-                  fontSize: "11px",
-                  fontWeight: 500,
-                  background: SPACE_STYLE.bg,
-                  color: SPACE_STYLE.text,
-                  border: `1px solid ${SPACE_STYLE.border}`,
-                  whiteSpace: "nowrap",
-                }}
-              >
-                @{name}
-              </span>
-            ))}
-            <span style={{ fontSize: "11px", color: "var(--text-3)" }}>
-              · type @space to add more
-            </span>
-          </>
-        ) : (
-          <span style={{ fontSize: "11px", color: "var(--text-3)" }}>
-            Type{" "}
-            <span style={{ color: SPACE_STYLE.text, fontWeight: 500 }}>@space</span>
-            {" "}to organize this note
-          </span>
-        )}
-      </div>
-
       {/* Inline error */}
       {error && (
         <p style={{ fontSize: "12px", color: "#f87171", margin: 0 }}>
@@ -527,6 +503,80 @@ export default function NoteComposer({
             {mode === "edit" ? "Save Changes" : "Save"}
           </button>
         </div>
+      </div>
+
+      {/* Spaces bar */}
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: "6px",
+          flexWrap: "wrap",
+          paddingTop: "12px",
+          marginTop: "2px",
+          borderTop: "1px solid var(--border-subtle)",
+        }}
+      >
+        {detectedSpaces.map((name) => (
+          <button
+            key={name}
+            onClick={() => removeSpace(name)}
+            title="Remove space"
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: "5px",
+              padding: "2px 8px",
+              borderRadius: "999px",
+              fontSize: "11px",
+              fontWeight: 500,
+              background: SPACE_STYLE.bg,
+              color: SPACE_STYLE.text,
+              border: `1px solid ${SPACE_STYLE.border}`,
+              cursor: "pointer",
+              whiteSpace: "nowrap",
+              transition: "filter 0.12s",
+            }}
+            onMouseEnter={(e) => { e.currentTarget.style.filter = "brightness(1.2)" }}
+            onMouseLeave={(e) => { e.currentTarget.style.filter = "none" }}
+          >
+            @{name}
+            <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" style={{ opacity: 0.6 }}>
+              <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
+            </svg>
+          </button>
+        ))}
+        <button
+          onClick={focusAndAddAt}
+          style={{
+            display: "inline-flex",
+            alignItems: "center",
+            gap: "4px",
+            fontSize: "11px",
+            color: detectedSpaces.length > 0 ? "var(--text-3)" : "var(--text-2)",
+            background: "transparent",
+            border: "none",
+            cursor: "pointer",
+            padding: "2px 0",
+            transition: "color 0.12s",
+          }}
+          onMouseEnter={(e) => { e.currentTarget.style.color = SPACE_STYLE.text }}
+          onMouseLeave={(e) => { e.currentTarget.style.color = detectedSpaces.length > 0 ? "var(--text-3)" : "var(--text-2)" }}
+        >
+          {detectedSpaces.length > 0 ? (
+            <>
+              <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+                <line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" />
+              </svg>
+              add space
+            </>
+          ) : (
+            <>
+              <span style={{ fontWeight: 600 }}>@space</span>
+              {" "}to organize this note
+            </>
+          )}
+        </button>
       </div>
     </div>
   )
