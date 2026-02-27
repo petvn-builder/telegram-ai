@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react"
 import type { NoteWithEntities, Space } from "./types"
 
-// ── Entity styling (mirrors page.tsx) ────────────────────────────────────────
+// ── Entity styling ────────────────────────────────────────────────────────────
 
 const ENTITY_COLORS: Record<string, { bg: string; text: string; border: string }> = {
   person:   { bg: "rgba(59,130,246,0.14)",  text: "#60a5fa", border: "rgba(59,130,246,0.28)" },
@@ -26,19 +26,6 @@ function entityStyle(type: string) {
   }
 }
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
-
-function getSpacesFromText(text: string): string[] {
-  const matches = [...text.matchAll(/(^|\s)@([a-zA-Z0-9_-]+)/g)]
-  return [...new Set(matches.map((m) => m[2].toLowerCase()))]
-}
-
-function detectActiveSpaceQuery(text: string, cursor: number): string | null {
-  const before = text.slice(0, cursor)
-  const match = before.match(/(^|\s)@([a-zA-Z0-9_-]*)$/)
-  return match ? match[2] : null
-}
-
 // ── Spinner icon ──────────────────────────────────────────────────────────────
 
 function Spinner() {
@@ -58,6 +45,12 @@ function Spinner() {
     </svg>
   )
 }
+
+// ── Types ─────────────────────────────────────────────────────────────────────
+
+type DropdownOption =
+  | { type: "space"; space: Space }
+  | { type: "create"; name: string }
 
 // ── Props ─────────────────────────────────────────────────────────────────────
 
@@ -82,21 +75,20 @@ export default function NoteComposer({
   onSave,
   onCancel,
 }: NoteComposerProps) {
-  const [value, setValue] = useState(() => {
-    // In edit mode, reconstruct text with @space tokens for editing
-    if (mode === "edit" && initialSpaces.length > 0) {
-      const tokens = initialSpaces.map((s) => `@${s.name}`).join(" ")
-      return initialValue ? `${initialValue}\n${tokens}` : tokens
-    }
-    return initialValue
-  })
+  const [value, setValue] = useState(initialValue)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [detectedEntities, setDetectedEntities] = useState<{ name: string; type: string }[]>(initialEntities)
   const [availableSpaces, setAvailableSpaces] = useState<Space[]>([])
-  const [spaceQuery, setSpaceQuery] = useState<string | null>(null)
-  const [dropdownIndex, setDropdownIndex] = useState(0)
+  const [assignedSpaces, setAssignedSpaces] = useState<string[]>(() =>
+    initialSpaces.map((s) => s.name)
+  )
+  const [spaceInput, setSpaceInput] = useState("")
+  const [spaceDropdownVisible, setSpaceDropdownVisible] = useState(false)
+  const [spaceDropdownIndex, setSpaceDropdownIndex] = useState(0)
+
   const textareaRef = useRef<HTMLTextAreaElement>(null)
+  const spaceInputRef = useRef<HTMLInputElement>(null)
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // Auto-focus on mount
@@ -143,59 +135,50 @@ export default function NoteComposer({
     }
   }, [value])
 
-  // Reset dropdown index when query changes
+  // Reset dropdown index when space input changes
   useEffect(() => {
-    setDropdownIndex(0)
-  }, [spaceQuery])
+    setSpaceDropdownIndex(0)
+  }, [spaceInput])
 
-  // Spaces detected in current text
-  const detectedSpaces = getSpacesFromText(value)
+  // ── Space helpers ────────────────────────────────────────────────────────────
 
-  // Autocomplete dropdown options
-  const dropdownOptions: Array<{ type: "space"; space: Space } | { type: "create"; name: string }> = (() => {
-    if (spaceQuery === null) return []
-    const q = spaceQuery.toLowerCase()
-    const filtered = availableSpaces.filter((s) => s.name.includes(q) && !detectedSpaces.includes(s.name))
-    const options: Array<{ type: "space"; space: Space } | { type: "create"; name: string }> = filtered.map((s) => ({ type: "space" as const, space: s }))
-    const exactMatch = availableSpaces.some((s) => s.name === q) || detectedSpaces.includes(q)
-    if (q.length > 0 && !exactMatch) {
-      options.push({ type: "create" as const, name: q })
-    }
+  function getSpaceQuery(input: string): string {
+    return (input.startsWith("@") ? input.slice(1) : input).toLowerCase().trim()
+  }
+
+  const spaceDropdownOptions: DropdownOption[] = (() => {
+    if (!spaceDropdownVisible || !spaceInput.trim()) return []
+    const q = getSpaceQuery(spaceInput)
+    const filtered = availableSpaces.filter(
+      (s) => s.name.includes(q) && !assignedSpaces.includes(s.name)
+    )
+    const options: DropdownOption[] = filtered.map((s) => ({ type: "space", space: s }))
+    const exactMatch = availableSpaces.some((s) => s.name === q) || assignedSpaces.includes(q)
+    if (q.length > 0 && !exactMatch) options.push({ type: "create", name: q })
     return options
   })()
 
-  function selectDropdownOption(option: typeof dropdownOptions[number]) {
-    const ta = textareaRef.current
-    if (!ta) return
-    const cursor = ta.selectionStart
-    const before = value.slice(0, cursor)
-    const after = value.slice(cursor)
-    // Replace the trailing @partial with @completedName
-    const newBefore = before.replace(/(^|\s)@([a-zA-Z0-9_-]*)$/, (_, prefix) => `${prefix}@${option.type === "space" ? option.space.name : option.name}`)
-    const newValue = newBefore + after
-    setValue(newValue)
-    setSpaceQuery(null)
-    // Restore cursor after React re-render
-    requestAnimationFrame(() => {
-      ta.focus()
-      ta.setSelectionRange(newBefore.length, newBefore.length)
-    })
-    // Add newly created space to available list optimistically
-    if (option.type === "create") {
+  function selectSpaceOption(opt: DropdownOption) {
+    const name = opt.type === "space" ? opt.space.name : opt.name
+    if (!assignedSpaces.includes(name)) {
+      setAssignedSpaces((prev) => [...prev, name])
+    }
+    if (opt.type === "create") {
       setAvailableSpaces((prev) => [
         ...prev,
-        { id: `temp-${option.name}`, name: option.name, note_count: 0 },
+        { id: `temp-${name}`, name, note_count: 0 },
       ])
     }
+    setSpaceInput("")
+    setSpaceDropdownVisible(false)
+    spaceInputRef.current?.focus()
   }
 
-  function handleChange(e: React.ChangeEvent<HTMLTextAreaElement>) {
-    const newValue = e.target.value
-    setValue(newValue)
-    const cursor = e.target.selectionStart
-    const query = detectActiveSpaceQuery(newValue, cursor)
-    setSpaceQuery(query)
+  function removeAssignedSpace(name: string) {
+    setAssignedSpaces((prev) => prev.filter((s) => s !== name))
   }
+
+  // ── Handlers ─────────────────────────────────────────────────────────────────
 
   async function handleSave() {
     if (saving || !value.trim()) return
@@ -209,7 +192,7 @@ export default function NoteComposer({
       const res = await fetch(url, {
         method,
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ content: value.trim() }),
+        body: JSON.stringify({ content: value.trim(), spaces: assignedSpaces }),
       })
 
       if (!res.ok) {
@@ -226,31 +209,6 @@ export default function NoteComposer({
   }
 
   function onKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
-    // Dropdown navigation
-    if (spaceQuery !== null && dropdownOptions.length > 0) {
-      if (e.key === "ArrowDown") {
-        e.preventDefault()
-        setDropdownIndex((i) => Math.min(i + 1, dropdownOptions.length - 1))
-        return
-      }
-      if (e.key === "ArrowUp") {
-        e.preventDefault()
-        setDropdownIndex((i) => Math.max(i - 1, 0))
-        return
-      }
-      if (e.key === "Enter" || e.key === "Tab") {
-        e.preventDefault()
-        const opt = dropdownOptions[dropdownIndex]
-        if (opt) selectDropdownOption(opt)
-        return
-      }
-      if (e.key === "Escape") {
-        e.preventDefault()
-        setSpaceQuery(null)
-        return
-      }
-    }
-
     if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
       e.preventDefault()
       handleSave()
@@ -261,28 +219,46 @@ export default function NoteComposer({
     }
   }
 
-  function focusAndAddAt() {
-    const ta = textareaRef.current
-    if (!ta) return
-    const newValue = value.trimEnd() ? value.trimEnd() + " @" : "@"
-    setValue(newValue)
-    setSpaceQuery("")
-    requestAnimationFrame(() => {
-      ta.focus()
-      ta.setSelectionRange(newValue.length, newValue.length)
-    })
-  }
-
-  function removeSpace(name: string) {
-    const newValue = value
-      .replace(new RegExp(`(^|\\s)@${name}(?=\\s|$)`, "gi"), (_, pre) => pre)
-      .replace(/[ \t]+/g, " ")
-      .trim()
-    setValue(newValue)
+  function onSpaceInputKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
+    if (spaceDropdownOptions.length > 0) {
+      if (e.key === "ArrowDown") {
+        e.preventDefault()
+        setSpaceDropdownIndex((i) => Math.min(i + 1, spaceDropdownOptions.length - 1))
+        return
+      }
+      if (e.key === "ArrowUp") {
+        e.preventDefault()
+        setSpaceDropdownIndex((i) => Math.max(i - 1, 0))
+        return
+      }
+      if (e.key === "Enter" || e.key === "Tab") {
+        e.preventDefault()
+        const opt = spaceDropdownOptions[spaceDropdownIndex]
+        if (opt) { selectSpaceOption(opt); return }
+      }
+      if (e.key === "Escape") {
+        e.preventDefault()
+        setSpaceInput("")
+        setSpaceDropdownVisible(false)
+        return
+      }
+    }
+    // Enter with no dropdown — add free-form space name
+    if (e.key === "Enter" && spaceInput.trim()) {
+      e.preventDefault()
+      const name = getSpaceQuery(spaceInput)
+      if (name && !assignedSpaces.includes(name)) {
+        selectSpaceOption({ type: "create", name })
+      }
+      return
+    }
+    if (e.key === "Escape") {
+      setSpaceInput("")
+      setSpaceDropdownVisible(false)
+    }
   }
 
   const isEmpty = !value.trim()
-  const showDropdown = spaceQuery !== null && dropdownOptions.length > 0
 
   return (
     <div
@@ -333,63 +309,180 @@ export default function NoteComposer({
       </div>
 
       {/* Textarea */}
-      <div style={{ position: "relative" }}>
-        <textarea
-          ref={textareaRef}
-          value={value}
-          onChange={handleChange}
-          onKeyDown={onKeyDown}
-          placeholder="Write a note…"
-          rows={4}
-          style={{
-            width: "100%",
-            background: "var(--bg-base)",
-            border: "1px solid var(--border)",
-            borderRadius: "8px",
-            padding: "12px",
-            fontSize: "14px",
-            lineHeight: 1.65,
-            color: "var(--text-1)",
-            resize: "none",
-            outline: "none",
-            fontFamily: "inherit",
-            overflowY: "hidden",
-            boxSizing: "border-box",
-            transition: "border-color 0.15s",
-            minHeight: "96px",
-          }}
-          onFocus={(e) => { e.currentTarget.style.borderColor = "var(--border-accent)" }}
-          onBlur={(e) => {
-            e.currentTarget.style.borderColor = "var(--border)"
-            // Delay hiding dropdown so clicks register
-            setTimeout(() => setSpaceQuery(null), 150)
-          }}
-        />
+      <textarea
+        ref={textareaRef}
+        value={value}
+        onChange={(e) => setValue(e.target.value)}
+        onKeyDown={onKeyDown}
+        placeholder="Write a note…"
+        rows={4}
+        style={{
+          width: "100%",
+          background: "var(--bg-base)",
+          border: "1px solid var(--border)",
+          borderRadius: "8px",
+          padding: "12px",
+          fontSize: "14px",
+          lineHeight: 1.65,
+          color: "var(--text-1)",
+          resize: "none",
+          outline: "none",
+          fontFamily: "inherit",
+          overflowY: "hidden",
+          boxSizing: "border-box",
+          transition: "border-color 0.15s",
+          minHeight: "96px",
+        }}
+        onFocus={(e) => { e.currentTarget.style.borderColor = "var(--border-accent)" }}
+        onBlur={(e) => { e.currentTarget.style.borderColor = "var(--border)" }}
+      />
 
-        {/* Autocomplete dropdown */}
-        {showDropdown && (
+      {/* Inline error */}
+      {error && (
+        <p style={{ fontSize: "12px", color: "#f87171", margin: 0 }}>
+          {error}
+        </p>
+      )}
+
+      {/* Space section */}
+      <div
+        style={{
+          borderTop: "1px solid var(--border-subtle)",
+          paddingTop: "12px",
+          display: "flex",
+          flexDirection: "column",
+          gap: "8px",
+        }}
+      >
+        <span
+          style={{
+            fontSize: "10px",
+            fontWeight: 600,
+            color: "var(--text-3)",
+            textTransform: "uppercase",
+            letterSpacing: "0.07em",
+          }}
+        >
+          Spaces
+        </span>
+        <div style={{ position: "relative" }}>
           <div
             style={{
-              position: "absolute",
-              top: "calc(100% + 4px)",
-              left: 0,
-              right: 0,
-              background: "var(--bg-elevated)",
-              border: "1px solid var(--border)",
-              borderRadius: "8px",
-              boxShadow: "var(--shadow-lg)",
-              zIndex: 100,
-              overflow: "hidden",
+              display: "flex",
+              flexWrap: "wrap",
+              alignItems: "center",
+              gap: "6px",
+              minHeight: "28px",
             }}
           >
-            {dropdownOptions.map((opt, i) => {
-              const isActive = i === dropdownIndex
-              if (opt.type === "space") {
+            {assignedSpaces.map((name) => (
+              <button
+                key={name}
+                onClick={() => removeAssignedSpace(name)}
+                title="Remove space"
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: "5px",
+                  padding: "3px 9px",
+                  borderRadius: "999px",
+                  fontSize: "12px",
+                  fontWeight: 500,
+                  background: SPACE_STYLE.bg,
+                  color: SPACE_STYLE.text,
+                  border: `1px solid ${SPACE_STYLE.border}`,
+                  cursor: "pointer",
+                  whiteSpace: "nowrap",
+                  transition: "filter 0.12s",
+                }}
+                onMouseEnter={(e) => { e.currentTarget.style.filter = "brightness(1.2)" }}
+                onMouseLeave={(e) => { e.currentTarget.style.filter = "none" }}
+              >
+                {name}
+                <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" style={{ opacity: 0.6 }}>
+                  <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
+                </svg>
+              </button>
+            ))}
+            <input
+              ref={spaceInputRef}
+              value={spaceInput}
+              onChange={(e) => {
+                setSpaceInput(e.target.value)
+                setSpaceDropdownVisible(true)
+                setSpaceDropdownIndex(0)
+              }}
+              onKeyDown={onSpaceInputKeyDown}
+              onFocus={() => { if (spaceInput.trim()) setSpaceDropdownVisible(true) }}
+              onBlur={() => setTimeout(() => setSpaceDropdownVisible(false), 150)}
+              placeholder={assignedSpaces.length === 0 ? "Type @spaceName to add a space" : "@spaceName…"}
+              style={{
+                flex: 1,
+                minWidth: "160px",
+                background: "transparent",
+                border: "none",
+                outline: "none",
+                fontSize: "12px",
+                color: "var(--text-2)",
+                padding: "3px 0",
+                fontFamily: "inherit",
+              }}
+            />
+          </div>
+
+          {/* Space autocomplete dropdown */}
+          {spaceDropdownVisible && spaceDropdownOptions.length > 0 && (
+            <div
+              style={{
+                position: "absolute",
+                top: "calc(100% + 4px)",
+                left: 0,
+                right: 0,
+                background: "var(--bg-elevated)",
+                border: "1px solid var(--border)",
+                borderRadius: "8px",
+                boxShadow: "var(--shadow-lg)",
+                zIndex: 100,
+                overflow: "hidden",
+              }}
+            >
+              {spaceDropdownOptions.map((opt, i) => {
+                const isActive = i === spaceDropdownIndex
+                if (opt.type === "space") {
+                  return (
+                    <button
+                      key={opt.space.id}
+                      onMouseDown={(e) => { e.preventDefault(); selectSpaceOption(opt) }}
+                      onMouseEnter={() => setSpaceDropdownIndex(i)}
+                      style={{
+                        width: "100%",
+                        textAlign: "left",
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "8px",
+                        padding: "9px 12px",
+                        fontSize: "13px",
+                        color: isActive ? "var(--text-1)" : "var(--text-2)",
+                        background: isActive ? "var(--bg-hover)" : "transparent",
+                        border: "none",
+                        cursor: "pointer",
+                        transition: "background 0.1s",
+                      }}
+                    >
+                      <span style={{ color: SPACE_STYLE.text, fontSize: "12px", fontWeight: 500 }}>
+                        @{opt.space.name}
+                      </span>
+                      <span style={{ fontSize: "11px", color: "var(--text-3)", marginLeft: "auto" }}>
+                        {opt.space.note_count} {opt.space.note_count === 1 ? "note" : "notes"}
+                      </span>
+                    </button>
+                  )
+                }
                 return (
                   <button
-                    key={opt.space.id}
-                    onMouseDown={(e) => { e.preventDefault(); selectDropdownOption(opt) }}
-                    onMouseEnter={() => setDropdownIndex(i)}
+                    key={`create-${opt.name}`}
+                    onMouseDown={(e) => { e.preventDefault(); selectSpaceOption(opt) }}
+                    onMouseEnter={() => setSpaceDropdownIndex(i)}
                     style={{
                       width: "100%",
                       textAlign: "left",
@@ -401,60 +494,29 @@ export default function NoteComposer({
                       color: isActive ? "var(--text-1)" : "var(--text-2)",
                       background: isActive ? "var(--bg-hover)" : "transparent",
                       border: "none",
+                      borderTop: spaceDropdownOptions.length > 1 ? "1px solid var(--border-subtle)" : "none",
                       cursor: "pointer",
                       transition: "background 0.1s",
                     }}
                   >
-                    <span style={{ color: SPACE_STYLE.text, fontSize: "12px", fontWeight: 500 }}>@{opt.space.name}</span>
-                    <span style={{ fontSize: "11px", color: "var(--text-3)", marginLeft: "auto" }}>
-                      {opt.space.note_count} {opt.space.note_count === 1 ? "note" : "notes"}
-                    </span>
+                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+                      <line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" />
+                    </svg>
+                    <span>Create </span>
+                    <span style={{ color: SPACE_STYLE.text, fontWeight: 500 }}>@{opt.name}</span>
                   </button>
                 )
-              }
-              return (
-                <button
-                  key={`create-${opt.name}`}
-                  onMouseDown={(e) => { e.preventDefault(); selectDropdownOption(opt) }}
-                  onMouseEnter={() => setDropdownIndex(i)}
-                  style={{
-                    width: "100%",
-                    textAlign: "left",
-                    display: "flex",
-                    alignItems: "center",
-                    gap: "8px",
-                    padding: "9px 12px",
-                    fontSize: "13px",
-                    color: isActive ? "var(--text-1)" : "var(--text-2)",
-                    background: isActive ? "var(--bg-hover)" : "transparent",
-                    border: "none",
-                    borderTop: dropdownOptions.length > 1 ? "1px solid var(--border-subtle)" : "none",
-                    cursor: "pointer",
-                    transition: "background 0.1s",
-                  }}
-                >
-                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
-                    <line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" />
-                  </svg>
-                  <span>Create </span>
-                  <span style={{ color: SPACE_STYLE.text, fontWeight: 500 }}>@{opt.name}</span>
-                </button>
-              )
-            })}
-          </div>
-        )}
+              })}
+            </div>
+          )}
+        </div>
       </div>
-
-      {/* Inline error */}
-      {error && (
-        <p style={{ fontSize: "12px", color: "#f87171", margin: 0 }}>
-          {error}
-        </p>
-      )}
 
       {/* Footer */}
       <div
         style={{
+          borderTop: "1px solid var(--border-subtle)",
+          paddingTop: "12px",
           display: "flex",
           alignItems: "center",
           justifyContent: "space-between",
@@ -503,80 +565,6 @@ export default function NoteComposer({
             {mode === "edit" ? "Save Changes" : "Save"}
           </button>
         </div>
-      </div>
-
-      {/* Spaces bar */}
-      <div
-        style={{
-          display: "flex",
-          alignItems: "center",
-          gap: "6px",
-          flexWrap: "wrap",
-          paddingTop: "12px",
-          marginTop: "2px",
-          borderTop: "1px solid var(--border-subtle)",
-        }}
-      >
-        {detectedSpaces.map((name) => (
-          <button
-            key={name}
-            onClick={() => removeSpace(name)}
-            title="Remove space"
-            style={{
-              display: "inline-flex",
-              alignItems: "center",
-              gap: "5px",
-              padding: "2px 8px",
-              borderRadius: "999px",
-              fontSize: "11px",
-              fontWeight: 500,
-              background: SPACE_STYLE.bg,
-              color: SPACE_STYLE.text,
-              border: `1px solid ${SPACE_STYLE.border}`,
-              cursor: "pointer",
-              whiteSpace: "nowrap",
-              transition: "filter 0.12s",
-            }}
-            onMouseEnter={(e) => { e.currentTarget.style.filter = "brightness(1.2)" }}
-            onMouseLeave={(e) => { e.currentTarget.style.filter = "none" }}
-          >
-            @{name}
-            <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" style={{ opacity: 0.6 }}>
-              <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
-            </svg>
-          </button>
-        ))}
-        <button
-          onClick={focusAndAddAt}
-          style={{
-            display: "inline-flex",
-            alignItems: "center",
-            gap: "4px",
-            fontSize: "11px",
-            color: detectedSpaces.length > 0 ? "var(--text-3)" : "var(--text-2)",
-            background: "transparent",
-            border: "none",
-            cursor: "pointer",
-            padding: "2px 0",
-            transition: "color 0.12s",
-          }}
-          onMouseEnter={(e) => { e.currentTarget.style.color = SPACE_STYLE.text }}
-          onMouseLeave={(e) => { e.currentTarget.style.color = detectedSpaces.length > 0 ? "var(--text-3)" : "var(--text-2)" }}
-        >
-          {detectedSpaces.length > 0 ? (
-            <>
-              <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
-                <line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" />
-              </svg>
-              add space
-            </>
-          ) : (
-            <>
-              <span style={{ fontWeight: 600 }}>@space</span>
-              {" "}to organize this note
-            </>
-          )}
-        </button>
       </div>
     </div>
   )

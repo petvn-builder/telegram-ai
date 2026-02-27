@@ -289,8 +289,8 @@ export async function POST(req: NextRequest) {
     const rawContent = (body.content ?? "").trim()
     if (!rawContent) return NextResponse.json({ error: "Empty content" }, { status: 400 })
 
-    const { spaceNames, cleanContent } = extractSpaceTokens(rawContent)
-    const content = cleanContent || rawContent
+    const spaceNames: string[] = Array.isArray(body.spaces) ? body.spaces.map(String) : []
+    const content = rawContent
 
     const db = getSupabaseAdmin()
     const { createEmbedding } = await import("@/lib/embeddings")

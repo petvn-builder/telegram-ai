@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { getSupabaseServer } from "@/lib/supabase/server"
 import { getSupabaseAdmin } from "@/lib/supabase/admin"
 import type { NoteDetail } from "@/app/notes/types"
-import { extractSpaceTokens, syncNoteSpaces } from "@/app/api/notes/route"
+import { syncNoteSpaces } from "@/app/api/notes/route"
 
 // Shared entity upsert + link helper
 async function upsertEntitiesAndLink(
@@ -148,8 +148,8 @@ export async function PUT(
     const rawContent = (body.content ?? "").trim()
     if (!rawContent) return NextResponse.json({ error: "Empty content" }, { status: 400 })
 
-    const { spaceNames, cleanContent } = extractSpaceTokens(rawContent)
-    const content = cleanContent || rawContent
+    const spaceNames: string[] = Array.isArray(body.spaces) ? body.spaces.map(String) : []
+    const content = rawContent
 
     const db = getSupabaseAdmin()
     const { createEmbedding } = await import("@/lib/embeddings")
