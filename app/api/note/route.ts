@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
-import { getSupabase } from "@/lib/supabase"
+import { getSupabaseServer } from "@/lib/supabase/server"
 
 export async function GET(req: NextRequest) {
   try {
@@ -13,7 +13,11 @@ export async function GET(req: NextRequest) {
       )
     }
 
-    const supabase = getSupabase()
+    const supabase = await getSupabaseServer()
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    }
 
     // 1️⃣ Get note content
     const { data: note, error: noteError } = await supabase
