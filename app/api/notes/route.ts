@@ -1,19 +1,21 @@
 import { NextResponse } from "next/server"
 import { getSupabaseServer } from "@/lib/supabase/server"
+import { getSupabaseAdmin } from "@/lib/supabase/admin"
 import type { NoteWithEntities, Entity } from "@/app/notes/types"
 
 export async function GET() {
   try {
-    const supabase = await getSupabaseServer()
-    const { data: { user } } = await supabase.auth.getUser()
+    const authClient = await getSupabaseServer()
+    const { data: { user } } = await authClient.auth.getUser()
     if (!user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
     const userId = user.id
+    const db = getSupabaseAdmin()
 
     // 1. Fetch all notes for this user
-    const { data: notes, error: notesError } = await supabase
+    const { data: notes, error: notesError } = await db
       .from("knowledge")
       .select("id, content, created_at")
       .eq("role", "note")
@@ -26,7 +28,7 @@ export async function GET() {
     const noteIds = notes.map((n) => n.id)
 
     // 2. Fetch all links for those notes
-    const { data: links, error: linksError } = await supabase
+    const { data: links, error: linksError } = await db
       .from("knowledge_links")
       .select("knowledge_id, entity_id")
       .eq("user_id", userId)
@@ -39,7 +41,7 @@ export async function GET() {
     // 3. Fetch entities (skip if none)
     let entityMap = new Map<string, Entity>()
     if (entityIds.length > 0) {
-      const { data: entities, error: entitiesError } = await supabase
+      const { data: entities, error: entitiesError } = await db
         .from("entities")
         .select("id, name, type")
         .in("id", entityIds)
