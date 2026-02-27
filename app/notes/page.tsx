@@ -204,9 +204,12 @@ export default function NotesPage() {
   const [groupByEntity, setGroupByEntity] = useState(false)
   const [showComposer, setShowComposer] = useState(false)
   const [editMode, setEditMode] = useState(false)
+  const [confirmDelete, setConfirmDelete] = useState(false)
+  const [deleting, setDeleting] = useState(false)
   const detailRef = useRef<HTMLDivElement>(null)
   const composerTopRef = useRef<HTMLDivElement>(null)
   const justAddedId = useRef<string | null>(null)
+  const confirmDeleteTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useEffect(() => {
     fetch("/api/notes")
@@ -278,6 +281,26 @@ export default function NotesPage() {
     setSelectedNote((prev) => (prev?.id === note.id ? null : note))
   }
 
+  async function handleDelete() {
+    if (!selectedNote || deleting) return
+    if (!confirmDelete) {
+      setConfirmDelete(true)
+      confirmDeleteTimerRef.current = setTimeout(() => setConfirmDelete(false), 3000)
+      return
+    }
+    if (confirmDeleteTimerRef.current) clearTimeout(confirmDeleteTimerRef.current)
+    setDeleting(true)
+    try {
+      const res = await fetch(`/api/notes/${selectedNote.id}`, { method: "DELETE" })
+      if (!res.ok) throw new Error()
+      setNotes((prev) => prev.filter((n) => n.id !== selectedNote.id))
+      setSelectedNote(null)
+    } catch {
+      setDeleting(false)
+      setConfirmDelete(false)
+    }
+  }
+
   useEffect(() => {
     if (selectedNote && detailRef.current) {
       detailRef.current.classList.remove("panel-slide-in")
@@ -285,6 +308,8 @@ export default function NotesPage() {
       detailRef.current.classList.add("panel-slide-in")
     }
     setEditMode(false)
+    setConfirmDelete(false)
+    setDeleting(false)
   }, [selectedNote?.id])
 
   // ── Render helpers ────────────────────────────────────────────────────────
@@ -803,6 +828,38 @@ export default function NotesPage() {
               {formatDate(selectedNote.created_at)}
             </span>
             <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+              {!editMode && (
+                <button
+                  onClick={handleDelete}
+                  disabled={deleting}
+                  style={{
+                    fontSize: "12px",
+                    color: confirmDelete ? "#f87171" : "var(--text-3)",
+                    background: "transparent",
+                    padding: "5px 10px",
+                    borderRadius: "7px",
+                    border: `1px solid ${confirmDelete ? "rgba(248,113,113,0.35)" : "transparent"}`,
+                    cursor: deleting ? "not-allowed" : "pointer",
+                    transition: "color 0.12s, border-color 0.12s",
+                    opacity: deleting ? 0.5 : 1,
+                  }}
+                  onMouseEnter={(e) => {
+                    if (!confirmDelete) e.currentTarget.style.color = "#f87171"
+                  }}
+                  onMouseLeave={(e) => {
+                    if (!confirmDelete) e.currentTarget.style.color = "var(--text-3)"
+                  }}
+                >
+                  {deleting ? "Deleting…" : confirmDelete ? "Delete?" : (
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ display: "block" }}>
+                      <polyline points="3 6 5 6 21 6" />
+                      <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
+                      <path d="M10 11v6M14 11v6" />
+                      <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" />
+                    </svg>
+                  )}
+                </button>
+              )}
               {!editMode && (
                 <button
                   onClick={() => setEditMode(true)}

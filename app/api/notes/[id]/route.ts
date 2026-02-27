@@ -102,6 +102,36 @@ export async function GET(
   }
 }
 
+export async function DELETE(
+  _req: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const { id } = await params
+    const authClient = await getSupabaseServer()
+    const { data: { user } } = await authClient.auth.getUser()
+    if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+
+    const db = getSupabaseAdmin()
+    await db.from("knowledge_links").delete().eq("knowledge_id", id).eq("user_id", user.id)
+    const { error: deleteError } = await db
+      .from("knowledge")
+      .delete()
+      .eq("id", id)
+      .eq("user_id", user.id)
+
+    if (deleteError) {
+      console.error("Note delete error:", deleteError)
+      return NextResponse.json({ error: "Delete failed" }, { status: 500 })
+    }
+
+    return NextResponse.json({ success: true })
+  } catch (error) {
+    console.error("Note DELETE error:", error)
+    return NextResponse.json({ error: "Internal error" }, { status: 500 })
+  }
+}
+
 export async function PUT(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
