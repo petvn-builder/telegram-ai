@@ -59,24 +59,24 @@ export async function GET(
 
     const db = getSupabaseAdmin()
 
-    const { data: note, error: noteError } = await db
-      .from("knowledge")
-      .select("id, content, created_at")
-      .eq("id", id)
-      .single()
+    // Fetch note and its links in parallel
+    const [noteRes, linksRes] = await Promise.all([
+      db.from("knowledge")
+        .select("id, content, created_at")
+        .eq("id", id)
+        .single(),
+      db.from("knowledge_links")
+        .select("entity_id")
+        .eq("knowledge_id", id),
+    ])
 
-    if (noteError || !note) {
+    if (noteRes.error || !noteRes.data) {
       return NextResponse.json({ error: "Note not found" }, { status: 404 })
     }
+    if (linksRes.error) throw linksRes.error
 
-    const { data: links, error: linkError } = await db
-      .from("knowledge_links")
-      .select("entity_id")
-      .eq("knowledge_id", id)
-
-    if (linkError) throw linkError
-
-    const entityIds = links?.map((l) => l.entity_id) ?? []
+    const note = noteRes.data
+    const entityIds = linksRes.data?.map((l) => l.entity_id) ?? []
 
     let entities: { id: string; name: string; type: string }[] = []
     if (entityIds.length > 0) {
@@ -152,14 +152,11 @@ export async function PUT(
     const content = rawContent
 
     const db = getSupabaseAdmin()
-    const { createEmbedding } = await import("@/lib/embeddings")
-    const { extractEntities } = await import("@/lib/extractEntities")
 
-    const embedding = await createEmbedding(content)
-
+    // Update note content immediately — no blocking AI calls
     const { data: knowledge, error: updateError } = await db
       .from("knowledge")
-      .update({ content, embedding })
+      .update({ content })
       .eq("id", id)
       .eq("user_id", user.id)
       .select("id, content, created_at")
@@ -170,22 +167,42 @@ export async function PUT(
       return NextResponse.json({ error: "Update failed" }, { status: 500 })
     }
 
-    // Delete old entity links then re-extract
-    await db.from("knowledge_links").delete().eq("knowledge_id", id)
-
-    const rawEntities = await extractEntities(content)
-    const entities = await upsertEntitiesAndLink(
-      db, user.id, id, Array.isArray(rawEntities) ? rawEntities : []
-    )
-
+    // Sync spaces immediately (fast, no AI)
     const spaces = await syncNoteSpaces(db, user.id, id, spaceNames)
+
+    // Re-extract entities in background after response is sent
+    const backgroundWork = (async () => {
+      try {
+        const { createEmbedding } = await import("@/lib/embeddings")
+        const { extractEntities } = await import("@/lib/extractEntities")
+        const [embedding, rawEntities] = await Promise.all([
+          createEmbedding(content),
+          extractEntities(content),
+        ])
+        await db.from("knowledge_links").delete().eq("knowledge_id", id)
+        await Promise.all([
+          db.from("knowledge").update({ embedding }).eq("id", id),
+          upsertEntitiesAndLink(db, user.id, id, Array.isArray(rawEntities) ? rawEntities : []),
+        ])
+      } catch (err) {
+        console.error("Background note update processing error:", err)
+      }
+    })()
+
+    try {
+      const { waitUntil } = await import("@vercel/functions")
+      waitUntil(backgroundWork)
+    } catch {
+      // @vercel/functions not available
+    }
 
     return NextResponse.json({
       id: knowledge.id,
       content: knowledge.content,
       created_at: knowledge.created_at,
-      entities,
+      entities: [],
       spaces,
+      processing: true,
     })
   } catch (error) {
     console.error("Note PUT error:", error)

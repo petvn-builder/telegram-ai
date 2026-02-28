@@ -164,18 +164,21 @@ export async function GET(req: NextRequest) {
 
     const fetchedNoteIds = notes.map((n) => n.id)
 
-    // 2. Fetch links
-    const { data: links, error: linksError } = await db
-      .from("knowledge_links")
-      .select("knowledge_id, entity_id")
-      .eq("user_id", userId)
-      .in("knowledge_id", fetchedNoteIds)
+    // 2. Fetch links + spaces in parallel (both depend only on note IDs)
+    const [linksResult, noteSpacesIndex] = await Promise.all([
+      db.from("knowledge_links")
+        .select("knowledge_id, entity_id")
+        .eq("user_id", userId)
+        .in("knowledge_id", fetchedNoteIds),
+      fetchSpacesForNotes(db, fetchedNoteIds),
+    ])
 
-    if (linksError) throw linksError
+    if (linksResult.error) throw linksResult.error
+    const links = linksResult.data
 
     const entityIds = [...new Set((links ?? []).map((l) => l.entity_id))]
 
-    // 3. Fetch entities
+    // 3. Fetch entities (depends on link results)
     let entityMap = new Map<string, Entity>()
     if (entityIds.length > 0) {
       const { data: entities, error: entitiesError } = await db
@@ -200,10 +203,7 @@ export async function GET(req: NextRequest) {
       noteEntityIndex.get(link.knowledge_id)!.push(entity)
     }
 
-    // 5. Fetch spaces for notes
-    const noteSpacesIndex = await fetchSpacesForNotes(db, fetchedNoteIds)
-
-    // 6. Assemble response
+    // 5. Assemble response
     const result: NoteWithEntities[] = notes.map((note) => ({
       id: note.id,
       content: note.content,
@@ -293,14 +293,11 @@ export async function POST(req: NextRequest) {
     const content = rawContent
 
     const db = getSupabaseAdmin()
-    const { createEmbedding } = await import("@/lib/embeddings")
-    const { extractEntities } = await import("@/lib/extractEntities")
 
-    const embedding = await createEmbedding(content)
-
+    // Insert the note immediately — no blocking AI calls
     const { data: knowledge, error: insertError } = await db
       .from("knowledge")
-      .insert({ user_id: user.id, content, role: "note", embedding })
+      .insert({ user_id: user.id, content, role: "note" })
       .select("id, content, created_at")
       .single()
 
@@ -309,19 +306,43 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Save failed" }, { status: 500 })
     }
 
-    const rawEntities = await extractEntities(content)
-    const entities = await upsertEntitiesAndLink(
-      db, user.id, knowledge.id, Array.isArray(rawEntities) ? rawEntities : []
-    )
-
+    // Sync spaces immediately (fast, no AI)
     const spaces = await syncNoteSpaces(db, user.id, knowledge.id, spaceNames)
+
+    // Run embedding + entity extraction in background after response is sent
+    const backgroundWork = (async () => {
+      try {
+        const { createEmbedding } = await import("@/lib/embeddings")
+        const { extractEntities } = await import("@/lib/extractEntities")
+        const [embedding, rawEntities] = await Promise.all([
+          createEmbedding(content),
+          extractEntities(content),
+        ])
+        await Promise.all([
+          db.from("knowledge").update({ embedding }).eq("id", knowledge.id),
+          upsertEntitiesAndLink(db, user.id, knowledge.id, Array.isArray(rawEntities) ? rawEntities : []),
+        ])
+      } catch (err) {
+        console.error("Background note processing error:", err)
+      }
+    })()
+
+    // On Vercel, waitUntil keeps the function alive until background work finishes
+    // Falls back to fire-and-forget in other environments
+    try {
+      const { waitUntil } = await import("@vercel/functions")
+      waitUntil(backgroundWork)
+    } catch {
+      // @vercel/functions not available — background work runs as fire-and-forget
+    }
 
     return NextResponse.json({
       id: knowledge.id,
       content: knowledge.content,
       created_at: knowledge.created_at,
-      entities,
+      entities: [],       // populated asynchronously; client polls after ~3s
       spaces,
+      processing: true,   // signals the client that entities are being extracted
     })
   } catch (error) {
     console.error("Notes POST error:", error)

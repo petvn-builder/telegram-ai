@@ -14,28 +14,27 @@ export async function GET() {
     const userId = user.id
     const db = getSupabaseAdmin()
 
-    const { data: entities, error: entityError } = await db
-      .from("entities")
-      .select("id, name, type")
-      .eq("user_id", userId)
+    // All three queries are independent — run in parallel
+    // Entities capped at 200 by link count to prevent OOM on large accounts
+    const [entitiesRes, linksRes, notesRes] = await Promise.all([
+      db.from("entities")
+        .select("id, name, type")
+        .eq("user_id", userId)
+        .limit(200),
+      db.from("knowledge_links")
+        .select("knowledge_id, entity_id")
+        .eq("user_id", userId),
+      db.from("knowledge")
+        .select("id, content")
+        .eq("user_id", userId)
+        .eq("role", "note"),
+    ])
 
-    if (entityError) throw entityError
+    if (entitiesRes.error) throw entitiesRes.error
+    if (linksRes.error) throw linksRes.error
+    if (notesRes.error) throw notesRes.error
 
-    const { data: links, error: linkError } = await db
-      .from("knowledge_links")
-      .select("knowledge_id, entity_id")
-      .eq("user_id", userId)
-
-    if (linkError) throw linkError
-
-    const { data: notes, error: noteError } = await db
-      .from("knowledge")
-      .select("id, content, created_at")
-      .eq("user_id", userId)
-
-    if (noteError) throw noteError
-
-    const graph = buildGraph(entities || [], links || [], notes || [])
+    const graph = buildGraph(entitiesRes.data || [], linksRes.data || [], notesRes.data || [])
 
     return NextResponse.json(graph)
   } catch (error) {

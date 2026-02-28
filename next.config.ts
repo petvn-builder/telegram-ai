@@ -14,6 +14,20 @@ const supabaseHostname = supabaseUrl
 const nextConfig: NextConfig = {
   async headers() {
     return [
+      // Cache the graph response in the browser for 60s, allow stale-while-revalidate for 5min
+      {
+        source: "/api/graph",
+        headers: [
+          { key: "Cache-Control", value: "private, max-age=60, stale-while-revalidate=300" },
+        ],
+      },
+      // Cache spaces list for 30s (cheap to re-fetch, changes rarely)
+      {
+        source: "/api/spaces",
+        headers: [
+          { key: "Cache-Control", value: "private, max-age=30" },
+        ],
+      },
       {
         source: "/(.*)",
         headers: [

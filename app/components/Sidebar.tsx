@@ -7,6 +7,20 @@ import { getSupabaseBrowser } from "@/lib/supabase/browser"
 import type { User } from "@supabase/supabase-js"
 import type { Space } from "@/app/notes/types"
 
+// Module-level cache: survives component remounts during same session (SPA navigation)
+let _spacesCache: { data: Space[]; ts: number } | null = null
+const SPACES_CACHE_TTL = 30_000 // 30 seconds
+
+async function fetchSpaces(): Promise<Space[]> {
+  if (_spacesCache && Date.now() - _spacesCache.ts < SPACES_CACHE_TTL) {
+    return _spacesCache.data
+  }
+  const res = await fetch("/api/spaces")
+  const data: Space[] = res.ok ? await res.json() : []
+  _spacesCache = { data, ts: Date.now() }
+  return data
+}
+
 const PRIMARY_LINKS = [
   {
     href: "/notes",
@@ -172,10 +186,7 @@ function SidebarInner() {
 
   useEffect(() => {
     if (!user) return
-    fetch("/api/spaces")
-      .then((r) => r.ok ? r.json() : [])
-      .then((data: Space[]) => setSpaces(data))
-      .catch(() => {})
+    fetchSpaces().then(setSpaces).catch(() => {})
   }, [user])
 
   async function handleSignOut() {

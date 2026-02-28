@@ -147,12 +147,16 @@ export default function GraphPage() {
   const [hoveredNote, setHoveredNote] = useState<GraphNode | null>(null)
   const [hoverPos, setHoverPos] = useState({ x: 0, y: 0 })
   const [theme, setTheme] = useState<"dark" | "light">("dark")
+  const [entitySummary, setEntitySummary] = useState<string | null>(null)
+  const [summaryLoading, setSummaryLoading] = useState(false)
   const fgRef = useRef<any>(null)
 
   // Refs for canvas interaction (avoids re-renders during animation loop)
   const hoveredNodeIdRef = useRef<string | null>(null)
   const clickedEntityIdRef = useRef<string | null>(null)
   const adjacencyRef = useRef<Map<string, Set<string>>>(new Map())
+  // In-memory cache: entityId → summary string (persists for the session)
+  const summaryCache = useRef<Record<string, string>>({})
 
   // Sync theme from html[data-theme]
   useEffect(() => {
@@ -202,6 +206,31 @@ export default function GraphPage() {
   // Sync clickedEntityIdRef when panel changes
   useEffect(() => {
     clickedEntityIdRef.current = panel.kind === "entity" ? panel.entityId : null
+  }, [panel])
+
+  // Fetch entity summary lazily when entity panel opens (uses in-memory cache)
+  useEffect(() => {
+    if (panel.kind !== "entity") {
+      setEntitySummary(null)
+      return
+    }
+    const { entityId } = panel
+    if (summaryCache.current[entityId]) {
+      setEntitySummary(summaryCache.current[entityId])
+      return
+    }
+    setSummaryLoading(true)
+    setEntitySummary(null)
+    fetch(`/api/entities/${entityId}/summary`)
+      .then((r) => r.ok ? r.json() : null)
+      .then((d) => {
+        if (d?.summary) {
+          summaryCache.current[entityId] = d.summary
+          setEntitySummary(d.summary)
+        }
+      })
+      .catch(() => {})
+      .finally(() => setSummaryLoading(false))
   }, [panel])
 
   // Memoize percentile thresholds
@@ -625,6 +654,28 @@ export default function GraphPage() {
 
           {panel.kind === "entity" && (
             <>
+              {/* Entity summary */}
+              {summaryLoading && (
+                <div style={{ marginBottom: "20px" }}>
+                  {[90, 75, 85].map((w, i) => (
+                    <div key={i} className="skeleton" style={{ height: "12px", borderRadius: "5px", width: `${w}%`, marginBottom: "8px" }} />
+                  ))}
+                </div>
+              )}
+              {entitySummary && !summaryLoading && (
+                <div style={{
+                  fontSize: "12.5px",
+                  lineHeight: 1.7,
+                  color: "var(--text-2)",
+                  whiteSpace: "pre-wrap",
+                  marginBottom: "24px",
+                  paddingBottom: "20px",
+                  borderBottom: "1px solid var(--border-subtle)",
+                }}>
+                  {entitySummary}
+                </div>
+              )}
+
               {panel.notes.length === 0 ? (
                 <p style={{ fontSize: "13px", color: "var(--text-3)" }}>
                   No notes linked to this entity.
