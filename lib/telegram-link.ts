@@ -9,7 +9,7 @@ export async function generateLinkToken(userId: string): Promise<string> {
 
   await admin.from("telegram_link_tokens").delete().eq("user_id", userId)
 
-  const rawToken = randomBytes(32).toString("hex")
+  const rawToken = randomBytes(29).toString("hex")
   const tokenHash = createHash("sha256").update(rawToken).digest("hex")
   const expiresAt = new Date(Date.now() + 5 * 60 * 1000).toISOString()
 
