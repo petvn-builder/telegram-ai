@@ -47,8 +47,8 @@ export default function TelegramConnectPanel({ existingIdentity }: Props) {
       <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
         {/* Connected state */}
         <div style={{
-          background: "rgba(99,102,241,0.08)",
-          border: "1px solid rgba(99,102,241,0.20)",
+          background: "var(--accent-dim)",
+          border: "1px solid var(--border-accent)",
           borderRadius: "12px",
           padding: "16px 20px",
           display: "flex",
@@ -57,7 +57,7 @@ export default function TelegramConnectPanel({ existingIdentity }: Props) {
           gap: "12px",
         }}>
           <div>
-            <p style={{ fontSize: "14px", fontWeight: 600, color: "#818cf8", margin: "0 0 3px" }}>
+            <p style={{ fontSize: "14px", fontWeight: 600, color: "var(--accent)", margin: "0 0 3px" }}>
               @{existingIdentity.telegram_username}
             </p>
             <p style={{ fontSize: "11px", color: "var(--text-3)", margin: 0 }}>
@@ -92,7 +92,7 @@ export default function TelegramConnectPanel({ existingIdentity }: Props) {
             transition: "border-color 0.15s, color 0.15s",
           }}
           onMouseEnter={(e) => {
-            e.currentTarget.style.borderColor = "rgba(255,255,255,0.15)"
+            e.currentTarget.style.borderColor = "var(--border-hover)"
             e.currentTarget.style.color = "var(--text-1)"
           }}
           onMouseLeave={(e) => {
@@ -186,17 +186,18 @@ export default function TelegramConnectPanel({ existingIdentity }: Props) {
         style={{
           alignSelf: "flex-start",
           padding: "9px 18px",
-          background: loading ? "rgba(99,102,241,0.5)" : "#6366f1",
-          border: "none",
+          background: "transparent",
+          border: "1px solid var(--border-hover)",
           borderRadius: "8px",
-          color: "white",
+          color: loading ? "var(--text-3)" : "var(--text-1)",
           fontSize: "13px",
-          fontWeight: 600,
+          fontWeight: 500,
           cursor: loading ? "not-allowed" : "pointer",
-          transition: "background 0.15s",
+          transition: "border-color 0.16s, color 0.16s",
+          opacity: loading ? 0.6 : 1,
         }}
-        onMouseEnter={(e) => { if (!loading) e.currentTarget.style.background = "#5254cc" }}
-        onMouseLeave={(e) => { if (!loading) e.currentTarget.style.background = "#6366f1" }}
+        onMouseEnter={(e) => { if (!loading) e.currentTarget.style.borderColor = "var(--accent)" }}
+        onMouseLeave={(e) => { if (!loading) e.currentTarget.style.borderColor = "var(--border-hover)" }}
       >
         {loading ? "Generating link…" : "Connect Telegram"}
       </button>

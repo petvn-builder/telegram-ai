@@ -64,7 +64,7 @@ const SETTINGS_LINK = {
 
 function SunIcon() {
   return (
-    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
       <circle cx="12" cy="12" r="4" />
       <line x1="12" y1="2" x2="12" y2="4" />
       <line x1="12" y1="20" x2="12" y2="22" />
@@ -80,7 +80,7 @@ function SunIcon() {
 
 function MoonIcon() {
   return (
-    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
       <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
     </svg>
   )
@@ -95,16 +95,16 @@ function NavLink({ href, label, icon, isActive }: { href: string; label: string;
       style={{
         display: "flex",
         alignItems: "center",
-        gap: "9px",
-        padding: "7px 10px",
-        borderRadius: "7px",
-        fontSize: "14px",
+        gap: "10px",
+        padding: "9px 14px",
+        borderRadius: "8px",
+        fontSize: "15px",
         fontWeight: isActive ? 500 : 400,
         color: isActive ? "var(--text-1)" : "var(--text-2)",
         textDecoration: "none",
-        background: isActive ? "rgba(99,102,241,0.08)" : "transparent",
+        background: isActive ? "var(--accent-dim)" : "transparent",
         borderLeft: isActive ? "2px solid var(--accent)" : "2px solid transparent",
-        transition: "color 0.15s, background 0.15s, border-color 0.15s",
+        transition: "color 0.16s ease-in-out, background 0.16s ease-in-out",
       }}
     >
       <span
@@ -113,7 +113,7 @@ function NavLink({ href, label, icon, isActive }: { href: string; label: string;
           display: "flex",
           alignItems: "center",
           flexShrink: 0,
-          transition: "color 0.15s",
+          transition: "color 0.16s",
         }}
       >
         {icon}
@@ -128,8 +128,8 @@ function Divider() {
     <div
       style={{
         height: "1px",
-        background: "var(--border-subtle)",
-        margin: "6px 8px",
+        background: "var(--border)",
+        margin: "8px 10px",
       }}
     />
   )
@@ -148,7 +148,7 @@ function SidebarInner() {
   const searchParams = useSearchParams()
   const router = useRouter()
   const [user, setUser] = useState<User | null>(null)
-  const [theme, setTheme] = useState<"dark" | "light">("dark")
+  const [theme, setTheme] = useState<"dark" | "light">("light")
   const [spaces, setSpaces] = useState<Space[]>([])
   const [spacesOpen, setSpacesOpen] = useState(true)
 
@@ -156,16 +156,24 @@ function SidebarInner() {
 
   useEffect(() => {
     const saved = localStorage.getItem("theme") as "dark" | "light" | null
-    const initial = saved ?? "dark"
+    const initial = saved ?? "light"
     setTheme(initial)
-    document.documentElement.setAttribute("data-theme", initial)
+    if (initial === "dark") {
+      document.documentElement.setAttribute("data-theme", "dark")
+    } else {
+      document.documentElement.removeAttribute("data-theme")
+    }
   }, [])
 
   function toggleTheme() {
     const next = theme === "dark" ? "light" : "dark"
     setTheme(next)
     localStorage.setItem("theme", next)
-    document.documentElement.setAttribute("data-theme", next)
+    if (next === "dark") {
+      document.documentElement.setAttribute("data-theme", "dark")
+    } else {
+      document.documentElement.removeAttribute("data-theme")
+    }
   }
 
   useEffect(() => {
@@ -217,8 +225,8 @@ function SidebarInner() {
       {/* Brand row */}
       <div
         style={{
-          padding: "20px 20px 16px",
-          borderBottom: "1px solid var(--border-subtle)",
+          padding: "22px 16px 18px",
+          borderBottom: "1px solid var(--border)",
           flexShrink: 0,
           display: "flex",
           alignItems: "center",
@@ -234,14 +242,14 @@ function SidebarInner() {
             flex: 1,
           }}
         >
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" style={{ flexShrink: 0 }}>
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" style={{ flexShrink: 0, color: "var(--accent)" }}>
             <path
               d="M12 2L20.66 7V17L12 22L3.34 17V7L12 2Z"
-              stroke="#6366f1"
+              stroke="currentColor"
               strokeWidth="1.5"
               strokeLinejoin="round"
             />
-            <circle cx="12" cy="12" r="2.5" fill="#6366f1" />
+            <circle cx="12" cy="12" r="2.5" fill="currentColor" />
           </svg>
           <span
             style={{
@@ -268,7 +276,7 @@ function SidebarInner() {
             padding: "4px",
             borderRadius: "6px",
             flexShrink: 0,
-            transition: "color 0.15s",
+            transition: "color 0.16s",
           }}
           onMouseEnter={(e) => { e.currentTarget.style.color = "var(--text-2)" }}
           onMouseLeave={(e) => { e.currentTarget.style.color = "var(--text-3)" }}
@@ -282,10 +290,10 @@ function SidebarInner() {
         style={{
           flex: 1,
           overflowY: "auto",
-          padding: "12px 10px",
+          padding: "12px 8px",
           display: "flex",
           flexDirection: "column",
-          gap: "2px",
+          gap: "3px",
         }}
       >
         {/* Primary links: Notes, Graph */}
@@ -299,7 +307,7 @@ function SidebarInner() {
         {/* Spaces section */}
         {spaces.length > 0 && (
           <>
-            <div style={{ margin: "8px 0" }}>
+            <div style={{ margin: "6px 0" }}>
               <Divider />
             </div>
 
@@ -310,18 +318,18 @@ function SidebarInner() {
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "space-between",
-                padding: "5px 10px",
+                padding: "6px 14px",
                 background: "transparent",
                 border: "none",
                 cursor: "pointer",
                 color: "var(--text-3)",
                 borderRadius: "6px",
-                transition: "color 0.15s",
+                transition: "color 0.16s",
               }}
               onMouseEnter={(e) => { e.currentTarget.style.color = "var(--text-2)" }}
               onMouseLeave={(e) => { e.currentTarget.style.color = "var(--text-3)" }}
             >
-              <span style={{ fontSize: "12px", fontWeight: 500, letterSpacing: "0.01em" }}>
+              <span style={{ fontSize: "13px", fontWeight: 400 }}>
                 Spaces
               </span>
               <svg
@@ -335,7 +343,7 @@ function SidebarInner() {
                 strokeLinejoin="round"
                 style={{
                   transform: spacesOpen ? "rotate(0deg)" : "rotate(-90deg)",
-                  transition: "transform 0.15s",
+                  transition: "transform 0.16s ease-in-out",
                 }}
               >
                 <polyline points="6 9 12 15 18 9" />
@@ -343,7 +351,7 @@ function SidebarInner() {
             </button>
 
             {spacesOpen && (
-              <div style={{ display: "flex", flexDirection: "column", gap: "1px" }}>
+              <div style={{ display: "flex", flexDirection: "column", gap: "2px" }}>
                 {spaces.map((space) => {
                   const isActiveSpace = pathname === "/notes" && activeSpaceId === space.id
                   return (
@@ -353,16 +361,16 @@ function SidebarInner() {
                       style={{
                         display: "flex",
                         alignItems: "center",
-                        gap: "5px",
-                        padding: "7px 10px 7px 12px",
-                        borderRadius: "7px",
-                        fontSize: "13px",
+                        gap: "6px",
+                        padding: "8px 14px",
+                        borderRadius: "8px",
+                        fontSize: "14px",
                         fontWeight: isActiveSpace ? 500 : 400,
                         color: isActiveSpace ? "var(--text-1)" : "var(--text-2)",
                         textDecoration: "none",
-                        background: isActiveSpace ? "rgba(99,102,241,0.08)" : "transparent",
-                        borderLeft: isActiveSpace ? "2px solid #6366f1" : "2px solid transparent",
-                        transition: "color 0.15s, background 0.15s, border-color 0.15s",
+                        background: isActiveSpace ? "var(--accent-dim)" : "transparent",
+                        borderLeft: isActiveSpace ? "2px solid var(--accent)" : "2px solid transparent",
+                        transition: "color 0.16s, background 0.16s",
                       }}
                       onMouseEnter={(e) => {
                         if (!isActiveSpace) {
@@ -379,10 +387,10 @@ function SidebarInner() {
                     >
                       <span
                         style={{
-                          fontSize: "11px",
-                          color: isActiveSpace ? "#818cf8" : "var(--text-3)",
-                          fontWeight: 600,
-                          transition: "color 0.15s",
+                          fontSize: "12px",
+                          color: isActiveSpace ? "var(--accent)" : "var(--text-3)",
+                          fontWeight: 500,
+                          transition: "color 0.16s",
                           flexShrink: 0,
                         }}
                       >
@@ -400,7 +408,7 @@ function SidebarInner() {
         )}
 
         {/* Divider before Settings */}
-        <div style={{ margin: "8px 0" }}>
+        <div style={{ margin: "6px 0" }}>
           <Divider />
         </div>
 
@@ -416,7 +424,7 @@ function SidebarInner() {
       {/* User section */}
       <div
         style={{
-          padding: "12px 14px",
+          padding: "14px 16px",
           borderTop: "1px solid var(--border)",
           flexShrink: 0,
         }}
@@ -428,14 +436,14 @@ function SidebarInner() {
                 width: "28px",
                 height: "28px",
                 borderRadius: "50%",
-                background: "rgba(99,102,241,0.12)",
-                border: "1px solid rgba(99,102,241,0.20)",
+                background: "var(--accent-dim)",
+                border: "1px solid var(--border-accent)",
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "center",
                 fontSize: "11px",
                 fontWeight: 600,
-                color: "#818cf8",
+                color: "var(--accent)",
                 flexShrink: 0,
               }}
             >
@@ -464,7 +472,7 @@ function SidebarInner() {
                   border: "none",
                   padding: 0,
                   cursor: "pointer",
-                  transition: "color 0.15s",
+                  transition: "color 0.16s",
                   marginTop: "1px",
                 }}
                 onMouseEnter={(e) => { e.currentTarget.style.color = "var(--text-2)" }}
@@ -479,14 +487,14 @@ function SidebarInner() {
             href="/login"
             style={{
               display: "block",
-              fontSize: "13px",
+              fontSize: "14px",
               color: "var(--text-2)",
               textDecoration: "none",
-              padding: "7px 10px",
+              padding: "8px 12px",
               border: "1px solid var(--border)",
-              borderRadius: "7px",
+              borderRadius: "8px",
               textAlign: "center",
-              transition: "color 0.15s, border-color 0.15s",
+              transition: "color 0.16s, border-color 0.16s",
             }}
           >
             Sign in

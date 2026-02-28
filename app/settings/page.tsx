@@ -20,12 +20,18 @@ export default async function SettingsPage() {
       style={{
         minHeight: "100vh",
         background: "var(--bg-base)",
-        padding: "44px 40px",
+        padding: "48px 48px",
       }}
     >
-      <div style={{ maxWidth: "560px" }}>
+      <div style={{ maxWidth: "520px" }}>
 
-        <h1 style={{ fontSize: "26px", fontWeight: 700, color: "var(--text-1)", margin: "0 0 32px", letterSpacing: "-0.015em" }}>
+        <h1 style={{
+          fontSize: "22px",
+          fontWeight: 600,
+          color: "var(--text-1)",
+          margin: "0 0 36px",
+          letterSpacing: "-0.015em",
+        }}>
           Settings
         </h1>
 
@@ -33,44 +39,42 @@ export default async function SettingsPage() {
         <div style={{
           background: "var(--bg-surface)",
           border: "1px solid var(--border)",
-          borderRadius: "16px",
-          padding: "24px",
-          marginBottom: "16px",
+          borderRadius: "14px",
+          padding: "28px",
+          marginBottom: "20px",
         }}>
           <h2 style={{
-            fontSize: "11px",
-            fontWeight: 600,
-            letterSpacing: "0.06em",
-            textTransform: "uppercase",
+            fontSize: "13px",
+            fontWeight: 500,
             color: "var(--text-2)",
-            margin: "0 0 16px",
+            margin: "0 0 20px",
           }}>
             Account
           </h2>
 
-          <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "14px" }}>
             <div style={{
               width: "36px",
               height: "36px",
               borderRadius: "50%",
-              background: "rgba(99,102,241,0.15)",
-              border: "1px solid rgba(99,102,241,0.25)",
+              background: "var(--accent-dim)",
+              border: "1px solid var(--border-accent)",
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
               fontSize: "14px",
-              color: "#818cf8",
+              color: "var(--accent)",
               fontWeight: 600,
               flexShrink: 0,
             }}>
               {(user.email ?? "?")[0].toUpperCase()}
             </div>
             <div>
-              <p style={{ fontSize: "13px", fontWeight: 500, color: "var(--text-1)", margin: "0 0 2px" }}>
+              <p style={{ fontSize: "14px", fontWeight: 500, color: "var(--text-1)", margin: "0 0 3px" }}>
                 {user.email}
               </p>
-              <p style={{ fontSize: "11px", color: "var(--text-2)", margin: 0 }}>
-                Supabase Auth · {user.app_metadata?.provider ?? "email"}
+              <p style={{ fontSize: "12px", color: "var(--text-3)", margin: 0 }}>
+                {user.app_metadata?.provider ?? "email"}
               </p>
             </div>
           </div>
@@ -80,16 +84,14 @@ export default async function SettingsPage() {
         <div style={{
           background: "var(--bg-surface)",
           border: "1px solid var(--border)",
-          borderRadius: "16px",
-          padding: "24px",
+          borderRadius: "14px",
+          padding: "28px",
         }}>
           <h2 style={{
-            fontSize: "11px",
-            fontWeight: 600,
-            letterSpacing: "0.06em",
-            textTransform: "uppercase",
+            fontSize: "13px",
+            fontWeight: 500,
             color: "var(--text-2)",
-            margin: "0 0 16px",
+            margin: "0 0 20px",
           }}>
             Telegram
           </h2>

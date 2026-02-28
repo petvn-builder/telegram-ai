@@ -13,26 +13,31 @@ function formatDate(iso: string): string {
   })
 }
 
+// Light-appropriate entity colors
 const ENTITY_COLORS: Record<string, { bg: string; text: string; border: string }> = {
-  person:   { bg: "rgba(59,130,246,0.14)",  text: "#60a5fa", border: "rgba(59,130,246,0.28)"  },
-  project:  { bg: "rgba(139,92,246,0.14)",  text: "#a78bfa", border: "rgba(139,92,246,0.28)"  },
-  company:  { bg: "rgba(245,158,11,0.14)",  text: "#fbbf24", border: "rgba(245,158,11,0.28)"  },
-  tool:     { bg: "rgba(16,185,129,0.14)",  text: "#34d399", border: "rgba(16,185,129,0.28)"  },
-  topic:    { bg: "rgba(99,102,241,0.14)",  text: "#818cf8", border: "rgba(99,102,241,0.28)"  },
-  goal:     { bg: "rgba(236,72,153,0.14)",  text: "#f472b6", border: "rgba(236,72,153,0.28)"  },
-  event:    { bg: "rgba(249,115,22,0.14)",  text: "#fb923c", border: "rgba(249,115,22,0.28)"  },
-  resource: { bg: "rgba(20,184,166,0.14)",  text: "#2dd4bf", border: "rgba(20,184,166,0.28)"  },
+  person:   { bg: "rgba(37,99,235,0.09)",    text: "#1D4ED8", border: "rgba(37,99,235,0.18)"   },
+  project:  { bg: "rgba(109,40,217,0.09)",   text: "#6D28D9", border: "rgba(109,40,217,0.18)"  },
+  company:  { bg: "rgba(180,83,9,0.09)",     text: "#B45309", border: "rgba(180,83,9,0.18)"    },
+  tool:     { bg: "rgba(4,120,87,0.09)",     text: "#047857", border: "rgba(4,120,87,0.18)"    },
+  topic:    { bg: "rgba(67,56,202,0.09)",    text: "#3730A3", border: "rgba(67,56,202,0.18)"   },
+  goal:     { bg: "rgba(190,24,93,0.09)",    text: "#BE185D", border: "rgba(190,24,93,0.18)"   },
+  event:    { bg: "rgba(194,65,12,0.09)",    text: "#C2410C", border: "rgba(194,65,12,0.18)"   },
+  resource: { bg: "rgba(15,118,110,0.09)",   text: "#0F766E", border: "rgba(15,118,110,0.18)"  },
 }
 
 function entityColor(type: string) {
-  return ENTITY_COLORS[type] ?? { bg: "rgba(255,255,255,0.09)", text: "var(--text-2)", border: "rgba(255,255,255,0.16)" }
+  return ENTITY_COLORS[type] ?? {
+    bg: "rgba(107,114,128,0.09)",
+    text: "var(--text-2)",
+    border: "rgba(107,114,128,0.18)",
+  }
 }
 
 function SkeletonLine({ width }: { width: string }) {
   return (
     <div
       className="skeleton"
-      style={{ height: "13px", borderRadius: "6px", width, marginBottom: "10px" }}
+      style={{ height: "14px", borderRadius: "6px", width, marginBottom: "12px" }}
     />
   )
 }
@@ -62,7 +67,7 @@ export default function NoteDetailPage() {
       style={{
         minHeight: "100vh",
         background: "var(--bg-base)",
-        padding: "40px 40px",
+        padding: "48px 48px",
       }}
     >
       <div style={{ maxWidth: "680px" }}>
@@ -74,32 +79,27 @@ export default function NoteDetailPage() {
             display: "inline-flex",
             alignItems: "center",
             gap: "6px",
-            fontSize: "13px",
-            color: "var(--text-2)",
+            fontSize: "14px",
+            color: "var(--text-3)",
             textDecoration: "none",
-            marginBottom: "28px",
-            transition: "color 0.15s",
+            marginBottom: "36px",
+            transition: "color 0.16s",
           }}
-          onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.color = "var(--text-1)" }}
-          onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.color = "var(--text-2)" }}
+          onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.color = "var(--text-2)" }}
+          onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.color = "var(--text-3)" }}
         >
           ← Notes
         </Link>
 
         {/* Loading */}
         {loading && (
-          <div style={{
-            background: "var(--bg-surface)",
-            border: "1px solid var(--border)",
-            borderRadius: "16px",
-            padding: "28px",
-          }}>
-            <SkeletonLine width="30%" />
-            <div style={{ marginTop: "16px" }}>
+          <div style={{ paddingTop: "8px" }}>
+            <SkeletonLine width="25%" />
+            <div style={{ marginTop: "20px" }}>
               <SkeletonLine width="100%" />
-              <SkeletonLine width="88%" />
-              <SkeletonLine width="94%" />
-              <SkeletonLine width="70%" />
+              <SkeletonLine width="90%" />
+              <SkeletonLine width="95%" />
+              <SkeletonLine width="65%" />
             </div>
           </div>
         )}
@@ -107,16 +107,13 @@ export default function NoteDetailPage() {
         {/* Error */}
         {!loading && error && (
           <div style={{
-            background: "rgba(239,68,68,0.08)",
-            border: "1px solid rgba(239,68,68,0.20)",
-            borderRadius: "16px",
-            padding: "48px 28px",
+            padding: "48px 0",
             textAlign: "center",
           }}>
-            <p style={{ fontSize: "14px", color: "#f87171", margin: "0 0 16px" }}>{error}</p>
+            <p style={{ fontSize: "15px", color: "#DC2626", margin: "0 0 16px" }}>{error}</p>
             <Link
               href="/notes"
-              style={{ fontSize: "13px", color: "var(--text-2)", textDecoration: "none" }}
+              style={{ fontSize: "14px", color: "var(--text-2)", textDecoration: "none" }}
             >
               ← Back to Notes
             </Link>
@@ -125,25 +122,19 @@ export default function NoteDetailPage() {
 
         {/* Content */}
         {!loading && note && (
-          <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+          <div style={{ display: "flex", flexDirection: "column", gap: "32px" }}>
 
-            {/* Main card */}
-            <div style={{
-              background: "var(--bg-surface)",
-              border: "1px solid var(--border)",
-              borderRadius: "16px",
-              padding: "28px",
-            }}>
+            {/* Main content — no card wrapper, feels like paper */}
+            <div>
               <p style={{
-                fontSize: "11px",
-                color: "var(--text-2)",
-                margin: "0 0 20px",
-                letterSpacing: "0.02em",
+                fontSize: "13px",
+                color: "var(--text-3)",
+                margin: "0 0 24px",
               }}>
                 {formatDate(note.created_at)}
               </p>
               <p style={{
-                fontSize: "14px",
+                fontSize: "17px",
                 lineHeight: 1.8,
                 color: "var(--text-1)",
                 whiteSpace: "pre-wrap",
@@ -156,18 +147,16 @@ export default function NoteDetailPage() {
             {/* Entities */}
             {note.relatedEntities.length > 0 && (
               <div style={{
-                background: "var(--bg-surface)",
-                border: "1px solid var(--border)",
-                borderRadius: "16px",
-                padding: "20px 28px",
+                borderTop: "1px solid var(--border-subtle)",
+                paddingTop: "24px",
               }}>
                 <p style={{
                   fontSize: "12px",
-                  fontWeight: 600,
-                  letterSpacing: "0.05em",
+                  fontWeight: 500,
+                  color: "var(--text-3)",
+                  margin: "0 0 14px",
                   textTransform: "uppercase",
-                  color: "var(--text-2)",
-                  margin: "0 0 12px",
+                  letterSpacing: "0.05em",
                 }}>
                   Linked Entities
                 </p>
@@ -182,21 +171,21 @@ export default function NoteDetailPage() {
                           display: "inline-flex",
                           alignItems: "center",
                           gap: "5px",
-                          padding: "5px 12px",
+                          padding: "4px 12px",
                           borderRadius: "999px",
-                          fontSize: "12px",
+                          fontSize: "13px",
                           fontWeight: 500,
                           background: c.bg,
                           color: c.text,
                           border: `1px solid ${c.border}`,
                           textDecoration: "none",
-                          transition: "filter 0.15s",
+                          transition: "opacity 0.16s",
                         }}
-                        onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.filter = "brightness(1.15)" }}
-                        onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.filter = "none" }}
+                        onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.opacity = "0.75" }}
+                        onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.opacity = "1" }}
                       >
                         {entity.name}
-                        <span style={{ opacity: 0.55, fontSize: "10px" }}>{entity.type}</span>
+                        <span style={{ opacity: 0.5, fontSize: "11px" }}>{entity.type}</span>
                       </Link>
                     )
                   })}
@@ -207,12 +196,12 @@ export default function NoteDetailPage() {
                   style={{
                     display: "inline-flex",
                     alignItems: "center",
-                    marginTop: "14px",
-                    fontSize: "12px",
-                    color: "#6366f1",
+                    marginTop: "16px",
+                    fontSize: "13px",
+                    color: "var(--accent)",
                     textDecoration: "none",
                     gap: "4px",
-                    transition: "opacity 0.15s",
+                    transition: "opacity 0.16s",
                   }}
                   onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.opacity = "0.7" }}
                   onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.opacity = "1" }}

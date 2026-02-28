@@ -34,25 +34,30 @@ function titleAndBody(content: string): { title: string; body: string } {
   return { title, body }
 }
 
+// Light-appropriate entity colors: subdued backgrounds, readable text
 const ENTITY_COLORS: Record<string, { bg: string; text: string; border: string }> = {
-  person:   { bg: "rgba(59,130,246,0.14)",  text: "#60a5fa", border: "rgba(59,130,246,0.28)" },
-  project:  { bg: "rgba(139,92,246,0.14)",  text: "#a78bfa", border: "rgba(139,92,246,0.28)" },
-  company:  { bg: "rgba(245,158,11,0.14)",  text: "#fbbf24", border: "rgba(245,158,11,0.28)" },
-  tool:     { bg: "rgba(16,185,129,0.14)",  text: "#34d399", border: "rgba(16,185,129,0.28)" },
-  topic:    { bg: "rgba(99,102,241,0.14)",  text: "#818cf8", border: "rgba(99,102,241,0.28)" },
-  goal:     { bg: "rgba(236,72,153,0.14)",  text: "#f472b6", border: "rgba(236,72,153,0.28)" },
-  event:    { bg: "rgba(249,115,22,0.14)",  text: "#fb923c", border: "rgba(249,115,22,0.28)" },
-  resource: { bg: "rgba(20,184,166,0.14)",  text: "#2dd4bf", border: "rgba(20,184,166,0.28)" },
+  person:   { bg: "rgba(37,99,235,0.09)",    text: "#1D4ED8", border: "rgba(37,99,235,0.18)" },
+  project:  { bg: "rgba(109,40,217,0.09)",   text: "#6D28D9", border: "rgba(109,40,217,0.18)" },
+  company:  { bg: "rgba(180,83,9,0.09)",     text: "#B45309", border: "rgba(180,83,9,0.18)" },
+  tool:     { bg: "rgba(4,120,87,0.09)",     text: "#047857", border: "rgba(4,120,87,0.18)" },
+  topic:    { bg: "rgba(67,56,202,0.09)",    text: "#3730A3", border: "rgba(67,56,202,0.18)" },
+  goal:     { bg: "rgba(190,24,93,0.09)",    text: "#BE185D", border: "rgba(190,24,93,0.18)" },
+  event:    { bg: "rgba(194,65,12,0.09)",    text: "#C2410C", border: "rgba(194,65,12,0.18)" },
+  resource: { bg: "rgba(15,118,110,0.09)",   text: "#0F766E", border: "rgba(15,118,110,0.18)" },
 }
 
-const SPACE_STYLE = { bg: "rgba(99,102,241,0.12)", text: "#818cf8", border: "rgba(99,102,241,0.30)" }
+const SPACE_STYLE = {
+  bg: "var(--accent-dim)",
+  text: "var(--accent)",
+  border: "var(--border-accent)",
+}
 
 function entityStyle(type: string) {
   return (
     ENTITY_COLORS[type] ?? {
-      bg: "rgba(255,255,255,0.09)",
+      bg: "rgba(107,114,128,0.09)",
       text: "var(--text-2)",
-      border: "rgba(255,255,255,0.16)",
+      border: "rgba(107,114,128,0.18)",
     }
   )
 }
@@ -63,16 +68,16 @@ function SkeletonCard() {
   return (
     <div
       style={{
-        padding: "16px 0",
+        padding: "20px 24px",
         borderBottom: "1px solid var(--border-subtle)",
         display: "flex",
         flexDirection: "column",
-        gap: "8px",
+        gap: "10px",
       }}
     >
-      <div className="skeleton" style={{ height: "14px", borderRadius: "6px", width: "70%" }} />
-      <div className="skeleton" style={{ height: "12px", borderRadius: "6px", width: "90%" }} />
-      <div className="skeleton" style={{ height: "11px", borderRadius: "6px", width: "120px" }} />
+      <div className="skeleton" style={{ height: "15px", borderRadius: "6px", width: "65%" }} />
+      <div className="skeleton" style={{ height: "13px", borderRadius: "6px", width: "85%" }} />
+      <div className="skeleton" style={{ height: "11px", borderRadius: "6px", width: "100px" }} />
     </div>
   )
 }
@@ -97,27 +102,27 @@ function NoteCard({ note, selected, onClick, isLast }: NoteCardProps) {
       style={{
         width: "100%",
         textAlign: "left",
-        background: selected ? "var(--accent-dim)" : hovered ? "var(--bg-surface)" : "transparent",
-        borderLeft: selected ? "2px solid var(--accent)" : "2px solid transparent",
+        background: selected ? "var(--accent-dim)" : hovered ? "var(--bg-hover)" : "transparent",
         borderBottom: isLast ? "none" : "1px solid var(--border-subtle)",
         borderTop: "none",
         borderRight: "none",
-        borderRadius: selected ? "0 6px 6px 0" : "0",
-        padding: "16px 12px 16px 14px",
+        borderLeft: selected ? "2px solid var(--accent)" : "2px solid transparent",
+        borderRadius: "0",
+        padding: "20px 24px",
         cursor: "pointer",
-        transition: "background 0.12s, border-color 0.12s",
+        transition: "background 0.16s ease-in-out, border-color 0.16s ease-in-out",
         display: "flex",
         flexDirection: "column",
-        gap: "5px",
+        gap: "6px",
       }}
     >
       {/* Title */}
       <p
         style={{
-          fontSize: "14px",
+          fontSize: "15px",
           fontWeight: 500,
           lineHeight: 1.4,
-          color: selected ? "var(--text-1)" : hovered ? "var(--text-1)" : "var(--text-1)",
+          color: "var(--text-1)",
           margin: 0,
           overflow: "hidden",
           textOverflow: "ellipsis",
@@ -131,8 +136,8 @@ function NoteCard({ note, selected, onClick, isLast }: NoteCardProps) {
       {body && (
         <p
           style={{
-            fontSize: "13px",
-            lineHeight: 1.5,
+            fontSize: "14px",
+            lineHeight: 1.6,
             color: "var(--text-2)",
             margin: 0,
             overflow: "hidden",
@@ -149,13 +154,13 @@ function NoteCard({ note, selected, onClick, isLast }: NoteCardProps) {
         style={{
           display: "flex",
           alignItems: "center",
-          gap: "5px",
+          gap: "6px",
           marginTop: "2px",
         }}
       >
         {spaceName && (
           <>
-            <span style={{ fontSize: "11px", color: "#818cf8", fontWeight: 500 }}>
+            <span style={{ fontSize: "11px", color: "var(--accent)", fontWeight: 500 }}>
               @{spaceName}
             </span>
             <span style={{ fontSize: "11px", color: "var(--text-3)" }}>·</span>
@@ -286,7 +291,7 @@ function NotesPageInner() {
       return (
         <div
           key={note.id}
-          style={isNew ? { animation: "fadeInUp 180ms ease-out both" } : undefined}
+          style={isNew ? { animation: "fadeInUp 180ms ease-in-out both" } : undefined}
           onAnimationEnd={() => { if (isNew) justAddedId.current = null }}
         >
           <NoteCard
@@ -320,7 +325,7 @@ function NotesPageInner() {
             alignItems: "center",
             justifyContent: "center",
             height: "200px",
-            color: "#f87171",
+            color: "#DC2626",
             fontSize: "14px",
           }}
         >
@@ -338,12 +343,12 @@ function NotesPageInner() {
             alignItems: "center",
             justifyContent: "center",
             height: "300px",
-            gap: "10px",
+            gap: "12px",
             color: "var(--text-3)",
           }}
         >
-          <span style={{ fontSize: "28px" }}>◌</span>
-          <p style={{ fontSize: "14px", margin: 0, color: "var(--text-2)" }}>
+          <span style={{ fontSize: "24px", opacity: 0.4 }}>◌</span>
+          <p style={{ fontSize: "15px", margin: 0, color: "var(--text-2)" }}>
             {searchQuery
               ? "No notes match your search"
               : activeSpaceId
@@ -357,6 +362,7 @@ function NotesPageInner() {
                 style={{
                   fontFamily: "var(--font-geist-mono)",
                   background: "var(--bg-surface)",
+                  border: "1px solid var(--border)",
                   padding: "1px 6px",
                   borderRadius: "4px",
                 }}
@@ -396,19 +402,19 @@ function NotesPageInner() {
           display: "flex",
           flexDirection: "column",
           overflow: "hidden",
-          transition: "padding-right 0.25s",
+          transition: "padding-right 0.22s ease-in-out",
           paddingRight: selectedNote ? `${DETAIL_W}px` : "0",
         }}
       >
         {/* Page header */}
-        <div style={{ padding: "28px 28px 0", flexShrink: 0 }}>
+        <div style={{ padding: "32px 32px 0", flexShrink: 0 }}>
           <div
             style={{
               display: "flex",
               alignItems: "center",
               justifyContent: "space-between",
               gap: "12px",
-              marginBottom: "20px",
+              marginBottom: "24px",
             }}
           >
             {/* Title / breadcrumb */}
@@ -419,11 +425,11 @@ function NotesPageInner() {
                     href="/notes"
                     style={{
                       fontSize: "20px",
-                      fontWeight: 600,
+                      fontWeight: 500,
                       color: "var(--text-3)",
                       textDecoration: "none",
                       letterSpacing: "-0.015em",
-                      transition: "color 0.15s",
+                      transition: "color 0.16s",
                     }}
                     onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.color = "var(--text-2)" }}
                     onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.color = "var(--text-3)" }}
@@ -434,8 +440,8 @@ function NotesPageInner() {
                   <span
                     style={{
                       fontSize: "20px",
-                      fontWeight: 600,
-                      color: SPACE_STYLE.text,
+                      fontWeight: 500,
+                      color: "var(--accent)",
                       letterSpacing: "-0.015em",
                     }}
                   >
@@ -446,7 +452,7 @@ function NotesPageInner() {
                 <h1
                   style={{
                     fontSize: "20px",
-                    fontWeight: 600,
+                    fontWeight: 500,
                     color: "var(--text-1)",
                     margin: 0,
                     letterSpacing: "-0.015em",
@@ -455,33 +461,16 @@ function NotesPageInner() {
                   Notes
                 </h1>
               )}
-              {!loading && notes.length > 0 && (
-                <span
-                  style={{
-                    fontSize: "12px",
-                    color: "var(--text-3)",
-                    background: "var(--bg-surface)",
-                    border: "1px solid var(--border)",
-                    borderRadius: "999px",
-                    padding: "1px 9px",
-                    lineHeight: "20px",
-                  }}
-                >
-                  {filteredNotes.length === notes.length
-                    ? notes.length
-                    : `${filteredNotes.length} / ${notes.length}`}
-                </span>
-              )}
             </div>
 
             {/* Right controls: search + new note */}
-            <div style={{ display: "flex", alignItems: "center", gap: "8px", flexShrink: 0 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "10px", flexShrink: 0 }}>
               {/* Search */}
               <div style={{ position: "relative" }}>
                 <span
                   style={{
                     position: "absolute",
-                    left: "9px",
+                    left: "10px",
                     top: "50%",
                     transform: "translateY(-50%)",
                     color: "var(--text-3)",
@@ -498,23 +487,31 @@ function NotesPageInner() {
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   style={{
-                    width: "180px",
-                    background: "var(--bg-surface)",
-                    border: "1px solid var(--border)",
-                    borderRadius: "7px",
-                    padding: "7px 10px 7px 28px",
-                    fontSize: "13px",
+                    width: "200px",
+                    background: "transparent",
+                    border: "1px solid transparent",
+                    borderRadius: "8px",
+                    padding: "7px 12px 7px 30px",
+                    fontSize: "14px",
                     color: "var(--text-1)",
                     outline: "none",
-                    transition: "border-color 0.15s",
+                    transition: "border-color 0.16s, background 0.16s",
                     boxSizing: "border-box",
                   }}
-                  onFocus={(e) => { e.currentTarget.style.borderColor = "var(--border-accent)" }}
-                  onBlur={(e) => { e.currentTarget.style.borderColor = "var(--border)" }}
+                  onFocus={(e) => {
+                    e.currentTarget.style.borderColor = "var(--border)"
+                    e.currentTarget.style.background = "var(--bg-surface)"
+                  }}
+                  onBlur={(e) => {
+                    if (!e.currentTarget.value) {
+                      e.currentTarget.style.borderColor = "transparent"
+                      e.currentTarget.style.background = "transparent"
+                    }
+                  }}
                 />
               </div>
 
-              {/* New note (+) button */}
+              {/* New note button */}
               <button
                 onClick={() => {
                   if (showComposer) {
@@ -525,17 +522,17 @@ function NotesPageInner() {
                 }}
                 title="New note"
                 style={{
-                  width: "30px",
-                  height: "30px",
                   display: "flex",
                   alignItems: "center",
-                  justifyContent: "center",
+                  gap: "5px",
+                  padding: "7px 14px",
                   background: "transparent",
                   border: "1px solid var(--border)",
-                  borderRadius: "7px",
+                  borderRadius: "8px",
                   cursor: "pointer",
                   color: "var(--text-2)",
-                  transition: "color 0.12s, border-color 0.12s, background 0.12s",
+                  fontSize: "14px",
+                  transition: "color 0.16s, border-color 0.16s, background 0.16s",
                   flexShrink: 0,
                 }}
                 onMouseEnter={(e) => {
@@ -549,22 +546,17 @@ function NotesPageInner() {
                   e.currentTarget.style.background = "transparent"
                 }}
               >
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
                   <line x1="12" y1="5" x2="12" y2="19" />
                   <line x1="5" y1="12" x2="19" y2="12" />
                 </svg>
+                New
               </button>
             </div>
           </div>
 
           {/* Divider line */}
-          <div
-            style={{
-              height: "1px",
-              background: "var(--border-subtle)",
-              marginBottom: "0",
-            }}
-          />
+          <div style={{ height: "1px", background: "var(--border-subtle)" }} />
         </div>
 
         {/* Cards scroll area */}
@@ -572,16 +564,16 @@ function NotesPageInner() {
           style={{
             flex: 1,
             overflowY: "auto",
-            padding: "0 28px 28px",
+            padding: "0 32px 32px",
           }}
         >
-          <div style={{ maxWidth: "720px" }}>
+          <div style={{ maxWidth: "680px" }}>
             {showComposer && (
               <div
                 ref={composerTopRef}
                 style={{
-                  padding: "20px 0 0",
-                  animation: "scaleIn 160ms cubic-bezier(0.16,1,0.3,1) both",
+                  padding: "24px 0 0",
+                  animation: "scaleIn 160ms ease-in-out both",
                 }}
               >
                 <NoteComposer
@@ -614,7 +606,6 @@ function NotesPageInner() {
             width: DETAIL_W,
             background: "var(--bg-elevated)",
             borderLeft: "1px solid var(--border)",
-            boxShadow: "var(--shadow-lg)",
             display: "flex",
             flexDirection: "column",
             zIndex: 40,
@@ -626,32 +617,32 @@ function NotesPageInner() {
               display: "flex",
               alignItems: "center",
               justifyContent: "space-between",
-              padding: "16px 24px",
+              padding: "20px 28px",
               borderBottom: "1px solid var(--border)",
               flexShrink: 0,
             }}
           >
-            <span style={{ fontSize: "12px", color: "var(--text-3)" }}>
+            <span style={{ fontSize: "13px", color: "var(--text-3)" }}>
               {relativeTime(selectedNote.created_at)}
             </span>
-            <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
               {!editMode && (
                 <button
                   onClick={handleDelete}
                   disabled={deleting}
                   style={{
-                    fontSize: "12px",
-                    color: confirmDelete ? "#f87171" : "var(--text-3)",
+                    fontSize: "13px",
+                    color: confirmDelete ? "#DC2626" : "var(--text-3)",
                     background: "transparent",
                     padding: "5px 10px",
                     borderRadius: "7px",
-                    border: `1px solid ${confirmDelete ? "rgba(248,113,113,0.35)" : "transparent"}`,
+                    border: `1px solid ${confirmDelete ? "rgba(220,38,38,0.25)" : "transparent"}`,
                     cursor: deleting ? "not-allowed" : "pointer",
-                    transition: "color 0.12s, border-color 0.12s",
+                    transition: "color 0.16s, border-color 0.16s",
                     opacity: deleting ? 0.5 : 1,
                   }}
                   onMouseEnter={(e) => {
-                    if (!confirmDelete) e.currentTarget.style.color = "#f87171"
+                    if (!confirmDelete) e.currentTarget.style.color = "#DC2626"
                   }}
                   onMouseLeave={(e) => {
                     if (!confirmDelete) e.currentTarget.style.color = "var(--text-3)"
@@ -671,14 +662,14 @@ function NotesPageInner() {
                 <button
                   onClick={() => setEditMode(true)}
                   style={{
-                    fontSize: "12px",
+                    fontSize: "13px",
                     color: "var(--text-2)",
                     background: "transparent",
                     padding: "5px 10px",
                     borderRadius: "7px",
                     border: "1px solid var(--border)",
                     cursor: "pointer",
-                    transition: "color 0.12s, border-color 0.12s",
+                    transition: "color 0.16s, border-color 0.16s",
                   }}
                   onMouseEnter={(e) => {
                     e.currentTarget.style.color = "var(--text-1)"
@@ -695,13 +686,13 @@ function NotesPageInner() {
               <Link
                 href={`/notes/${selectedNote.id}`}
                 style={{
-                  fontSize: "12px",
+                  fontSize: "13px",
                   color: "var(--text-2)",
                   textDecoration: "none",
                   padding: "5px 10px",
                   borderRadius: "7px",
                   border: "1px solid var(--border)",
-                  transition: "color 0.12s, border-color 0.12s",
+                  transition: "color 0.16s, border-color 0.16s",
                 }}
                 onMouseEnter={(e) => {
                   ;(e.currentTarget as HTMLElement).style.color = "var(--text-1)"
@@ -726,19 +717,17 @@ function NotesPageInner() {
                   border: "1px solid transparent",
                   borderRadius: "7px",
                   cursor: "pointer",
-                  color: "var(--text-2)",
+                  color: "var(--text-3)",
                   fontSize: "14px",
-                  transition: "background 0.12s, color 0.12s, border-color 0.12s",
+                  transition: "background 0.16s, color 0.16s",
                 }}
                 onMouseEnter={(e) => {
                   e.currentTarget.style.background = "var(--bg-hover)"
                   e.currentTarget.style.color = "var(--text-1)"
-                  e.currentTarget.style.borderColor = "var(--border)"
                 }}
                 onMouseLeave={(e) => {
                   e.currentTarget.style.background = "transparent"
-                  e.currentTarget.style.color = "var(--text-2)"
-                  e.currentTarget.style.borderColor = "transparent"
+                  e.currentTarget.style.color = "var(--text-3)"
                 }}
               >
                 ✕
@@ -747,7 +736,7 @@ function NotesPageInner() {
           </div>
 
           {/* Content */}
-          <div style={{ flex: 1, overflowY: "auto", padding: "24px" }}>
+          <div style={{ flex: 1, overflowY: "auto", padding: "32px" }}>
             {editMode ? (
               <NoteComposer
                 mode="edit"
@@ -766,7 +755,7 @@ function NotesPageInner() {
               <>
                 {/* Space badges in detail view */}
                 {selectedNote.spaces && selectedNote.spaces.length > 0 && (
-                  <div style={{ display: "flex", flexWrap: "wrap", gap: "5px", marginBottom: "16px" }}>
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: "6px", marginBottom: "20px" }}>
                     {selectedNote.spaces.map((s) => (
                       <Link
                         key={s.id}
@@ -774,18 +763,18 @@ function NotesPageInner() {
                         style={{
                           display: "inline-flex",
                           alignItems: "center",
-                          padding: "2px 8px",
+                          padding: "3px 10px",
                           borderRadius: "999px",
-                          fontSize: "11px",
+                          fontSize: "12px",
                           fontWeight: 500,
                           background: SPACE_STYLE.bg,
                           color: SPACE_STYLE.text,
                           border: `1px solid ${SPACE_STYLE.border}`,
                           textDecoration: "none",
-                          transition: "filter 0.15s",
+                          transition: "opacity 0.16s",
                         }}
-                        onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.filter = "brightness(1.2)" }}
-                        onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.filter = "none" }}
+                        onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.opacity = "0.7" }}
+                        onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.opacity = "1" }}
                       >
                         @{s.name}
                       </Link>
@@ -794,7 +783,7 @@ function NotesPageInner() {
                 )}
                 <p
                   style={{
-                    fontSize: "15px",
+                    fontSize: "16px",
                     lineHeight: 1.75,
                     color: "var(--text-1)",
                     whiteSpace: "pre-wrap",
@@ -811,7 +800,7 @@ function NotesPageInner() {
           {!editMode && selectedNote.entities.length > 0 && (
             <div
               style={{
-                padding: "16px 24px 20px",
+                padding: "20px 28px 24px",
                 borderTop: "1px solid var(--border)",
                 flexShrink: 0,
               }}
@@ -820,15 +809,15 @@ function NotesPageInner() {
                 style={{
                   fontSize: "11px",
                   fontWeight: 500,
-                  letterSpacing: "0.04em",
-                  textTransform: "uppercase",
                   color: "var(--text-3)",
                   margin: "0 0 10px",
+                  textTransform: "uppercase",
+                  letterSpacing: "0.04em",
                 }}
               >
                 Linked
               </p>
-              <div style={{ display: "flex", flexWrap: "wrap", gap: "6px" }}>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: "5px" }}>
                 {selectedNote.entities.map((entity) => {
                   const s = entityStyle(entity.type)
                   return (
@@ -838,7 +827,7 @@ function NotesPageInner() {
                       style={{
                         display: "inline-flex",
                         alignItems: "center",
-                        gap: "5px",
+                        gap: "4px",
                         padding: "3px 9px",
                         borderRadius: "999px",
                         fontSize: "12px",
@@ -847,13 +836,13 @@ function NotesPageInner() {
                         color: s.text,
                         border: `1px solid ${s.border}`,
                         textDecoration: "none",
-                        transition: "filter 0.15s",
+                        transition: "opacity 0.16s",
                       }}
                       onMouseEnter={(e) => {
-                        ;(e.currentTarget as HTMLElement).style.filter = "brightness(1.15)"
+                        ;(e.currentTarget as HTMLElement).style.opacity = "0.75"
                       }}
                       onMouseLeave={(e) => {
-                        ;(e.currentTarget as HTMLElement).style.filter = "none"
+                        ;(e.currentTarget as HTMLElement).style.opacity = "1"
                       }}
                       title={`View ${entity.name} in graph`}
                     >
@@ -869,12 +858,12 @@ function NotesPageInner() {
                 style={{
                   display: "inline-flex",
                   alignItems: "center",
-                  gap: "6px",
+                  gap: "5px",
                   marginTop: "14px",
                   fontSize: "12px",
                   color: "var(--accent)",
                   textDecoration: "none",
-                  transition: "opacity 0.15s",
+                  transition: "opacity 0.16s",
                 }}
                 onMouseEnter={(e) => {
                   ;(e.currentTarget as HTMLElement).style.opacity = "0.7"

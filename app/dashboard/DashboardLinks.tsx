@@ -16,9 +16,9 @@ const LINKS = [
         <polyline points="10 9 9 9 8 9" />
       </svg>
     ),
-    color: "#818cf8",
-    colorBg: "rgba(99,102,241,0.10)",
-    colorBorder: "rgba(99,102,241,0.20)",
+    color: "var(--accent)",
+    colorBg: "var(--accent-dim)",
+    colorBorder: "var(--border-accent)",
   },
   {
     href: "/graph",
@@ -67,7 +67,6 @@ export default function DashboardLinks() {
         <Link
           key={href}
           href={href}
-          className="card-lift"
           style={{
             background: "var(--bg-surface)",
             border: "1px solid var(--border)",

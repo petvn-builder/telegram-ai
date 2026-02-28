@@ -3,7 +3,11 @@
 import { useEffect, useRef, useState } from "react"
 import type { NoteWithEntities, Space } from "./types"
 
-const SPACE_STYLE = { bg: "rgba(99,102,241,0.10)", text: "#818cf8", border: "rgba(99,102,241,0.22)" }
+const SPACE_STYLE = {
+  bg: "var(--accent-dim)",
+  text: "var(--accent)",
+  border: "var(--border-accent)",
+}
 
 function Spinner() {
   return (
@@ -255,12 +259,11 @@ export default function NoteComposer({
       style={{
         background: "var(--bg-surface)",
         border: "1px solid var(--border)",
-        borderRadius: "12px",
-        padding: "20px",
+        borderRadius: "14px",
+        padding: "24px",
         display: "flex",
         flexDirection: "column",
-        gap: "14px",
-        boxShadow: "var(--shadow-md)",
+        gap: "16px",
       }}
     >
       {/* Textarea */}
@@ -277,15 +280,15 @@ export default function NoteComposer({
           border: "none",
           borderRadius: "0",
           padding: "0",
-          fontSize: "15px",
-          lineHeight: 1.7,
+          fontSize: "16px",
+          lineHeight: 1.75,
           color: "var(--text-1)",
           resize: "none",
           outline: "none",
           fontFamily: "inherit",
           overflowY: "hidden",
           boxSizing: "border-box",
-          minHeight: "120px",
+          minHeight: "140px",
         }}
       />
 
@@ -300,18 +303,17 @@ export default function NoteComposer({
       <div
         style={{
           borderTop: "1px solid var(--border-subtle)",
-          paddingTop: "12px",
+          paddingTop: "16px",
           display: "flex",
           flexDirection: "column",
-          gap: "8px",
+          gap: "10px",
         }}
       >
         <span
           style={{
-            fontSize: "11px",
-            fontWeight: 500,
+            fontSize: "13px",
+            fontWeight: 400,
             color: "var(--text-3)",
-            letterSpacing: "0.02em",
           }}
         >
           Spaces
@@ -467,7 +469,7 @@ export default function NoteComposer({
       <div
         style={{
           borderTop: "1px solid var(--border-subtle)",
-          paddingTop: "12px",
+          paddingTop: "16px",
           display: "flex",
           alignItems: "center",
           justifyContent: "space-between",

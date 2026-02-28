@@ -61,8 +61,8 @@ function LoginForm() {
         {/* Logo */}
         <div style={{ textAlign: "center", marginBottom: "8px" }}>
           <svg width="28" height="28" viewBox="0 0 24 24" fill="none" style={{ margin: "0 auto 12px" }}>
-            <path d="M12 2L20.66 7V17L12 22L3.34 17V7L12 2Z" stroke="#6366f1" strokeWidth="1.5" strokeLinejoin="round" />
-            <circle cx="12" cy="12" r="2.5" fill="#6366f1" />
+            <path d="M12 2L20.66 7V17L12 22L3.34 17V7L12 2Z" stroke="var(--accent)" strokeWidth="1.5" strokeLinejoin="round" />
+            <circle cx="12" cy="12" r="2.5" fill="var(--accent)" />
           </svg>
           <h1 style={{ fontSize: "20px", fontWeight: 600, color: "var(--text-1)", margin: 0 }}>
             Sign in to Brain
@@ -103,7 +103,7 @@ function LoginForm() {
             }}
             onMouseEnter={(e) => {
               e.currentTarget.style.background = "var(--bg-card-hover)"
-              e.currentTarget.style.borderColor = "rgba(255,255,255,0.12)"
+              e.currentTarget.style.borderColor = "var(--border-hover)"
             }}
             onMouseLeave={(e) => {
               e.currentTarget.style.background = "var(--bg-card)"
@@ -146,7 +146,7 @@ function LoginForm() {
                   outline: "none",
                   transition: "border-color 0.15s",
                 }}
-                onFocus={(e) => { e.currentTarget.style.borderColor = "rgba(99,102,241,0.5)" }}
+                onFocus={(e) => { e.currentTarget.style.borderColor = "var(--border-accent)" }}
                 onBlur={(e) => { e.currentTarget.style.borderColor = "var(--border)" }}
               />
             </div>
@@ -169,7 +169,7 @@ function LoginForm() {
                   outline: "none",
                   transition: "border-color 0.15s",
                 }}
-                onFocus={(e) => { e.currentTarget.style.borderColor = "rgba(99,102,241,0.5)" }}
+                onFocus={(e) => { e.currentTarget.style.borderColor = "var(--border-accent)" }}
                 onBlur={(e) => { e.currentTarget.style.borderColor = "var(--border)" }}
               />
             </div>
@@ -194,18 +194,19 @@ function LoginForm() {
               style={{
                 width: "100%",
                 padding: "10px 16px",
-                background: loading ? "rgba(99,102,241,0.5)" : "#6366f1",
+                background: "var(--accent)",
                 border: "none",
                 borderRadius: "8px",
                 color: "white",
                 fontSize: "13px",
-                fontWeight: 600,
+                fontWeight: 500,
                 cursor: loading ? "not-allowed" : "pointer",
-                transition: "background 0.15s",
+                transition: "opacity 0.16s",
                 marginTop: "4px",
+                opacity: loading ? 0.6 : 1,
               }}
-              onMouseEnter={(e) => { if (!loading) e.currentTarget.style.background = "#5254cc" }}
-              onMouseLeave={(e) => { if (!loading) e.currentTarget.style.background = "#6366f1" }}
+              onMouseEnter={(e) => { if (!loading) e.currentTarget.style.opacity = "0.85" }}
+              onMouseLeave={(e) => { if (!loading) e.currentTarget.style.opacity = "1" }}
             >
               {loading ? "Signing in…" : "Sign In"}
             </button>
@@ -214,7 +215,7 @@ function LoginForm() {
 
         <p style={{ textAlign: "center", fontSize: "13px", color: "var(--text-3)" }}>
           Don&apos;t have an account?{" "}
-          <Link href="/signup" style={{ color: "#818cf8", textDecoration: "none" }}>
+          <Link href="/signup" style={{ color: "var(--accent)", textDecoration: "none" }}>
             Sign up
           </Link>
         </p>
