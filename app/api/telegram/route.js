@@ -408,7 +408,7 @@ if (text === "/todo") {
       .from("tasks")
       .select("title, status, due_date, priority")
       .eq("user_id", userUuid)
-      .in("status", ["doing", "waiting", "inbox"])
+      .in("status", ["doing", "next", "waiting", "inbox"])
       .order("created_at", { ascending: false })
       .limit(10)
 
@@ -422,6 +422,7 @@ if (text === "/todo") {
 
     const sections = [
       { status: "doing", label: "🔵 Doing" },
+      { status: "next", label: "⏭ Next" },
       { status: "waiting", label: "⏳ Waiting" },
       { status: "inbox", label: "📥 Inbox" },
     ]
