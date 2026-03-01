@@ -180,19 +180,23 @@ function NotesPageInner() {
   const [panelText, setPanelText] = useState("")
   const [panelSaving, setPanelSaving] = useState(false)
   const [panelSaved, setPanelSaved] = useState(false)
+  const [panelDirty, setPanelDirty] = useState(false)
   const [panelCreating, setPanelCreating] = useState(false)
 
   // ── Panel spaces
   const [panelSpaces, setPanelSpaces] = useState<Space[]>([])
   const [allSpaces, setAllSpaces] = useState<Space[]>([])
-  const [showSpaceDropdown, setShowSpaceDropdown] = useState(false)
-  const [spaceSearch, setSpaceSearch] = useState("")
+  const [showSpaceInput, setShowSpaceInput] = useState(false)
+  const [spaceInput, setSpaceInput] = useState("")
+  const [creatingSpace, setCreatingSpace] = useState(false)
 
   // ── Panel tasks
   const [noteTasks, setNoteTasks] = useState<TaskWithEntities[]>([])
   const [taskTitle, setTaskTitle] = useState("")
   const [taskDue, setTaskDue] = useState("")
   const [addingTask, setAddingTask] = useState(false)
+  const [editingTaskId, setEditingTaskId] = useState<string | null>(null)
+  const [editingTaskTitle, setEditingTaskTitle] = useState("")
 
   // ── Panel delete
   const [confirmDelete, setConfirmDelete] = useState(false)
@@ -263,8 +267,8 @@ function NotesPageInner() {
       detailRef.current.classList.add("panel-slide-in")
     }
     if (panelMode === null) {
-      setShowSpaceDropdown(false)
-      setSpaceSearch("")
+      setShowSpaceInput(false)
+      setSpaceInput("")
     }
     setConfirmDelete(false)
     setDeleting(false)
@@ -276,11 +280,12 @@ function NotesPageInner() {
     setPanelText(selectedNote.content)
     setPanelSpaces(selectedNote.spaces ?? [])
     setPanelSaved(false)
+    setPanelDirty(false)
     setTaskTitle("")
     setTaskDue("")
     setNoteTasks([])
-    setShowSpaceDropdown(false)
-    setSpaceSearch("")
+    setShowSpaceInput(false)
+    setSpaceInput("")
     fetch(`/api/tasks?note_id=${selectedNote.id}`)
       .then((r) => (r.ok ? r.json() : []))
       .then(setNoteTasks)
@@ -300,13 +305,6 @@ function NotesPageInner() {
   useEffect(() => {
     return () => { if (saveTimerRef.current) clearTimeout(saveTimerRef.current) }
   }, [])
-
-  // ── Auto-save (edit mode)
-  function scheduleSave(text: string) {
-    if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
-    setPanelSaved(false)
-    saveTimerRef.current = setTimeout(() => doSave(text, panelSpacesRef.current), 1500)
-  }
 
   async function doSave(text: string, spaces: Space[]) {
     if (!selectedNote) return
@@ -393,6 +391,20 @@ function NotesPageInner() {
     }
   }
 
+  async function handleSaveTaskTitle(taskId: string) {
+    const title = editingTaskTitle.trim()
+    setEditingTaskId(null)
+    if (!title) return
+    const res = await fetch(`/api/tasks/${taskId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ title }),
+    })
+    if (res.ok) {
+      setNoteTasks((prev) => prev.map((t) => t.id === taskId ? { ...t, title } : t))
+    }
+  }
+
   async function handleToggleTask(taskId: string, currentStatus: string) {
     const newStatus = currentStatus === "done" ? "inbox" : "done"
     const res = await fetch(`/api/tasks/${taskId}`, {
@@ -410,8 +422,8 @@ function NotesPageInner() {
     if (panelSpaces.some((s) => s.id === space.id)) return
     const newSpaces = [...panelSpaces, space]
     setPanelSpaces(newSpaces)
-    setShowSpaceDropdown(false)
-    setSpaceSearch("")
+    setShowSpaceInput(false)
+    setSpaceInput("")
     if (panelMode === "edit" && selectedNote) {
       doSave(panelText, newSpaces)
     }
@@ -422,6 +434,25 @@ function NotesPageInner() {
     setPanelSpaces(newSpaces)
     if (panelMode === "edit" && selectedNote) {
       doSave(panelText, newSpaces)
+    }
+  }
+
+  async function handleCreateSpace(name: string) {
+    if (!name.trim() || creatingSpace) return
+    setCreatingSpace(true)
+    try {
+      const res = await fetch("/api/spaces", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: name.trim() }),
+      })
+      if (res.ok) {
+        const space: Space = await res.json()
+        setAllSpaces((prev) => [...prev, space])
+        handleAddSpace(space)
+      }
+    } finally {
+      setCreatingSpace(false)
     }
   }
 
@@ -488,13 +519,18 @@ function NotesPageInner() {
     return result
   }, [notes, searchQuery, activeEntityId])
 
+  const spaceQuery = spaceInput.replace(/^@/, "").trim()
+
   const filteredSpaceDropdown = useMemo(() =>
     allSpaces.filter((s) =>
       !panelSpaces.some((ps) => ps.id === s.id) &&
-      s.name.toLowerCase().includes(spaceSearch.toLowerCase())
+      s.name.toLowerCase().includes(spaceQuery.toLowerCase())
     ),
-    [allSpaces, panelSpaces, spaceSearch]
+    [allSpaces, panelSpaces, spaceQuery]
   )
+
+  const canCreateSpace = spaceQuery.length > 0 &&
+    !allSpaces.some((s) => s.name.toLowerCase() === spaceQuery.toLowerCase())
 
   // ── Render helpers
   function renderCards(items: NoteWithEntities[]) {
@@ -677,7 +713,7 @@ function NotesPageInner() {
       {panelOpen && (
         <div ref={detailRef} className="panel-slide-in" style={{
           position: "fixed", top: 0, right: 0, bottom: 0, width: DETAIL_W,
-          background: "var(--bg-elevated)", borderLeft: "1px solid var(--border)",
+          background: "var(--bg-surface)", borderLeft: "1px solid var(--border)",
           display: "flex", flexDirection: "column", zIndex: 40,
         }}>
 
@@ -747,7 +783,7 @@ function NotesPageInner() {
                   setPanelText(e.target.value)
                   e.target.style.height = "auto"
                   e.target.style.height = e.target.scrollHeight + "px"
-                  if (panelMode === "edit") scheduleSave(e.target.value)
+                  if (panelMode === "edit") { setPanelDirty(true); setPanelSaved(false) }
                 }}
                 style={{
                   width: "100%", resize: "none", border: "none", outline: "none",
@@ -757,12 +793,6 @@ function NotesPageInner() {
                   fontFamily: "Georgia, Merriweather, serif",
                 }}
               />
-              {/* Save indicator (edit mode only) */}
-              {panelMode === "edit" && (
-                <div style={{ fontSize: "11px", color: "var(--text-3)", marginTop: "8px", height: "14px", fontFamily: "var(--font-geist-mono, monospace)" }}>
-                  {panelSaving ? "Saving…" : panelSaved ? "Saved" : ""}
-                </div>
-              )}
             </div>
 
             {/* ── C. Tasks section (edit mode only) ── */}
@@ -804,9 +834,26 @@ function NotesPageInner() {
                                 </svg>
                               )}
                             </button>
-                            <span style={{ fontSize: "13px", color: done ? "var(--text-3)" : "var(--text-1)", textDecoration: done ? "line-through" : "none", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", transition: "color 0.15s" }}>
-                              {task.title}
-                            </span>
+                            {editingTaskId === task.id ? (
+                              <input
+                                autoFocus
+                                value={editingTaskTitle}
+                                onChange={(e) => setEditingTaskTitle(e.target.value)}
+                                onBlur={() => handleSaveTaskTitle(task.id)}
+                                onKeyDown={(e) => {
+                                  if (e.key === "Enter") handleSaveTaskTitle(task.id)
+                                  if (e.key === "Escape") setEditingTaskId(null)
+                                }}
+                                style={{ fontSize: "13px", color: "var(--text-1)", background: "transparent", border: "none", outline: "none", padding: 0, width: "100%", fontFamily: "inherit" }}
+                              />
+                            ) : (
+                              <span
+                                onClick={() => { setEditingTaskId(task.id); setEditingTaskTitle(task.title) }}
+                                title="Click to edit"
+                                style={{ fontSize: "13px", color: done ? "var(--text-3)" : "var(--text-1)", textDecoration: done ? "line-through" : "none", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", transition: "color 0.15s", cursor: "text" }}>
+                                {task.title}
+                              </span>
+                            )}
                           </div>
                           {task.due_date && (
                             <span style={{ fontSize: "11px", color: "var(--text-3)", flexShrink: 0, fontFamily: "var(--font-geist-mono, monospace)" }}>
@@ -867,28 +914,29 @@ function NotesPageInner() {
               </div>
 
               {/* Add space button */}
-              <button onClick={() => { setShowSpaceDropdown((v) => !v); setSpaceSearch("") }}
-                style={{ display: "inline-flex", alignItems: "center", gap: "4px", padding: "4px 10px", borderRadius: "20px", fontSize: "12px", color: showSpaceDropdown ? "var(--accent)" : "var(--text-3)", background: "transparent", border: `1px dashed ${showSpaceDropdown ? "var(--border-accent)" : "var(--border)"}`, cursor: "pointer", transition: "color 0.15s, border-color 0.15s" }}
+              <button onClick={() => { setShowSpaceInput((v) => !v); setSpaceInput("") }}
+                style={{ display: "inline-flex", alignItems: "center", gap: "4px", padding: "4px 10px", borderRadius: "20px", fontSize: "12px", color: showSpaceInput ? "var(--accent)" : "var(--text-3)", background: "transparent", border: `1px dashed ${showSpaceInput ? "var(--border-accent)" : "var(--border)"}`, cursor: "pointer", transition: "color 0.15s, border-color 0.15s" }}
                 onMouseEnter={(e) => { e.currentTarget.style.color = "var(--accent)"; e.currentTarget.style.borderColor = "var(--border-accent)" }}
-                onMouseLeave={(e) => { if (!showSpaceDropdown) { e.currentTarget.style.color = "var(--text-3)"; e.currentTarget.style.borderColor = "var(--border)" } }}>
+                onMouseLeave={(e) => { if (!showSpaceInput) { e.currentTarget.style.color = "var(--text-3)"; e.currentTarget.style.borderColor = "var(--border)" } }}>
                 <span style={{ color: "var(--accent)", fontWeight: 600 }}>@</span>
                 Add space
               </button>
 
               {/* Dropdown */}
-              {showSpaceDropdown && (
-                <div style={{ position: "absolute", left: "24px", right: "24px", top: "100%", marginTop: "-4px", background: "var(--bg-surface)", border: "1px solid var(--border)", borderRadius: "10px", boxShadow: "var(--shadow-lg)", zIndex: 50, overflow: "hidden" }}>
-                  <div style={{ padding: "10px 10px 8px" }}>
-                    <input type="text" placeholder="Search spaces…" value={spaceSearch} onChange={(e) => setSpaceSearch(e.target.value)}
+              {showSpaceInput && (
+                <div style={{ position: "absolute", left: "24px", right: "24px", top: "100%", marginTop: "4px", background: "var(--bg-surface)", border: "1px solid var(--border)", borderRadius: "10px", boxShadow: "var(--shadow-lg)", zIndex: 50, overflow: "hidden" }}>
+                  <div style={{ padding: "10px 10px 8px", display: "flex", alignItems: "center", gap: "6px" }}>
+                    <span style={{ color: "var(--accent)", fontWeight: 600, fontSize: "14px", flexShrink: 0 }}>@</span>
+                    <input type="text" placeholder="space name…" value={spaceInput.replace(/^@/, "")} onChange={(e) => setSpaceInput(e.target.value)}
                       autoFocus
-                      style={{ width: "100%", background: "var(--bg-elevated)", border: "1px solid var(--border)", borderRadius: "7px", padding: "6px 10px", fontSize: "13px", color: "var(--text-1)", outline: "none", boxSizing: "border-box" }} />
+                      onKeyDown={(e) => {
+                        if (e.key === "Escape") { setShowSpaceInput(false); setSpaceInput("") }
+                        if (e.key === "Enter" && canCreateSpace) handleCreateSpace(spaceQuery)
+                      }}
+                      style={{ flex: 1, background: "transparent", border: "none", padding: "4px 0", fontSize: "13px", color: "var(--text-1)", outline: "none" }} />
                   </div>
-                  <div style={{ maxHeight: "180px", overflowY: "auto" }}>
-                    {filteredSpaceDropdown.length === 0 ? (
-                      <div style={{ padding: "10px 14px 12px", fontSize: "13px", color: "var(--text-3)" }}>
-                        {spaceSearch ? "No spaces match" : "No spaces available"}
-                      </div>
-                    ) : filteredSpaceDropdown.map((space) => (
+                  <div style={{ maxHeight: "180px", overflowY: "auto", borderTop: "1px solid var(--border-subtle)" }}>
+                    {filteredSpaceDropdown.map((space) => (
                       <button key={space.id} onClick={() => handleAddSpace(space)}
                         style={{ width: "100%", textAlign: "left", display: "flex", alignItems: "center", gap: "6px", padding: "9px 14px", background: "transparent", border: "none", cursor: "pointer", fontSize: "14px", color: "var(--text-1)", transition: "background 0.12s" }}
                         onMouseEnter={(e) => { e.currentTarget.style.background = "var(--bg-hover)" }}
@@ -897,6 +945,20 @@ function NotesPageInner() {
                         {space.name}
                       </button>
                     ))}
+                    {canCreateSpace && (
+                      <button onClick={() => handleCreateSpace(spaceQuery)} disabled={creatingSpace}
+                        style={{ width: "100%", textAlign: "left", display: "flex", alignItems: "center", gap: "6px", padding: "9px 14px", background: "transparent", border: "none", cursor: "pointer", fontSize: "14px", color: "var(--text-2)", transition: "background 0.12s", borderTop: filteredSpaceDropdown.length > 0 ? "1px solid var(--border-subtle)" : "none" }}
+                        onMouseEnter={(e) => { e.currentTarget.style.background = "var(--bg-hover)" }}
+                        onMouseLeave={(e) => { e.currentTarget.style.background = "transparent" }}>
+                        <span style={{ color: "var(--accent)", fontWeight: 600, fontSize: "13px" }}>+</span>
+                        {creatingSpace ? "Creating…" : `Create @${spaceQuery}`}
+                      </button>
+                    )}
+                    {!canCreateSpace && filteredSpaceDropdown.length === 0 && (
+                      <div style={{ padding: "10px 14px 12px", fontSize: "13px", color: "var(--text-3)" }}>
+                        No spaces yet — type a name to create one
+                      </div>
+                    )}
                   </div>
                 </div>
               )}
@@ -940,7 +1002,7 @@ function NotesPageInner() {
           </div>
 
           {/* ── F. Sticky save / status bar ── */}
-          <div style={{ padding: "14px 20px", borderTop: "1px solid var(--border)", flexShrink: 0, background: "var(--bg-elevated)" }}>
+          <div style={{ padding: "14px 20px", borderTop: "1px solid var(--border)", flexShrink: 0, background: "var(--bg-surface)" }}>
             {panelMode === "create" ? (
               <button onClick={handleCreateNote} disabled={!panelText.trim() || panelCreating}
                 style={{
@@ -956,12 +1018,22 @@ function NotesPageInner() {
                 {panelCreating ? "Creating…" : "Create Note"}
               </button>
             ) : (
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                <span style={{ fontSize: "12px", color: "var(--text-3)", fontFamily: "var(--font-geist-mono, monospace)" }}>
-                  {panelSaving ? "Saving…" : panelSaved ? "Saved" : "Auto-save on"}
-                </span>
-                <div style={{ width: "6px", height: "6px", borderRadius: "50%", background: panelSaving ? "#FFD60A" : panelSaved ? "#34C759" : "var(--text-3)", transition: "background 0.3s ease" }} />
-              </div>
+              <button
+                onClick={() => { doSave(panelText, panelSpacesRef.current); setPanelDirty(false) }}
+                disabled={!panelDirty || panelSaving}
+                style={{
+                  width: "100%", padding: "11px", borderRadius: "10px", fontSize: "14px", fontWeight: 600,
+                  background: panelDirty ? "var(--accent)" : "var(--bg-hover)",
+                  color: panelDirty ? "#FFFFFF" : "var(--text-3)",
+                  border: "none", cursor: panelDirty ? "pointer" : "default",
+                  boxShadow: panelDirty ? "0 0 20px rgba(212, 119, 92, 0.25)" : "none",
+                  transition: "all 0.2s ease",
+                }}
+                onMouseEnter={(e) => { if (panelDirty) e.currentTarget.style.background = "var(--accent-hover)" }}
+                onMouseLeave={(e) => { if (panelDirty) e.currentTarget.style.background = "var(--accent)" }}
+              >
+                {panelSaving ? "Saving…" : panelDirty ? "Save Changes" : "Saved"}
+              </button>
             )}
           </div>
         </div>

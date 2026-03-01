@@ -119,6 +119,9 @@ export default function NoteDetailPage() {
   const [error, setError] = useState<string | null>(null)
   const [relatedTasks, setRelatedTasks] = useState<TaskWithEntities[]>([])
   const [showTaskModal, setShowTaskModal] = useState(false)
+  const [isEditing, setIsEditing] = useState(false)
+  const [editContent, setEditContent] = useState("")
+  const [editSaving, setEditSaving] = useState(false)
 
   useEffect(() => {
     if (!id) return
@@ -140,6 +143,24 @@ export default function NoteDetailPage() {
       .then(setRelatedTasks)
       .catch(() => {})
   }, [note])
+
+  async function handleSaveEdit() {
+    if (!note || editSaving) return
+    setEditSaving(true)
+    try {
+      const res = await fetch(`/api/notes/${note.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ content: editContent }),
+      })
+      if (res.ok) {
+        setNote({ ...note, content: editContent })
+        setIsEditing(false)
+      }
+    } finally {
+      setEditSaving(false)
+    }
+  }
 
   return (
     <div
@@ -206,22 +227,70 @@ export default function NoteDetailPage() {
 
             {/* Main content — no card wrapper, feels like paper */}
             <div>
-              <p style={{
-                fontSize: "13px",
-                color: "var(--text-3)",
-                margin: "0 0 24px",
-              }}>
-                {formatDate(note.created_at)}
-              </p>
-              <p style={{
-                fontSize: "17px",
-                lineHeight: 1.8,
-                color: "var(--text-1)",
-                whiteSpace: "pre-wrap",
-                margin: 0,
-              }}>
-                {note.content}
-              </p>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "24px" }}>
+                <p style={{ fontSize: "13px", color: "var(--text-3)", margin: 0 }}>
+                  {formatDate(note.created_at)}
+                </p>
+                {!isEditing && (
+                  <button
+                    onClick={() => { setIsEditing(true); setEditContent(note.content) }}
+                    title="Edit note"
+                    style={{ display: "flex", alignItems: "center", gap: "5px", fontSize: "13px", color: "var(--text-3)", background: "transparent", border: "none", cursor: "pointer", padding: "4px 8px", borderRadius: "6px", transition: "color 0.15s, background 0.15s" }}
+                    onMouseEnter={(e) => { e.currentTarget.style.color = "var(--text-1)"; e.currentTarget.style.background = "var(--bg-elevated)" }}
+                    onMouseLeave={(e) => { e.currentTarget.style.color = "var(--text-3)"; e.currentTarget.style.background = "transparent" }}
+                  >
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+                      <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+                    </svg>
+                    Edit
+                  </button>
+                )}
+              </div>
+
+              {isEditing ? (
+                <div>
+                  <textarea
+                    autoFocus
+                    value={editContent}
+                    onChange={(e) => {
+                      setEditContent(e.target.value)
+                      e.target.style.height = "auto"
+                      e.target.style.height = e.target.scrollHeight + "px"
+                    }}
+                    ref={(el) => {
+                      if (el) { el.style.height = "auto"; el.style.height = el.scrollHeight + "px" }
+                    }}
+                    style={{
+                      width: "100%", fontSize: "17px", lineHeight: 1.8, color: "var(--text-1)",
+                      background: "transparent", border: "none", outline: "none", resize: "none",
+                      padding: 0, boxSizing: "border-box", overflow: "hidden", minHeight: "120px",
+                      fontFamily: "inherit", whiteSpace: "pre-wrap",
+                    }}
+                  />
+                  <div style={{ display: "flex", gap: "10px", marginTop: "16px" }}>
+                    <button
+                      onClick={handleSaveEdit}
+                      disabled={editSaving}
+                      style={{ padding: "8px 20px", borderRadius: "8px", fontSize: "14px", fontWeight: 600, background: "var(--accent)", color: "#fff", border: "none", cursor: editSaving ? "default" : "pointer", opacity: editSaving ? 0.7 : 1, transition: "opacity 0.15s" }}
+                    >
+                      {editSaving ? "Saving…" : "Save"}
+                    </button>
+                    <button
+                      onClick={() => setIsEditing(false)}
+                      style={{ padding: "8px 16px", borderRadius: "8px", fontSize: "14px", color: "var(--text-2)", background: "transparent", border: "none", cursor: "pointer", transition: "color 0.15s" }}
+                      onMouseEnter={(e) => { e.currentTarget.style.color = "var(--text-1)" }}
+                      onMouseLeave={(e) => { e.currentTarget.style.color = "var(--text-2)" }}
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <p style={{ fontSize: "17px", lineHeight: 1.8, color: "var(--text-1)", whiteSpace: "pre-wrap", margin: 0 }}>
+                  {note.content}
+                </p>
+              )}
             </div>
 
             {/* Entities */}
