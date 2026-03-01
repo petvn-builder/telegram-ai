@@ -88,18 +88,6 @@ export default function NoteComposer({
       .catch(() => {})
   }, [])
 
-  // Auto-save for edit mode
-  useEffect(() => {
-    if (mode !== "edit") return
-    if (!value.trim()) return
-    setSaveStatus("idle")
-    if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current)
-    autoSaveTimerRef.current = setTimeout(() => { doSave(true) }, 1500)
-    return () => {
-      if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current)
-    }
-  }, [value, assignedSpaces, mode]) // eslint-disable-line react-hooks/exhaustive-deps
-
   // Reset dropdown index when input changes
   useEffect(() => {
     setSpaceDropdownIndex(0)
@@ -495,58 +483,43 @@ export default function NoteComposer({
         </button>
 
         <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-          {/* Status indicator (edit mode) or Save button (create mode) */}
-          {mode === "edit" ? (
-            <span
-              style={{
-                fontSize: "12px",
-                color: saveStatus === "saved" ? "var(--text-2)" : "var(--text-3)",
-                display: "flex",
-                alignItems: "center",
-                gap: "5px",
-                transition: "color 0.2s",
-              }}
-            >
-              {saveStatus === "saving" && <Spinner />}
-              {saveStatus === "saving" && "Saving…"}
-              {saveStatus === "saved" && "· Saved"}
-            </span>
-          ) : (
-            <button
-              onClick={() => {
-                if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current)
-                doSave(false)
-              }}
-              disabled={saving || isEmpty}
-              style={{
-                display: "inline-flex",
-                alignItems: "center",
-                gap: "6px",
-                padding: "6px 14px",
-                borderRadius: "7px",
-                fontSize: "13px",
-                fontWeight: 500,
-                background: "transparent",
-                color: saving || isEmpty ? "var(--text-3)" : "var(--text-2)",
-                border: `1px solid ${saving || isEmpty ? "var(--border)" : "var(--border-hover)"}`,
-                cursor: saving || isEmpty ? "not-allowed" : "pointer",
-                transition: "color 0.15s, border-color 0.15s",
-              }}
-              onMouseEnter={(e) => {
-                if (!saving && !isEmpty) {
-                  e.currentTarget.style.color = "var(--text-1)"
-                }
-              }}
-              onMouseLeave={(e) => {
-                if (!saving && !isEmpty) {
-                  e.currentTarget.style.color = "var(--text-2)"
-                }
-              }}
-            >
-              {saving && <Spinner />}
-              Save
-            </button>
+          {saveStatus === "saved" && (
+            <span style={{ fontSize: "12px", color: "var(--text-3)" }}>· Saved</span>
           )}
+          <button
+            onClick={() => {
+              if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current)
+              doSave(false)
+            }}
+            disabled={saving || isEmpty}
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: "6px",
+              padding: "6px 14px",
+              borderRadius: "7px",
+              fontSize: "13px",
+              fontWeight: 500,
+              background: "transparent",
+              color: saving || isEmpty ? "var(--text-3)" : "var(--text-2)",
+              border: `1px solid ${saving || isEmpty ? "var(--border)" : "var(--border-hover)"}`,
+              cursor: saving || isEmpty ? "not-allowed" : "pointer",
+              transition: "color 0.15s, border-color 0.15s",
+            }}
+            onMouseEnter={(e) => {
+              if (!saving && !isEmpty) {
+                e.currentTarget.style.color = "var(--text-1)"
+              }
+            }}
+            onMouseLeave={(e) => {
+              if (!saving && !isEmpty) {
+                e.currentTarget.style.color = "var(--text-2)"
+              }
+            }}
+          >
+            {saving && <Spinner />}
+            Save
+          </button>
         </div>
       </div>
     </div>
