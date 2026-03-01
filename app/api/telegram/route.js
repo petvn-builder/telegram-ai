@@ -338,6 +338,67 @@ if (knowledgeIds.length > 0) {
 }
 
   // =========================
+// TASK CREATION COMMAND
+// =========================
+
+if (text.startsWith("/task")) {
+  const content = text.slice(5).trim();
+
+  if (!content) {
+    await sendTelegram(
+      chatId,
+      "Usage: /task <title> [due date] [priority]\n\nExamples:\n/task Call Ricky tomorrow\n/task Review proposal next friday high\n/task Send invoice in 3 days"
+    );
+    return new Response("ok");
+  }
+
+  try {
+    const { parseTaskText, createTask } = await import("@/lib/tasks");
+    const { title, priority, due_date } = parseTaskText(content);
+
+    if (!title) {
+      await sendTelegram(chatId, "❌ Could not parse task title. Try: /task <title>");
+      return new Response("ok");
+    }
+
+    const task = await createTask(supabase, userUuid, {
+      title,
+      priority,
+      due_date,
+      created_from: "telegram",
+      telegram_message_id: String(message.message_id),
+    });
+
+    // Build confirmation message
+    let confirmMsg = `✅ Task: "${task.title}"`;
+    if (task.due_date) {
+      const d = new Date(task.due_date);
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const tomorrow = new Date(today);
+      tomorrow.setDate(today.getDate() + 1);
+      d.setHours(0, 0, 0, 0);
+      if (d.getTime() === today.getTime()) confirmMsg += "\n📅 Due: Today";
+      else if (d.getTime() === tomorrow.getTime()) confirmMsg += "\n📅 Due: Tomorrow";
+      else confirmMsg += `\n📅 Due: ${d.toLocaleDateString("en-US", { month: "short", day: "numeric" })}`;
+    }
+    if (task.priority !== "medium") {
+      confirmMsg += `\n⚡ Priority: ${task.priority.charAt(0).toUpperCase() + task.priority.slice(1)}`;
+    }
+    if (task.entities.length > 0) {
+      confirmMsg += `\n🏷️ Linked: ${task.entities.map((e) => e.name).join(", ")}`;
+    }
+
+    await sendTelegram(chatId, confirmMsg);
+  } catch (err) {
+    console.error("[Task Command] Error:", err);
+    await sendTelegram(chatId, "❌ Failed to create task. Please try again.");
+  }
+
+  return new Response("ok");
+}
+
+  // =========================
   // DAILY LIMIT CHECK
   // =========================
 

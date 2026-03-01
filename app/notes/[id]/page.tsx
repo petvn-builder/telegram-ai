@@ -3,7 +3,8 @@
 import { useEffect, useState } from "react"
 import { useParams } from "next/navigation"
 import Link from "next/link"
-import type { NoteDetail } from "../types"
+import type { NoteDetail, TaskWithEntities, TaskStatus } from "../types"
+import CreateTaskModal from "@/app/tasks/CreateTaskModal"
 
 function formatDate(iso: string): string {
   return new Date(iso).toLocaleDateString("en-US", {
@@ -42,11 +43,82 @@ function SkeletonLine({ width }: { width: string }) {
   )
 }
 
+const STATUS_DOT: Record<string, string> = {
+  inbox: "#9CA3AF",
+  next: "#3B82F6",
+  doing: "#F59E0B",
+  waiting: "#8B5CF6",
+  done: "#10B981",
+}
+
+function RelatedTaskRow({
+  task,
+  onStatusChange,
+}: {
+  task: TaskWithEntities
+  onStatusChange: (s: TaskStatus) => void
+}) {
+  const dueDate = task.due_date
+    ? new Date(task.due_date).toLocaleDateString("en-US", { month: "short", day: "numeric" })
+    : null
+
+  return (
+    <div style={{
+      display: "flex",
+      alignItems: "center",
+      gap: "10px",
+      padding: "8px 0",
+      borderBottom: "1px solid var(--border-subtle)",
+    }}>
+      <span
+        title={task.status}
+        style={{
+          width: "8px",
+          height: "8px",
+          borderRadius: "50%",
+          background: STATUS_DOT[task.status] ?? "#9CA3AF",
+          flexShrink: 0,
+        }}
+      />
+      <span style={{
+        flex: 1,
+        fontSize: "14px",
+        color: task.status === "done" ? "var(--text-3)" : "var(--text-1)",
+        textDecoration: task.status === "done" ? "line-through" : "none",
+      }}>
+        {task.title}
+      </span>
+      {dueDate && (
+        <span style={{ fontSize: "12px", color: "var(--text-3)" }}>{dueDate}</span>
+      )}
+      <select
+        value={task.status}
+        onChange={(e) => onStatusChange(e.target.value as TaskStatus)}
+        style={{
+          fontSize: "12px",
+          color: "var(--text-2)",
+          background: "transparent",
+          border: "1px solid var(--border)",
+          borderRadius: "6px",
+          padding: "2px 6px",
+          cursor: "pointer",
+        }}
+      >
+        {(["inbox", "next", "doing", "waiting", "done"] as TaskStatus[]).map((s) => (
+          <option key={s} value={s}>{s.charAt(0).toUpperCase() + s.slice(1)}</option>
+        ))}
+      </select>
+    </div>
+  )
+}
+
 export default function NoteDetailPage() {
   const { id } = useParams<{ id: string }>()
   const [note, setNote] = useState<NoteDetail | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [relatedTasks, setRelatedTasks] = useState<TaskWithEntities[]>([])
+  const [showTaskModal, setShowTaskModal] = useState(false)
 
   useEffect(() => {
     if (!id) return
@@ -60,6 +132,14 @@ export default function NoteDetailPage() {
       .catch((err: Error) => setError(err.message))
       .finally(() => setLoading(false))
   }, [id])
+
+  useEffect(() => {
+    if (!note) return
+    fetch(`/api/tasks?note_id=${note.id}`)
+      .then((r) => r.ok ? r.json() : [])
+      .then(setRelatedTasks)
+      .catch(() => {})
+  }, [note])
 
   return (
     <div
@@ -210,9 +290,88 @@ export default function NoteDetailPage() {
                 </Link>
               </div>
             )}
+
+            {/* Related Tasks */}
+            <div style={{
+              borderTop: "1px solid var(--border-subtle)",
+              paddingTop: "24px",
+            }}>
+              <div style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                marginBottom: "14px",
+              }}>
+                <p style={{
+                  fontSize: "12px",
+                  fontWeight: 500,
+                  color: "var(--text-3)",
+                  margin: 0,
+                  textTransform: "uppercase",
+                  letterSpacing: "0.05em",
+                }}>
+                  Tasks {relatedTasks.length > 0 && `· ${relatedTasks.length}`}
+                </p>
+                <button
+                  onClick={() => setShowTaskModal(true)}
+                  style={{
+                    fontSize: "12px",
+                    fontWeight: 500,
+                    color: "var(--accent)",
+                    background: "transparent",
+                    border: "none",
+                    cursor: "pointer",
+                    padding: "3px 8px",
+                    borderRadius: "6px",
+                    transition: "background 0.16s",
+                  }}
+                  onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = "var(--accent-dim)" }}
+                  onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = "transparent" }}
+                >
+                  + New Task
+                </button>
+              </div>
+
+              {relatedTasks.length === 0 ? (
+                <p style={{ margin: 0, fontSize: "13px", color: "var(--text-3)" }}>
+                  No tasks yet.
+                </p>
+              ) : (
+                <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+                  {relatedTasks.map((task) => (
+                    <RelatedTaskRow
+                      key={task.id}
+                      task={task}
+                      onStatusChange={(newStatus) => {
+                        setRelatedTasks((prev) =>
+                          prev.map((t) => t.id === task.id ? { ...t, status: newStatus } : t)
+                        )
+                        fetch(`/api/tasks/${task.id}`, {
+                          method: "PATCH",
+                          headers: { "Content-Type": "application/json" },
+                          body: JSON.stringify({ status: newStatus }),
+                        }).catch(() => {})
+                      }}
+                    />
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
         )}
       </div>
+
+      {showTaskModal && note && (
+        <CreateTaskModal
+          linkedNoteId={note.id}
+          initialTitle={note.content.split("\n")[0].slice(0, 80)}
+          onClose={() => setShowTaskModal(false)}
+          onCreated={(task) => {
+            setRelatedTasks((prev) => [task, ...prev])
+            setShowTaskModal(false)
+          }}
+        />
+      )}
     </div>
   )
 }

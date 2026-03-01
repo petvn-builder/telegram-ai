@@ -31,3 +31,31 @@ export interface NoteDetail {
   created_at: string
   relatedEntities: Entity[]
 }
+
+// ── Task types (shared across client components) ───────────────────────────────
+
+export type TaskStatus = "inbox" | "next" | "doing" | "waiting" | "done"
+export type TaskPriority = "low" | "medium" | "high"
+export type TaskCreatedFrom = "manual" | "note" | "telegram"
+
+export interface TaskEntity {
+  id: string
+  name: string
+  type: string
+}
+
+export interface TaskWithEntities {
+  id: string
+  user_id: string
+  title: string
+  description: string | null
+  status: TaskStatus
+  due_date: string | null
+  priority: TaskPriority
+  linked_note_id: string | null
+  created_from: TaskCreatedFrom
+  telegram_message_id: string | null
+  created_at: string
+  updated_at: string
+  entities: TaskEntity[]
+}
