@@ -4,7 +4,6 @@ import { Suspense, useEffect, useMemo, useRef, useState } from "react"
 import { useSearchParams, useRouter } from "next/navigation"
 import Link from "next/link"
 import type { Entity, Space, NoteWithEntities, TaskWithEntities } from "./types"
-import NoteComposer from "./NoteComposer"
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -23,6 +22,10 @@ function relativeTime(iso: string): string {
   return `${months}mo ago`
 }
 
+function shortDate(iso: string): string {
+  return new Date(iso).toLocaleDateString("en", { month: "short", day: "numeric" })
+}
+
 function titleAndBody(content: string): { title: string; body: string } {
   const trimmed = content.trim()
   const newlineIdx = trimmed.indexOf("\n")
@@ -34,25 +37,27 @@ function titleAndBody(content: string): { title: string; body: string } {
   return { title, body }
 }
 
-const SPACE_STYLE = {
-  bg: "var(--accent-dim)",
-  text: "var(--accent)",
-  border: "var(--border-accent)",
+// Entity badge colors (vibrant, dark-mode adapted)
+const ENTITY_COLORS: Record<string, { bg: string; text: string; border: string }> = {
+  person:   { bg: "rgba(167,139,250,0.15)", text: "#A78BFA", border: "rgba(167,139,250,0.3)" },
+  topic:    { bg: "rgba(96,165,250,0.15)",  text: "#60A5FA", border: "rgba(96,165,250,0.3)"  },
+  project:  { bg: "rgba(129,140,248,0.15)", text: "#818CF8", border: "rgba(129,140,248,0.3)" },
+  company:  { bg: "rgba(52,211,153,0.15)",  text: "#34D399", border: "rgba(52,211,153,0.3)"  },
+  tool:     { bg: "rgba(251,191,36,0.15)",  text: "#FBBF24", border: "rgba(251,191,36,0.3)"  },
+  goal:     { bg: "rgba(244,114,182,0.15)", text: "#F472B6", border: "rgba(244,114,182,0.3)" },
+  event:    { bg: "rgba(248,113,113,0.15)", text: "#F87171", border: "rgba(248,113,113,0.3)" },
+  resource: { bg: "rgba(45,212,191,0.15)",  text: "#2DD4BF", border: "rgba(45,212,191,0.3)"  },
+}
+
+function entityStyle(type: string) {
+  return ENTITY_COLORS[type] ?? { bg: "rgba(167,139,250,0.15)", text: "#A78BFA", border: "rgba(167,139,250,0.3)" }
 }
 
 // ── Sub-components ────────────────────────────────────────────────────────────
 
 function SkeletonCard() {
   return (
-    <div
-      style={{
-        padding: "20px 24px",
-        borderBottom: "1px solid var(--border-subtle)",
-        display: "flex",
-        flexDirection: "column",
-        gap: "10px",
-      }}
-    >
+    <div style={{ padding: "20px 24px", borderBottom: "1px solid var(--border-subtle)", display: "flex", flexDirection: "column", gap: "10px" }}>
       <div className="skeleton" style={{ height: "15px", borderRadius: "6px", width: "65%" }} />
       <div className="skeleton" style={{ height: "13px", borderRadius: "6px", width: "85%" }} />
       <div className="skeleton" style={{ height: "11px", borderRadius: "6px", width: "100px" }} />
@@ -84,67 +89,32 @@ function NoteCard({ note, selected, onClick, isLast }: NoteCardProps) {
         borderBottom: isLast ? "none" : "1px solid var(--border-subtle)",
         borderTop: "none",
         borderRight: "none",
-        borderLeft: selected ? "2px solid var(--accent)" : "2px solid transparent",
+        borderLeft: selected ? "3px solid var(--accent)" : "3px solid transparent",
         borderRadius: "0",
-        padding: "20px 24px",
+        padding: "18px 22px 18px 21px",
         cursor: "pointer",
-        transition: "background 0.16s ease-in-out, border-color 0.16s ease-in-out",
+        transition: "background 0.15s ease, border-color 0.15s ease",
         display: "flex",
         flexDirection: "column",
-        gap: "6px",
+        gap: "5px",
       }}
     >
-      {/* Title */}
-      <p
-        style={{
-          fontSize: "15px",
-          fontWeight: 500,
-          lineHeight: 1.4,
-          color: "var(--text-1)",
-          margin: 0,
-          overflow: "hidden",
-          textOverflow: "ellipsis",
-          whiteSpace: "nowrap",
-        }}
-      >
+      <p style={{ fontSize: "14px", fontWeight: 500, lineHeight: 1.4, color: "var(--text-1)", margin: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
         {title || "Untitled"}
       </p>
-
-      {/* Body preview */}
       {body && (
-        <p
-          style={{
-            fontSize: "14px",
-            lineHeight: 1.6,
-            color: "var(--text-2)",
-            margin: 0,
-            overflow: "hidden",
-            textOverflow: "ellipsis",
-            whiteSpace: "nowrap",
-          }}
-        >
+        <p style={{ fontSize: "13px", lineHeight: 1.5, color: "var(--text-2)", margin: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
           {body}
         </p>
       )}
-
-      {/* Metadata row */}
-      <div
-        style={{
-          display: "flex",
-          alignItems: "center",
-          gap: "6px",
-          marginTop: "2px",
-        }}
-      >
+      <div style={{ display: "flex", alignItems: "center", gap: "5px", marginTop: "2px" }}>
         {spaceName && (
           <>
-            <span style={{ fontSize: "11px", color: "var(--accent)", fontWeight: 500 }}>
-              @{spaceName}
-            </span>
+            <span style={{ fontSize: "11px", color: "var(--accent)", fontWeight: 500 }}>@{spaceName}</span>
             <span style={{ fontSize: "11px", color: "var(--text-3)" }}>·</span>
           </>
         )}
-        <span style={{ fontSize: "11px", color: "var(--text-3)" }}>
+        <span style={{ fontSize: "11px", color: "var(--text-3)", fontFamily: "var(--font-geist-mono, monospace)" }}>
           {relativeTime(note.created_at)}
         </span>
       </div>
@@ -152,14 +122,9 @@ function NoteCard({ note, selected, onClick, isLast }: NoteCardProps) {
   )
 }
 
-// ── EntityTag ─────────────────────────────────────────────────────────────────
+// ── EntityTag (filter row) ─────────────────────────────────────────────────────
 
-interface EntityTagProps {
-  label: string
-  count: number
-  active: boolean
-  onClick: () => void
-}
+interface EntityTagProps { label: string; count: number; active: boolean; onClick: () => void }
 
 function EntityTag({ label, count, active, onClick }: EntityTagProps) {
   const [hovered, setHovered] = useState(false)
@@ -169,45 +134,29 @@ function EntityTag({ label, count, active, onClick }: EntityTagProps) {
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
       style={{
-        display: "inline-flex",
-        alignItems: "center",
-        gap: "4px",
-        padding: "6px 12px",
-        borderRadius: "999px",
-        fontSize: "13px",
-        fontWeight: 500,
-        whiteSpace: "nowrap",
-        flexShrink: 0,
-        cursor: "pointer",
-        background: active
-          ? "var(--accent-dim)"
-          : hovered
-          ? "var(--bg-elevated)"
-          : "var(--bg-hover)",
-        borderTop: "1px solid transparent",
-        borderRight: "1px solid transparent",
-        borderBottom: "1px solid transparent",
-        borderLeft: active ? "2px solid var(--accent)" : "1px solid transparent",
-        color: active ? "var(--text-1)" : "var(--text-2)",
-        transition: "background 0.16s ease-in-out, color 0.16s ease-in-out",
+        display: "inline-flex", alignItems: "center", gap: "4px",
+        padding: "5px 11px", borderRadius: "999px", fontSize: "13px", fontWeight: 500,
+        whiteSpace: "nowrap", flexShrink: 0, cursor: "pointer",
+        background: active ? "var(--accent-dim)" : hovered ? "var(--bg-elevated)" : "var(--bg-hover)",
+        border: active ? "1px solid var(--border-accent)" : "1px solid transparent",
+        color: active ? "var(--accent)" : "var(--text-2)",
+        transition: "background 0.15s ease, color 0.15s ease",
       }}
     >
       {label}
-      <span style={{ fontSize: "12px", opacity: 0.65 }}>{count}</span>
+      <span style={{ fontSize: "11px", opacity: 0.6 }}>{count}</span>
     </button>
   )
 }
 
+// ── Constants ──────────────────────────────────────────────────────────────────
+
+const DETAIL_W = 440
+
 // ── Main page ─────────────────────────────────────────────────────────────────
 
-const DETAIL_W = 400
-
 export default function NotesPage() {
-  return (
-    <Suspense>
-      <NotesPageInner />
-    </Suspense>
-  )
+  return <Suspense><NotesPageInner /></Suspense>
 }
 
 function NotesPageInner() {
@@ -215,47 +164,62 @@ function NotesPageInner() {
   const router = useRouter()
   const activeSpaceId = searchParams.get("space")
 
+  // ── Core data
   const [notes, setNotes] = useState<NoteWithEntities[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [selectedNote, setSelectedNote] = useState<NoteWithEntities | null>(null)
   const [searchQuery, setSearchQuery] = useState("")
-  const [showComposer, setShowComposer] = useState(false)
-  const [confirmDelete, setConfirmDelete] = useState(false)
-  const [deleting, setDeleting] = useState(false)
-  // Panel auto-save
-  const [panelText, setPanelText] = useState("")
-  const [panelSaving, setPanelSaving] = useState(false)
-  const [panelSaved, setPanelSaved] = useState(false)
-  // Panel tasks
-  const [noteTasks, setNoteTasks] = useState<TaskWithEntities[]>([])
-  const [taskTitle, setTaskTitle] = useState("")
-  const [taskDue, setTaskDue] = useState("")
-  const [addingTask, setAddingTask] = useState(false)
-  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [activeSpaceName, setActiveSpaceName] = useState<string | null>(null)
   const [activeEntityId, setActiveEntityId] = useState<string | null>(searchParams.get("entity"))
   const [groupByEntity, setGroupByEntity] = useState(false)
   const [listFading, setListFading] = useState(false)
+
+  // ── Panel
+  const [panelMode, setPanelMode] = useState<"create" | "edit" | null>(null)
+  const [panelText, setPanelText] = useState("")
+  const [panelSaving, setPanelSaving] = useState(false)
+  const [panelSaved, setPanelSaved] = useState(false)
+  const [panelCreating, setPanelCreating] = useState(false)
+
+  // ── Panel spaces
+  const [panelSpaces, setPanelSpaces] = useState<Space[]>([])
+  const [allSpaces, setAllSpaces] = useState<Space[]>([])
+  const [showSpaceDropdown, setShowSpaceDropdown] = useState(false)
+  const [spaceSearch, setSpaceSearch] = useState("")
+
+  // ── Panel tasks
+  const [noteTasks, setNoteTasks] = useState<TaskWithEntities[]>([])
+  const [taskTitle, setTaskTitle] = useState("")
+  const [taskDue, setTaskDue] = useState("")
+  const [addingTask, setAddingTask] = useState(false)
+
+  // ── Panel delete
+  const [confirmDelete, setConfirmDelete] = useState(false)
+  const [deleting, setDeleting] = useState(false)
+
+  // ── Refs
   const detailRef = useRef<HTMLDivElement>(null)
-  const composerTopRef = useRef<HTMLDivElement>(null)
   const scrollContainerRef = useRef<HTMLDivElement>(null)
   const justAddedId = useRef<string | null>(null)
   const confirmDeleteTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const panelSpacesRef = useRef<Space[]>([])
+  const panelTextareaRef = useRef<HTMLTextAreaElement>(null)
 
+  // Keep ref in sync with state
+  useEffect(() => { panelSpacesRef.current = panelSpaces }, [panelSpaces])
+
+  // ── Fetch notes
   useEffect(() => {
     setLoading(true)
     setNotes([])
     setSelectedNote(null)
+    setPanelMode(null)
     setActiveSpaceName(null)
-
     const url = activeSpaceId ? `/api/notes?spaceId=${activeSpaceId}` : "/api/notes"
-
     fetch(url)
-      .then((r) => {
-        if (!r.ok) throw new Error("Failed to load notes")
-        return r.json()
-      })
+      .then((r) => { if (!r.ok) throw new Error("Failed to load notes"); return r.json() })
       .then((data: NoteWithEntities[]) => {
         setNotes(data)
         if (activeSpaceId && data.length > 0) {
@@ -267,6 +231,7 @@ function NotesPageInner() {
       .finally(() => setLoading(false))
   }, [activeSpaceId])
 
+  // Fetch activeSpaceName fallback
   useEffect(() => {
     if (!activeSpaceId || activeSpaceName) return
     fetch("/api/spaces")
@@ -278,61 +243,114 @@ function NotesPageInner() {
       .catch(() => {})
   }, [activeSpaceId, activeSpaceName])
 
+  // Fetch all spaces for the add-space dropdown
+  useEffect(() => {
+    fetch("/api/spaces")
+      .then((r) => r.ok ? r.json() : [])
+      .then(setAllSpaces)
+      .catch(() => {})
+  }, [])
+
   useEffect(() => {
     setActiveEntityId(searchParams.get("entity"))
   }, [searchParams])
 
-  // Aggregate entities across all notes, sorted by note count descending
-  const entityStats = useMemo(() => {
-    const map = new Map<string, { entity: Entity; count: number; notes: NoteWithEntities[] }>()
-    for (const note of notes) {
-      for (const entity of note.entities) {
-        const entry = map.get(entity.id)
-        if (entry) {
-          entry.count++
-          entry.notes.push(note)
-        } else {
-          map.set(entity.id, { entity, count: 1, notes: [note] })
-        }
+  // ── Panel open/close effects
+  useEffect(() => {
+    if (panelMode !== null && detailRef.current) {
+      detailRef.current.classList.remove("panel-slide-in")
+      void detailRef.current.offsetWidth
+      detailRef.current.classList.add("panel-slide-in")
+    }
+    if (panelMode === null) {
+      setShowSpaceDropdown(false)
+      setSpaceSearch("")
+    }
+    setConfirmDelete(false)
+    setDeleting(false)
+  }, [panelMode])
+
+  // When selected note changes (edit mode)
+  useEffect(() => {
+    if (!selectedNote) return
+    setPanelText(selectedNote.content)
+    setPanelSpaces(selectedNote.spaces ?? [])
+    setPanelSaved(false)
+    setTaskTitle("")
+    setTaskDue("")
+    setNoteTasks([])
+    setShowSpaceDropdown(false)
+    setSpaceSearch("")
+    fetch(`/api/tasks?note_id=${selectedNote.id}`)
+      .then((r) => (r.ok ? r.json() : []))
+      .then(setNoteTasks)
+      .catch(() => {})
+    // Auto-focus textarea after transition
+    setTimeout(() => panelTextareaRef.current?.focus(), 220)
+  }, [selectedNote?.id])
+
+  // Auto-focus when opening create mode
+  useEffect(() => {
+    if (panelMode === "create") {
+      setTimeout(() => panelTextareaRef.current?.focus(), 220)
+    }
+  }, [panelMode])
+
+  // Cleanup save timer
+  useEffect(() => {
+    return () => { if (saveTimerRef.current) clearTimeout(saveTimerRef.current) }
+  }, [])
+
+  // ── Auto-save (edit mode)
+  function scheduleSave(text: string) {
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
+    setPanelSaved(false)
+    saveTimerRef.current = setTimeout(() => doSave(text, panelSpacesRef.current), 1500)
+  }
+
+  async function doSave(text: string, spaces: Space[]) {
+    if (!selectedNote) return
+    setPanelSaving(true)
+    try {
+      const res = await fetch(`/api/notes/${selectedNote.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ content: text, spaces: spaces.map((s) => s.name) }),
+      })
+      if (res.ok) {
+        const updated: NoteWithEntities = await res.json()
+        setNotes((prev) => prev.map((n) => (n.id === updated.id ? updated : n)))
+        setSelectedNote(updated)
+        setPanelSaved(true)
       }
+    } finally {
+      setPanelSaving(false)
     }
-    return Array.from(map.values()).sort((a, b) => b.count - a.count)
-  }, [notes])
-
-  const filteredNotes = useMemo(() => {
-    let result = notes
-    if (searchQuery) {
-      result = result.filter((n) =>
-        n.content.toLowerCase().includes(searchQuery.toLowerCase())
-      )
-    }
-    if (activeEntityId) {
-      result = result.filter((n) => n.entities.some((e) => e.id === activeEntityId))
-    }
-    return result
-  }, [notes, searchQuery, activeEntityId])
-
-  function setEntityFilter(entityId: string | null) {
-    const params = new URLSearchParams(searchParams.toString())
-    if (entityId) params.set("entity", entityId)
-    else params.delete("entity")
-    router.push(`/notes?${params}`, { scroll: false })
-    setActiveEntityId(entityId)
-    scrollContainerRef.current?.scrollTo({ top: 0 })
   }
 
-  function toggleGroupMode() {
-    setListFading(true)
-    setTimeout(() => {
-      setGroupByEntity((prev) => !prev)
-      setListFading(false)
-    }, 120)
+  // ── Create note
+  async function handleCreateNote() {
+    if (!panelText.trim() || panelCreating) return
+    setPanelCreating(true)
+    try {
+      const res = await fetch("/api/notes", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ content: panelText, spaces: panelSpaces.map((s) => s.name) }),
+      })
+      if (res.ok) {
+        const note: NoteWithEntities = await res.json()
+        justAddedId.current = note.id
+        setNotes((prev) => [note, ...prev])
+        setSelectedNote(note)
+        setPanelMode("edit")
+      }
+    } finally {
+      setPanelCreating(false)
+    }
   }
 
-  function handleNoteClick(note: NoteWithEntities) {
-    setSelectedNote((prev) => (prev?.id === note.id ? null : note))
-  }
-
+  // ── Delete note
   async function handleDelete() {
     if (!selectedNote || deleting) return
     if (!confirmDelete) {
@@ -347,65 +365,14 @@ function NotesPageInner() {
       if (!res.ok) throw new Error()
       setNotes((prev) => prev.filter((n) => n.id !== selectedNote.id))
       setSelectedNote(null)
+      setPanelMode(null)
     } catch {
       setDeleting(false)
       setConfirmDelete(false)
     }
   }
 
-  useEffect(() => {
-    if (selectedNote && detailRef.current) {
-      detailRef.current.classList.remove("panel-slide-in")
-      void detailRef.current.offsetWidth
-      detailRef.current.classList.add("panel-slide-in")
-    }
-    setConfirmDelete(false)
-    setDeleting(false)
-    if (selectedNote) {
-      setPanelText(selectedNote.content)
-      setPanelSaved(false)
-      setTaskTitle("")
-      setTaskDue("")
-      setNoteTasks([])
-      fetch(`/api/tasks?note_id=${selectedNote.id}`)
-        .then((r) => (r.ok ? r.json() : []))
-        .then(setNoteTasks)
-        .catch(() => {})
-    }
-  }, [selectedNote?.id])
-
-  useEffect(() => {
-    return () => {
-      if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
-    }
-  }, [])
-
-  function scheduleSave(text: string) {
-    if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
-    setPanelSaved(false)
-    saveTimerRef.current = setTimeout(() => doSave(text), 1500)
-  }
-
-  async function doSave(text: string) {
-    if (!selectedNote) return
-    setPanelSaving(true)
-    try {
-      const res = await fetch(`/api/notes/${selectedNote.id}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ content: text, spaces: [] }),
-      })
-      if (res.ok) {
-        const updated: NoteWithEntities = await res.json()
-        setNotes((prev) => prev.map((n) => (n.id === updated.id ? updated : n)))
-        setSelectedNote(updated)
-        setPanelSaved(true)
-      }
-    } finally {
-      setPanelSaving(false)
-    }
-  }
-
+  // ── Tasks
   async function handleAddTask() {
     if (!taskTitle.trim() || !selectedNote || addingTask) return
     setAddingTask(true)
@@ -413,12 +380,7 @@ function NotesPageInner() {
       const res = await fetch("/api/tasks", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          title: taskTitle.trim(),
-          due_date: taskDue || null,
-          linked_note_id: selectedNote.id,
-          status: "inbox",
-        }),
+        body: JSON.stringify({ title: taskTitle.trim(), due_date: taskDue || null, linked_note_id: selectedNote.id, status: "inbox" }),
       })
       if (res.ok) {
         const task: TaskWithEntities = await res.json()
@@ -431,23 +393,118 @@ function NotesPageInner() {
     }
   }
 
-  // ── Render helpers ────────────────────────────────────────────────────────
+  async function handleToggleTask(taskId: string, currentStatus: string) {
+    const newStatus = currentStatus === "done" ? "inbox" : "done"
+    const res = await fetch(`/api/tasks/${taskId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ status: newStatus }),
+    })
+    if (res.ok) {
+      setNoteTasks((prev) => prev.map((t) => t.id === taskId ? { ...t, status: newStatus as TaskWithEntities["status"] } : t))
+    }
+  }
 
+  // ── Spaces management
+  function handleAddSpace(space: Space) {
+    if (panelSpaces.some((s) => s.id === space.id)) return
+    const newSpaces = [...panelSpaces, space]
+    setPanelSpaces(newSpaces)
+    setShowSpaceDropdown(false)
+    setSpaceSearch("")
+    if (panelMode === "edit" && selectedNote) {
+      doSave(panelText, newSpaces)
+    }
+  }
+
+  function handleRemoveSpace(spaceId: string) {
+    const newSpaces = panelSpaces.filter((s) => s.id !== spaceId)
+    setPanelSpaces(newSpaces)
+    if (panelMode === "edit" && selectedNote) {
+      doSave(panelText, newSpaces)
+    }
+  }
+
+  // ── Note list interactions
+  function handleNoteClick(note: NoteWithEntities) {
+    if (selectedNote?.id === note.id && panelMode === "edit") {
+      setSelectedNote(null)
+      setPanelMode(null)
+      return
+    }
+    setSelectedNote(note)
+    setPanelMode("edit")
+  }
+
+  function openCreatePanel() {
+    setSelectedNote(null)
+    setPanelText("")
+    setPanelSpaces([])
+    setPanelSaved(false)
+    setPanelMode("create")
+  }
+
+  function closePanel() {
+    if (saveTimerRef.current) {
+      clearTimeout(saveTimerRef.current)
+      saveTimerRef.current = null
+    }
+    setSelectedNote(null)
+    setPanelMode(null)
+  }
+
+  // ── Filter/group helpers
+  function setEntityFilter(entityId: string | null) {
+    const params = new URLSearchParams(searchParams.toString())
+    if (entityId) params.set("entity", entityId)
+    else params.delete("entity")
+    router.push(`/notes?${params}`, { scroll: false })
+    setActiveEntityId(entityId)
+    scrollContainerRef.current?.scrollTo({ top: 0 })
+  }
+
+  function toggleGroupMode() {
+    setListFading(true)
+    setTimeout(() => { setGroupByEntity((prev) => !prev); setListFading(false) }, 120)
+  }
+
+  // ── Memos
+  const entityStats = useMemo(() => {
+    const map = new Map<string, { entity: Entity; count: number; notes: NoteWithEntities[] }>()
+    for (const note of notes) {
+      for (const entity of note.entities) {
+        const entry = map.get(entity.id)
+        if (entry) { entry.count++; entry.notes.push(note) }
+        else map.set(entity.id, { entity, count: 1, notes: [note] })
+      }
+    }
+    return Array.from(map.values()).sort((a, b) => b.count - a.count)
+  }, [notes])
+
+  const filteredNotes = useMemo(() => {
+    let result = notes
+    if (searchQuery) result = result.filter((n) => n.content.toLowerCase().includes(searchQuery.toLowerCase()))
+    if (activeEntityId) result = result.filter((n) => n.entities.some((e) => e.id === activeEntityId))
+    return result
+  }, [notes, searchQuery, activeEntityId])
+
+  const filteredSpaceDropdown = useMemo(() =>
+    allSpaces.filter((s) =>
+      !panelSpaces.some((ps) => ps.id === s.id) &&
+      s.name.toLowerCase().includes(spaceSearch.toLowerCase())
+    ),
+    [allSpaces, panelSpaces, spaceSearch]
+  )
+
+  // ── Render helpers
   function renderCards(items: NoteWithEntities[]) {
     return items.map((note, idx) => {
       const isNew = note.id === justAddedId.current
       return (
-        <div
-          key={note.id}
-          style={isNew ? { animation: "fadeInUp 180ms ease-in-out both" } : undefined}
-          onAnimationEnd={() => { if (isNew) justAddedId.current = null }}
-        >
-          <NoteCard
-            note={note}
-            selected={selectedNote?.id === note.id}
-            onClick={() => handleNoteClick(note)}
-            isLast={idx === items.length - 1}
-          />
+        <div key={note.id} style={isNew ? { animation: "fadeInUp 180ms ease-in-out both" } : undefined}
+          onAnimationEnd={() => { if (isNew) justAddedId.current = null }}>
+          <NoteCard note={note} selected={selectedNote?.id === note.id && panelMode === "edit"}
+            onClick={() => handleNoteClick(note)} isLast={idx === items.length - 1} />
         </div>
       )
     })
@@ -455,33 +512,13 @@ function NotesPageInner() {
 
   function renderGrouped() {
     return entityStats.map(({ entity, notes: entityNotes }) => {
-      // When an entity filter is active, skip all other entity sections
       if (activeEntityId && activeEntityId !== entity.id) return null
-      // Apply search filter within this group
-      const items = searchQuery
-        ? entityNotes.filter((n) =>
-            n.content.toLowerCase().includes(searchQuery.toLowerCase())
-          )
-        : entityNotes
+      const items = searchQuery ? entityNotes.filter((n) => n.content.toLowerCase().includes(searchQuery.toLowerCase())) : entityNotes
       if (items.length === 0) return null
       return (
         <div key={entity.id}>
-          <div
-            style={{
-              position: "sticky",
-              top: 0,
-              background: "var(--bg-base)",
-              zIndex: 2,
-              padding: "12px 24px 8px",
-              borderBottom: "1px solid var(--border-subtle)",
-              display: "flex",
-              alignItems: "baseline",
-              gap: "6px",
-            }}
-          >
-            <span style={{ fontSize: "14px", fontWeight: 600, color: "var(--text-1)" }}>
-              {entity.name}
-            </span>
+          <div style={{ position: "sticky", top: 0, background: "var(--bg-base)", zIndex: 2, padding: "12px 24px 8px", borderBottom: "1px solid var(--border-subtle)", display: "flex", alignItems: "baseline", gap: "6px" }}>
+            <span style={{ fontSize: "14px", fontWeight: 600, color: "var(--text-1)" }}>{entity.name}</span>
             <span style={{ fontSize: "13px", color: "var(--text-3)" }}>({items.length})</span>
           </div>
           {renderCards(items)}
@@ -491,727 +528,439 @@ function NotesPageInner() {
   }
 
   function renderMain() {
-    if (loading) {
-      return (
-        <div style={{ display: "flex", flexDirection: "column" }}>
-          <SkeletonCard />
-          <SkeletonCard />
-          <SkeletonCard />
-          <SkeletonCard />
-        </div>
-      )
-    }
-
-    if (error) {
-      return (
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            height: "200px",
-            color: "#DC2626",
-            fontSize: "14px",
-          }}
-        >
-          {error}
-        </div>
-      )
-    }
-
+    if (loading) return (
+      <div style={{ display: "flex", flexDirection: "column" }}>
+        <SkeletonCard /><SkeletonCard /><SkeletonCard /><SkeletonCard />
+      </div>
+    )
+    if (error) return (
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "200px", color: "#FF453A", fontSize: "14px" }}>
+        {error}
+      </div>
+    )
     if (filteredNotes.length === 0) {
-      const activeEntityName = activeEntityId
-        ? entityStats.find((s) => s.entity.id === activeEntityId)?.entity.name
-        : null
+      const activeEntityName = activeEntityId ? entityStats.find((s) => s.entity.id === activeEntityId)?.entity.name : null
       return (
-        <div
-          style={{
-            display: "flex",
-            flexDirection: "column",
-            alignItems: "center",
-            justifyContent: "center",
-            height: "300px",
-            gap: "12px",
-            color: "var(--text-3)",
-          }}
-        >
-          <span style={{ fontSize: "24px", opacity: 0.4 }}>◌</span>
-          <p style={{ fontSize: "15px", margin: 0, color: "var(--text-2)" }}>
-            {activeEntityName
-              ? `No notes linked to ${activeEntityName} yet`
-              : searchQuery
-              ? "No notes match your search"
-              : activeSpaceId
-              ? `No notes in ${activeSpaceName ? `@${activeSpaceName}` : "this space"} yet`
-              : "No notes saved yet"}
+        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", height: "300px", gap: "12px" }}>
+          <span style={{ fontSize: "24px", opacity: 0.25, color: "var(--text-3)" }}>◌</span>
+          <p style={{ fontSize: "14px", margin: 0, color: "var(--text-2)" }}>
+            {activeEntityName ? `No notes linked to ${activeEntityName} yet`
+              : searchQuery ? "No notes match your search"
+              : activeSpaceId ? `No notes in ${activeSpaceName ? `@${activeSpaceName}` : "this space"} yet`
+              : "No notes yet"}
           </p>
-          {activeEntityName && (
-            <button
-              onClick={() => setShowComposer(true)}
-              style={{
-                fontSize: "13px",
-                color: "var(--accent)",
-                background: "transparent",
-                border: "1px solid var(--border-accent)",
-                borderRadius: "8px",
-                padding: "6px 14px",
-                cursor: "pointer",
-                transition: "opacity 0.16s",
-              }}
-              onMouseEnter={(e) => { e.currentTarget.style.opacity = "0.7" }}
-              onMouseLeave={(e) => { e.currentTarget.style.opacity = "1" }}
-            >
-              Create note mentioning {activeEntityName}
-            </button>
-          )}
           {!searchQuery && !activeSpaceId && !activeEntityName && (
             <p style={{ fontSize: "13px", margin: 0, color: "var(--text-3)" }}>
               Use{" "}
-              <code
-                style={{
-                  fontFamily: "var(--font-geist-mono)",
-                  background: "var(--bg-surface)",
-                  border: "1px solid var(--border)",
-                  padding: "1px 6px",
-                  borderRadius: "4px",
-                }}
-              >
+              <code style={{ fontFamily: "var(--font-geist-mono, monospace)", background: "var(--bg-surface)", border: "1px solid var(--border)", padding: "1px 6px", borderRadius: "4px" }}>
                 /save
               </code>{" "}
-              in Telegram
+              in Telegram or click + New
             </p>
           )}
         </div>
       )
     }
-
     return (
-      <div
-        style={{
-          display: "flex",
-          flexDirection: "column",
-          opacity: listFading ? 0 : 1,
-          transition: "opacity 150ms ease-in-out",
-        }}
-      >
+      <div style={{ display: "flex", flexDirection: "column", opacity: listFading ? 0 : 1, transition: "opacity 150ms ease-in-out" }}>
         {groupByEntity ? renderGrouped() : renderCards(filteredNotes)}
       </div>
     )
   }
 
-  // ── Layout ────────────────────────────────────────────────────────────────
-
+  // ── Layout
   const showEntityTags = !loading && entityStats.length > 0
+  const panelOpen = panelMode !== null
+  const tasksDone = noteTasks.filter((t) => t.status === "done").length
+  const tasksTotal = noteTasks.length
+
+  // ── Icon buttons shared style
+  const iconBtnStyle: React.CSSProperties = {
+    width: "32px", height: "32px", display: "flex", alignItems: "center", justifyContent: "center",
+    background: "transparent", border: "none", borderRadius: "8px", cursor: "pointer",
+    color: "var(--text-2)", transition: "background 0.15s ease, color 0.15s ease",
+  }
 
   return (
-    <div
-      style={{
-        display: "flex",
-        height: "100vh",
-        background: "var(--bg-base)",
-        overflow: "hidden",
-        position: "relative",
-      }}
-    >
-      {/* Content column */}
-      <div
-        style={{
-          flex: 1,
-          display: "flex",
-          flexDirection: "column",
-          overflow: "hidden",
-          transition: "padding-right 0.22s ease-in-out",
-          paddingRight: selectedNote ? `${DETAIL_W}px` : "0",
-        }}
-      >
+    <div style={{ display: "flex", height: "100vh", background: "var(--bg-base)", overflow: "hidden", position: "relative" }}>
+
+      {/* ── Content column ── */}
+      <div style={{
+        flex: 1, display: "flex", flexDirection: "column", overflow: "hidden",
+        transition: "padding-right 0.22s cubic-bezier(0.4, 0, 0.2, 1)",
+        paddingRight: panelOpen ? `${DETAIL_W}px` : "0",
+      }}>
         {/* Page header */}
-        <div style={{ padding: "32px 32px 0", flexShrink: 0 }}>
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "space-between",
-              gap: "12px",
-              marginBottom: showEntityTags ? "16px" : "24px",
-            }}
-          >
+        <div style={{ padding: "28px 32px 0", flexShrink: 0 }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "12px", marginBottom: showEntityTags ? "16px" : "20px" }}>
             {/* Title / breadcrumb */}
             <div style={{ display: "flex", alignItems: "baseline", gap: "8px" }}>
               {activeSpaceId ? (
                 <div style={{ display: "flex", alignItems: "baseline", gap: "6px" }}>
-                  <Link
-                    href="/notes"
-                    style={{
-                      fontSize: "20px",
-                      fontWeight: 500,
-                      color: "var(--text-3)",
-                      textDecoration: "none",
-                      letterSpacing: "-0.015em",
-                      transition: "color 0.16s",
-                    }}
+                  <Link href="/notes" style={{ fontSize: "19px", fontWeight: 500, color: "var(--text-3)", textDecoration: "none", letterSpacing: "-0.015em", transition: "color 0.15s" }}
                     onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.color = "var(--text-2)" }}
-                    onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.color = "var(--text-3)" }}
-                  >
+                    onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.color = "var(--text-3)" }}>
                     Notes
                   </Link>
                   <span style={{ fontSize: "16px", color: "var(--text-3)" }}>/</span>
-                  <span
-                    style={{
-                      fontSize: "20px",
-                      fontWeight: 500,
-                      color: "var(--accent)",
-                      letterSpacing: "-0.015em",
-                    }}
-                  >
+                  <span style={{ fontSize: "19px", fontWeight: 500, color: "var(--accent)", letterSpacing: "-0.015em" }}>
                     {activeSpaceName ? `@${activeSpaceName}` : "Space"}
                   </span>
                 </div>
               ) : (
-                <h1
-                  style={{
-                    fontSize: "20px",
-                    fontWeight: 500,
-                    color: "var(--text-1)",
-                    margin: 0,
-                    letterSpacing: "-0.015em",
-                  }}
-                >
-                  Notes
-                </h1>
+                <h1 style={{ fontSize: "19px", fontWeight: 600, color: "var(--text-1)", margin: 0, letterSpacing: "-0.02em" }}>Notes</h1>
               )}
             </div>
 
-            {/* Right controls: group + search + new note */}
-            <div style={{ display: "flex", alignItems: "center", gap: "10px", flexShrink: 0 }}>
-              {/* Group by Entity toggle */}
-              <button
-                onClick={toggleGroupMode}
-                title={groupByEntity ? "Ungroup notes" : "Group by entity"}
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: "5px",
-                  padding: "7px 14px",
-                  background: groupByEntity ? "var(--accent-dim)" : "transparent",
-                  border: groupByEntity
-                    ? "1px solid var(--border-accent)"
-                    : "1px solid var(--border)",
-                  borderRadius: "8px",
-                  cursor: "pointer",
-                  color: groupByEntity ? "var(--accent)" : "var(--text-2)",
-                  fontSize: "14px",
-                  transition: "color 0.16s, border-color 0.16s, background 0.16s",
-                  flexShrink: 0,
-                }}
-                onMouseEnter={(e) => {
-                  if (!groupByEntity) {
-                    e.currentTarget.style.color = "var(--text-1)"
-                    e.currentTarget.style.borderColor = "var(--border-hover)"
-                    e.currentTarget.style.background = "var(--bg-surface)"
-                  }
-                }}
-                onMouseLeave={(e) => {
-                  if (!groupByEntity) {
-                    e.currentTarget.style.color = "var(--text-2)"
-                    e.currentTarget.style.borderColor = "var(--border)"
-                    e.currentTarget.style.background = "transparent"
-                  }
-                }}
-              >
-                <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                  <rect x="1" y="1" width="6" height="6" rx="1" />
-                  <rect x="9" y="1" width="6" height="6" rx="1" />
-                  <rect x="1" y="9" width="6" height="6" rx="1" />
-                  <rect x="9" y="9" width="6" height="6" rx="1" />
+            {/* Controls */}
+            <div style={{ display: "flex", alignItems: "center", gap: "8px", flexShrink: 0 }}>
+              {/* Group toggle */}
+              <button onClick={toggleGroupMode} title={groupByEntity ? "Ungroup" : "Group by entity"}
+                style={{ display: "flex", alignItems: "center", gap: "5px", padding: "6px 12px", background: groupByEntity ? "var(--accent-dim)" : "transparent", border: groupByEntity ? "1px solid var(--border-accent)" : "1px solid var(--border)", borderRadius: "8px", cursor: "pointer", color: groupByEntity ? "var(--accent)" : "var(--text-2)", fontSize: "13px", transition: "all 0.15s ease" }}
+                onMouseEnter={(e) => { if (!groupByEntity) { e.currentTarget.style.color = "var(--text-1)"; e.currentTarget.style.borderColor = "var(--border-hover)" } }}
+                onMouseLeave={(e) => { if (!groupByEntity) { e.currentTarget.style.color = "var(--text-2)"; e.currentTarget.style.borderColor = "var(--border)" } }}>
+                <svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                  <rect x="1" y="1" width="6" height="6" rx="1" /><rect x="9" y="1" width="6" height="6" rx="1" />
+                  <rect x="1" y="9" width="6" height="6" rx="1" /><rect x="9" y="9" width="6" height="6" rx="1" />
                 </svg>
                 Group
               </button>
 
               {/* Search */}
               <div style={{ position: "relative" }}>
-                <span
-                  style={{
-                    position: "absolute",
-                    left: "10px",
-                    top: "50%",
-                    transform: "translateY(-50%)",
-                    color: "var(--text-3)",
-                    fontSize: "14px",
-                    pointerEvents: "none",
-                    lineHeight: 1,
-                  }}
-                >
-                  ⌕
-                </span>
-                <input
-                  type="text"
-                  placeholder="Search…"
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  style={{
-                    width: "200px",
-                    background: "transparent",
-                    border: "1px solid transparent",
-                    borderRadius: "8px",
-                    padding: "7px 12px 7px 30px",
-                    fontSize: "14px",
-                    color: "var(--text-1)",
-                    outline: "none",
-                    transition: "border-color 0.16s, background 0.16s",
-                    boxSizing: "border-box",
-                  }}
-                  onFocus={(e) => {
-                    e.currentTarget.style.borderColor = "var(--border)"
-                    e.currentTarget.style.background = "var(--bg-surface)"
-                  }}
-                  onBlur={(e) => {
-                    if (!e.currentTarget.value) {
-                      e.currentTarget.style.borderColor = "transparent"
-                      e.currentTarget.style.background = "transparent"
-                    }
-                  }}
-                />
+                <span style={{ position: "absolute", left: "10px", top: "50%", transform: "translateY(-50%)", color: "var(--text-3)", fontSize: "13px", pointerEvents: "none", lineHeight: 1 }}>⌕</span>
+                <input type="text" placeholder="Search…" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)}
+                  style={{ width: "180px", background: "transparent", border: "1px solid transparent", borderRadius: "8px", padding: "6px 12px 6px 28px", fontSize: "13px", color: "var(--text-1)", outline: "none", transition: "border-color 0.15s, background 0.15s", boxSizing: "border-box" }}
+                  onFocus={(e) => { e.currentTarget.style.borderColor = "var(--border)"; e.currentTarget.style.background = "var(--bg-surface)" }}
+                  onBlur={(e) => { if (!e.currentTarget.value) { e.currentTarget.style.borderColor = "transparent"; e.currentTarget.style.background = "transparent" } }} />
               </div>
 
-              {/* New note button */}
-              <button
-                onClick={() => {
-                  if (showComposer) {
-                    composerTopRef.current?.querySelector("textarea")?.focus()
-                    return
-                  }
-                  setShowComposer(true)
-                }}
-                title="New note"
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: "5px",
-                  padding: "7px 14px",
-                  background: "transparent",
-                  border: "1px solid var(--border)",
-                  borderRadius: "8px",
-                  cursor: "pointer",
-                  color: "var(--text-2)",
-                  fontSize: "14px",
-                  transition: "color 0.16s, border-color 0.16s, background 0.16s",
-                  flexShrink: 0,
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.color = "var(--text-1)"
-                  e.currentTarget.style.borderColor = "var(--border-hover)"
-                  e.currentTarget.style.background = "var(--bg-surface)"
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.color = "var(--text-2)"
-                  e.currentTarget.style.borderColor = "var(--border)"
-                  e.currentTarget.style.background = "transparent"
-                }}
-              >
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
-                  <line x1="12" y1="5" x2="12" y2="19" />
-                  <line x1="5" y1="12" x2="19" y2="12" />
+              {/* New note */}
+              <button onClick={openCreatePanel} title="New note"
+                style={{ display: "flex", alignItems: "center", gap: "5px", padding: "6px 14px", background: panelMode === "create" ? "var(--accent-dim)" : "transparent", border: panelMode === "create" ? "1px solid var(--border-accent)" : "1px solid var(--border)", borderRadius: "8px", cursor: "pointer", color: panelMode === "create" ? "var(--accent)" : "var(--text-2)", fontSize: "13px", fontWeight: 500, transition: "all 0.15s ease" }}
+                onMouseEnter={(e) => { if (panelMode !== "create") { e.currentTarget.style.color = "var(--text-1)"; e.currentTarget.style.borderColor = "var(--border-hover)" } }}
+                onMouseLeave={(e) => { if (panelMode !== "create") { e.currentTarget.style.color = "var(--text-2)"; e.currentTarget.style.borderColor = "var(--border)" } }}>
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+                  <line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" />
                 </svg>
                 New
               </button>
             </div>
           </div>
 
-          {/* Entity Tags Row */}
+          {/* Entity tags row */}
           {showEntityTags && (
             <div style={{ position: "relative", marginBottom: "16px" }}>
-              <div className="entity-tags-scroll" style={{ display: "flex", gap: "8px", overflowX: "auto", paddingBottom: "2px" }}>
-                <EntityTag
-                  label="All"
-                  count={notes.length}
-                  active={activeEntityId === null}
-                  onClick={() => setEntityFilter(null)}
-                />
+              <div className="entity-tags-scroll" style={{ display: "flex", gap: "6px", overflowX: "auto", paddingBottom: "2px" }}>
+                <EntityTag label="All" count={notes.length} active={activeEntityId === null} onClick={() => setEntityFilter(null)} />
                 {entityStats.map(({ entity, count }) => (
-                  <EntityTag
-                    key={entity.id}
-                    label={entity.name}
-                    count={count}
-                    active={activeEntityId === entity.id}
-                    onClick={() => setEntityFilter(activeEntityId === entity.id ? null : entity.id)}
-                  />
+                  <EntityTag key={entity.id} label={entity.name} count={count} active={activeEntityId === entity.id}
+                    onClick={() => setEntityFilter(activeEntityId === entity.id ? null : entity.id)} />
                 ))}
               </div>
-              {/* Right fade mask */}
-              <div
-                style={{
-                  position: "absolute",
-                  right: 0,
-                  top: 0,
-                  bottom: "2px",
-                  width: "48px",
-                  background: "linear-gradient(to right, transparent, var(--bg-base))",
-                  pointerEvents: "none",
-                }}
-              />
+              <div style={{ position: "absolute", right: 0, top: 0, bottom: "2px", width: "48px", background: "linear-gradient(to right, transparent, var(--bg-base))", pointerEvents: "none" }} />
             </div>
           )}
 
-          {/* Divider line */}
           <div style={{ height: "1px", background: "var(--border-subtle)" }} />
         </div>
 
         {/* Cards scroll area */}
-        <div
-          ref={scrollContainerRef}
-          style={{
-            flex: 1,
-            overflowY: "auto",
-            padding: "0 32px 32px",
-          }}
-        >
+        <div ref={scrollContainerRef} style={{ flex: 1, overflowY: "auto", padding: "0 32px 32px" }}>
           <div style={{ maxWidth: "680px" }}>
-            {showComposer && (
-              <div
-                ref={composerTopRef}
-                style={{
-                  padding: "24px 0 0",
-                  animation: "scaleIn 160ms ease-in-out both",
-                }}
-              >
-                <NoteComposer
-                  mode="create"
-                  onSave={(note) => {
-                    justAddedId.current = note.id
-                    setShowComposer(false)
-                    setNotes((prev) => [note, ...prev])
-                    setSelectedNote(note)
-                  }}
-                  onCancel={() => setShowComposer(false)}
-                />
-              </div>
-            )}
             {renderMain()}
           </div>
         </div>
       </div>
 
-      {/* Detail panel (fixed right) */}
-      {selectedNote && (
-        <div
-          ref={detailRef}
-          className="panel-slide-in"
-          style={{
-            position: "fixed",
-            top: 0,
-            right: 0,
-            bottom: 0,
-            width: DETAIL_W,
-            background: "var(--bg-elevated)",
-            borderLeft: "1px solid var(--border)",
-            display: "flex",
-            flexDirection: "column",
-            zIndex: 40,
-          }}
-        >
-          {/* Panel header */}
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "space-between",
-              padding: "16px 24px",
-              borderBottom: "1px solid var(--border)",
-              flexShrink: 0,
-            }}
-          >
-            <span style={{ fontSize: "12px", color: "var(--text-3)" }}>
-              {relativeTime(selectedNote.created_at)}
+      {/* ── Detail / Create panel ── */}
+      {panelOpen && (
+        <div ref={detailRef} className="panel-slide-in" style={{
+          position: "fixed", top: 0, right: 0, bottom: 0, width: DETAIL_W,
+          background: "var(--bg-elevated)", borderLeft: "1px solid var(--border)",
+          display: "flex", flexDirection: "column", zIndex: 40,
+        }}>
+
+          {/* ── A. Toolbar ── */}
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "13px 18px", borderBottom: "1px solid var(--border)", flexShrink: 0 }}>
+            <span style={{ fontSize: "12px", color: "var(--text-3)", fontFamily: "var(--font-geist-mono, monospace)" }}>
+              {panelMode === "edit" && selectedNote ? relativeTime(selectedNote.created_at) : "New note"}
             </span>
-            <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
-              <button
-                onClick={handleDelete}
-                disabled={deleting}
-                style={{
-                  fontSize: "13px",
-                  color: confirmDelete ? "#DC2626" : "var(--text-3)",
-                  background: "transparent",
-                  padding: "5px 8px",
-                  borderRadius: "7px",
-                  border: `1px solid ${confirmDelete ? "rgba(220,38,38,0.25)" : "transparent"}`,
-                  cursor: deleting ? "not-allowed" : "pointer",
-                  transition: "color 0.16s, border-color 0.16s",
-                  opacity: deleting ? 0.5 : 1,
-                }}
-                onMouseEnter={(e) => {
-                  if (!confirmDelete) e.currentTarget.style.color = "#DC2626"
-                }}
-                onMouseLeave={(e) => {
-                  if (!confirmDelete) e.currentTarget.style.color = "var(--text-3)"
-                }}
-              >
-                {deleting ? "Deleting…" : confirmDelete ? "Delete?" : (
-                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ display: "block" }}>
-                    <polyline points="3 6 5 6 21 6" />
-                    <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
-                    <path d="M10 11v6M14 11v6" />
-                    <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" />
+            <div style={{ display: "flex", alignItems: "center", gap: "2px" }}>
+              {/* Open full-page (edit only) */}
+              {panelMode === "edit" && selectedNote && (
+                <Link href={`/notes/${selectedNote.id}`} title="Open full page"
+                  style={{ ...iconBtnStyle, textDecoration: "none" }}
+                  onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = "var(--bg-hover)"; (e.currentTarget as HTMLElement).style.color = "var(--text-1)" }}
+                  onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = "transparent"; (e.currentTarget as HTMLElement).style.color = "var(--text-2)" }}>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+                    <polyline points="15 3 21 3 21 9" /><line x1="10" y1="14" x2="21" y2="3" />
                   </svg>
-                )}
-              </button>
-              <button
-                onClick={() => setSelectedNote(null)}
-                style={{
-                  width: "28px",
-                  height: "28px",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  background: "transparent",
-                  border: "1px solid transparent",
-                  borderRadius: "7px",
-                  cursor: "pointer",
-                  color: "var(--text-3)",
-                  fontSize: "14px",
-                  transition: "background 0.16s, color 0.16s",
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.background = "var(--bg-hover)"
-                  e.currentTarget.style.color = "var(--text-1)"
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.background = "transparent"
-                  e.currentTarget.style.color = "var(--text-3)"
-                }}
-              >
-                ✕
+                </Link>
+              )}
+              {/* Delete (edit only) */}
+              {panelMode === "edit" && selectedNote && (
+                <button onClick={handleDelete} disabled={deleting} title={confirmDelete ? "Click again to confirm" : "Delete note"}
+                  style={{ ...iconBtnStyle, color: confirmDelete ? "#FF453A" : "var(--text-2)", opacity: deleting ? 0.5 : 1, cursor: deleting ? "not-allowed" : "pointer" }}
+                  onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(255,69,58,0.1)"; e.currentTarget.style.color = "#FF453A" }}
+                  onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = confirmDelete ? "#FF453A" : "var(--text-2)" }}>
+                  {deleting ? (
+                    <span style={{ fontSize: "12px", color: "var(--text-3)" }}>…</span>
+                  ) : confirmDelete ? (
+                    <span style={{ fontSize: "11px", fontWeight: 600, color: "#FF453A", whiteSpace: "nowrap" }}>Delete?</span>
+                  ) : (
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+                      <polyline points="3 6 5 6 21 6" />
+                      <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
+                      <path d="M10 11v6M14 11v6" />
+                      <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" />
+                    </svg>
+                  )}
+                </button>
+              )}
+              {/* Close */}
+              <button onClick={closePanel} title="Close"
+                style={iconBtnStyle}
+                onMouseEnter={(e) => { e.currentTarget.style.background = "var(--bg-hover)"; e.currentTarget.style.color = "var(--text-1)" }}
+                onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = "var(--text-2)" }}>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                  <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
+                </svg>
               </button>
             </div>
           </div>
 
-          {/* Scrollable content */}
+          {/* ── Scrollable body ── */}
           <div style={{ flex: 1, overflowY: "auto" }}>
 
-            {/* ── Section 1: Note writing area ── */}
-            <div style={{ padding: "24px 28px" }}>
+            {/* ── B. Note writing area ── */}
+            <div style={{ padding: "24px 24px 12px" }}>
               <textarea
+                ref={(el) => {
+                  panelTextareaRef.current = el
+                  if (el) { el.style.height = "auto"; el.style.height = el.scrollHeight + "px" }
+                }}
                 value={panelText}
+                placeholder="What's on your mind…"
                 onChange={(e) => {
                   setPanelText(e.target.value)
-                  scheduleSave(e.target.value)
-                  // auto-resize
                   e.target.style.height = "auto"
                   e.target.style.height = e.target.scrollHeight + "px"
-                }}
-                ref={(el) => {
-                  if (el) {
-                    el.style.height = "auto"
-                    el.style.height = el.scrollHeight + "px"
-                  }
+                  if (panelMode === "edit") scheduleSave(e.target.value)
                 }}
                 style={{
-                  width: "100%",
-                  resize: "none",
-                  border: "none",
-                  outline: "none",
-                  fontSize: "16px",
-                  lineHeight: 1.75,
-                  color: "var(--text-1)",
-                  background: "transparent",
-                  fontFamily: "inherit",
-                  padding: 0,
-                  boxSizing: "border-box",
-                  minHeight: "120px",
-                  overflow: "hidden",
+                  width: "100%", resize: "none", border: "none", outline: "none",
+                  fontSize: "15px", lineHeight: 1.75, color: "var(--text-1)",
+                  background: "transparent", padding: 0, boxSizing: "border-box",
+                  minHeight: "180px", overflow: "hidden",
+                  fontFamily: "Georgia, Merriweather, serif",
                 }}
               />
-              <div style={{ fontSize: "11px", color: "var(--text-3)", marginTop: "10px", height: "14px" }}>
-                {panelSaving ? "Saving…" : panelSaved ? "Saved" : ""}
-              </div>
-            </div>
-
-            {/* ── Section 2: Tasks ── */}
-            <div
-              style={{
-                padding: "20px 28px",
-                borderTop: "1px solid var(--border-subtle)",
-              }}
-            >
-              {/* Section header */}
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "14px" }}>
-                <span
-                  style={{
-                    fontSize: "11px",
-                    fontWeight: 600,
-                    textTransform: "uppercase",
-                    letterSpacing: "0.06em",
-                    color: "var(--text-3)",
-                  }}
-                >
-                  Tasks
-                </span>
-                <Link
-                  href="/tasks"
-                  style={{
-                    fontSize: "12px",
-                    color: "var(--accent)",
-                    textDecoration: "none",
-                    transition: "opacity 0.16s",
-                  }}
-                  onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.opacity = "0.7" }}
-                  onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.opacity = "1" }}
-                >
-                  Tasks →
-                </Link>
-              </div>
-
-              {/* Existing tasks */}
-              {noteTasks.filter((t) => t.status !== "done").length > 0 && (
-                <div style={{ display: "flex", flexDirection: "column", marginBottom: "12px" }}>
-                  {noteTasks
-                    .filter((t) => t.status !== "done")
-                    .map((task) => (
-                      <div
-                        key={task.id}
-                        style={{
-                          display: "flex",
-                          alignItems: "center",
-                          justifyContent: "space-between",
-                          padding: "7px 0",
-                          borderBottom: "1px solid var(--border-subtle)",
-                          gap: "8px",
-                        }}
-                      >
-                        <div style={{ display: "flex", alignItems: "center", gap: "8px", minWidth: 0 }}>
-                          <span
-                            style={{
-                              width: "6px",
-                              height: "6px",
-                              borderRadius: "50%",
-                              flexShrink: 0,
-                              background:
-                                task.status === "doing" ? "#F97316"
-                                : task.status === "next" ? "var(--accent)"
-                                : "var(--text-3)",
-                            }}
-                          />
-                          <span
-                            style={{
-                              fontSize: "14px",
-                              color: "var(--text-1)",
-                              overflow: "hidden",
-                              textOverflow: "ellipsis",
-                              whiteSpace: "nowrap",
-                            }}
-                          >
-                            {task.title}
-                          </span>
-                        </div>
-                        {task.due_date && (
-                          <span style={{ fontSize: "12px", color: "var(--text-3)", flexShrink: 0 }}>
-                            {new Date(task.due_date).toLocaleDateString("en", { month: "short", day: "numeric" })}
-                          </span>
-                        )}
-                      </div>
-                    ))}
+              {/* Save indicator (edit mode only) */}
+              {panelMode === "edit" && (
+                <div style={{ fontSize: "11px", color: "var(--text-3)", marginTop: "8px", height: "14px", fontFamily: "var(--font-geist-mono, monospace)" }}>
+                  {panelSaving ? "Saving…" : panelSaved ? "Saved" : ""}
                 </div>
               )}
-
-              {/* Quick-add form */}
-              <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
-                <div style={{ display: "flex", gap: "6px" }}>
-                  <input
-                    type="text"
-                    placeholder="Add a task…"
-                    value={taskTitle}
-                    onChange={(e) => setTaskTitle(e.target.value)}
-                    onKeyDown={(e) => { if (e.key === "Enter") handleAddTask() }}
-                    style={{
-                      flex: 1,
-                      border: "1px solid var(--border)",
-                      borderRadius: "7px",
-                      padding: "6px 10px",
-                      fontSize: "14px",
-                      color: "var(--text-1)",
-                      background: "var(--bg-surface)",
-                      outline: "none",
-                      fontFamily: "inherit",
-                      transition: "border-color 0.16s",
-                    }}
-                    onFocus={(e) => { e.currentTarget.style.borderColor = "var(--border-hover)" }}
-                    onBlur={(e) => { e.currentTarget.style.borderColor = "var(--border)" }}
-                  />
-                  <input
-                    type="date"
-                    value={taskDue}
-                    onChange={(e) => setTaskDue(e.target.value)}
-                    style={{
-                      border: "1px solid var(--border)",
-                      borderRadius: "7px",
-                      padding: "6px 8px",
-                      fontSize: "13px",
-                      background: "var(--bg-surface)",
-                      color: taskDue ? "var(--text-1)" : "var(--text-3)",
-                      outline: "none",
-                      fontFamily: "inherit",
-                      width: "120px",
-                      flexShrink: 0,
-                    }}
-                  />
-                </div>
-                <div style={{ display: "flex", justifyContent: "flex-end" }}>
-                  <button
-                    onClick={handleAddTask}
-                    disabled={!taskTitle.trim() || addingTask}
-                    style={{
-                      fontSize: "13px",
-                      color: taskTitle.trim() ? "var(--accent)" : "var(--text-3)",
-                      background: "transparent",
-                      border: "1px solid var(--border-accent)",
-                      borderRadius: "7px",
-                      padding: "5px 12px",
-                      cursor: taskTitle.trim() ? "pointer" : "default",
-                      transition: "opacity 0.16s",
-                      opacity: taskTitle.trim() ? 1 : 0.4,
-                    }}
-                    onMouseEnter={(e) => { if (taskTitle.trim()) e.currentTarget.style.opacity = "0.7" }}
-                    onMouseLeave={(e) => { if (taskTitle.trim()) e.currentTarget.style.opacity = "1" }}
-                  >
-                    {addingTask ? "Adding…" : "+ Add"}
-                  </button>
-                </div>
-              </div>
             </div>
 
-            {/* ── Section 3: Spaces ── */}
-            {selectedNote.spaces && selectedNote.spaces.length > 0 && (
-              <div
-                style={{
-                  padding: "16px 28px 24px",
-                  borderTop: "1px solid var(--border-subtle)",
-                  display: "flex",
-                  flexWrap: "wrap",
-                  gap: "6px",
-                }}
-              >
-                {selectedNote.spaces.map((s) => (
-                  <Link
-                    key={s.id}
-                    href={`/notes?space=${s.id}`}
-                    style={{
-                      display: "inline-flex",
-                      alignItems: "center",
-                      padding: "2px 9px",
-                      borderRadius: "999px",
-                      fontSize: "12px",
-                      fontWeight: 500,
-                      background: SPACE_STYLE.bg,
-                      color: SPACE_STYLE.text,
-                      border: `1px solid ${SPACE_STYLE.border}`,
-                      textDecoration: "none",
-                      transition: "opacity 0.16s",
-                    }}
+            {/* ── C. Tasks section (edit mode only) ── */}
+            {panelMode === "edit" && (
+              <div style={{ padding: "16px 24px", borderTop: "1px solid var(--border-subtle)" }}>
+                {/* Header */}
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "12px" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                    <span style={{ fontSize: "11px", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--text-3)", fontFamily: "var(--font-geist-mono, monospace)" }}>
+                      Tasks
+                    </span>
+                    {tasksTotal > 0 && (
+                      <span style={{ fontSize: "11px", color: "var(--text-3)", fontFamily: "var(--font-geist-mono, monospace)" }}>
+                        {tasksDone}/{tasksTotal}
+                      </span>
+                    )}
+                  </div>
+                  <Link href="/tasks" style={{ fontSize: "12px", color: "var(--accent)", textDecoration: "none", transition: "opacity 0.15s" }}
                     onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.opacity = "0.7" }}
-                    onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.opacity = "1" }}
-                  >
-                    @{s.name}
+                    onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.opacity = "1" }}>
+                    Tasks →
                   </Link>
+                </div>
+
+                {/* Task rows */}
+                {noteTasks.length > 0 && (
+                  <div style={{ display: "flex", flexDirection: "column", marginBottom: "14px" }}>
+                    {noteTasks.map((task) => {
+                      const done = task.status === "done"
+                      return (
+                        <div key={task.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "7px 0", borderBottom: "1px solid var(--border-subtle)", gap: "10px" }}>
+                          <div style={{ display: "flex", alignItems: "center", gap: "10px", minWidth: 0 }}>
+                            {/* Checkbox */}
+                            <button onClick={() => handleToggleTask(task.id, task.status)}
+                              style={{ width: "18px", height: "18px", borderRadius: "5px", border: `1.5px solid ${done ? "var(--accent)" : "var(--text-3)"}`, background: done ? "var(--accent)" : "transparent", cursor: "pointer", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", transition: "all 0.15s ease" }}>
+                              {done && (
+                                <svg width="10" height="10" viewBox="0 0 12 12" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                  <polyline points="2 6 5 9 10 3" />
+                                </svg>
+                              )}
+                            </button>
+                            <span style={{ fontSize: "13px", color: done ? "var(--text-3)" : "var(--text-1)", textDecoration: done ? "line-through" : "none", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", transition: "color 0.15s" }}>
+                              {task.title}
+                            </span>
+                          </div>
+                          {task.due_date && (
+                            <span style={{ fontSize: "11px", color: "var(--text-3)", flexShrink: 0, fontFamily: "var(--font-geist-mono, monospace)" }}>
+                              {shortDate(task.due_date)}
+                            </span>
+                          )}
+                        </div>
+                      )
+                    })}
+                  </div>
+                )}
+
+                {/* Quick-add */}
+                <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                  <div style={{ display: "flex", gap: "6px" }}>
+                    <input type="text" placeholder="Add a task…" value={taskTitle}
+                      onChange={(e) => setTaskTitle(e.target.value)}
+                      onKeyDown={(e) => { if (e.key === "Enter") handleAddTask() }}
+                      style={{ flex: 1, border: "1px solid var(--border)", borderRadius: "8px", padding: "7px 10px", fontSize: "13px", color: "var(--text-1)", background: "var(--bg-surface)", outline: "none", fontFamily: "inherit", transition: "border-color 0.15s" }}
+                      onFocus={(e) => { e.currentTarget.style.borderColor = "var(--border-hover)" }}
+                      onBlur={(e) => { e.currentTarget.style.borderColor = "var(--border)" }} />
+                    <input type="date" value={taskDue} onChange={(e) => setTaskDue(e.target.value)}
+                      style={{ border: "1px solid var(--border)", borderRadius: "8px", padding: "7px 8px", fontSize: "12px", background: "var(--bg-surface)", color: taskDue ? "var(--text-1)" : "var(--text-3)", outline: "none", fontFamily: "inherit", width: "110px", flexShrink: 0 }} />
+                  </div>
+                  <div style={{ display: "flex", justifyContent: "flex-end" }}>
+                    <button onClick={handleAddTask} disabled={!taskTitle.trim() || addingTask}
+                      style={{ fontSize: "12px", color: taskTitle.trim() ? "var(--accent)" : "var(--text-3)", background: "transparent", border: "1px solid var(--border-accent)", borderRadius: "7px", padding: "5px 12px", cursor: taskTitle.trim() ? "pointer" : "default", transition: "opacity 0.15s", opacity: taskTitle.trim() ? 1 : 0.4 }}
+                      onMouseEnter={(e) => { if (taskTitle.trim()) e.currentTarget.style.opacity = "0.7" }}
+                      onMouseLeave={(e) => { if (taskTitle.trim()) e.currentTarget.style.opacity = "1" }}>
+                      {addingTask ? "Adding…" : "+ Add"}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* ── D. Spaces section ── */}
+            <div style={{ padding: "16px 24px", borderTop: "1px solid var(--border-subtle)", position: "relative" }}>
+              <span style={{ fontSize: "11px", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--text-3)", fontFamily: "var(--font-geist-mono, monospace)", display: "block", marginBottom: "10px" }}>
+                Spaces
+              </span>
+
+              {/* Space pills */}
+              <div style={{ display: "flex", flexWrap: "wrap", gap: "6px", marginBottom: panelSpaces.length > 0 ? "10px" : "0" }}>
+                {panelSpaces.map((s) => (
+                  <span key={s.id} style={{ display: "inline-flex", alignItems: "center", gap: "4px", padding: "3px 8px 3px 10px", borderRadius: "20px", fontSize: "12px", fontWeight: 500, background: "var(--accent-dim)", color: "var(--accent)", border: "1px solid var(--border-accent)" }}>
+                    @{s.name}
+                    <button onClick={() => handleRemoveSpace(s.id)}
+                      style={{ display: "flex", alignItems: "center", justifyContent: "center", background: "transparent", border: "none", cursor: "pointer", color: "var(--accent)", opacity: 0.6, padding: "0", borderRadius: "50%", width: "14px", height: "14px", transition: "opacity 0.15s" }}
+                      onMouseEnter={(e) => { e.currentTarget.style.opacity = "1" }}
+                      onMouseLeave={(e) => { e.currentTarget.style.opacity = "0.6" }}>
+                      <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+                        <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
+                      </svg>
+                    </button>
+                  </span>
                 ))}
+              </div>
+
+              {/* Add space button */}
+              <button onClick={() => { setShowSpaceDropdown((v) => !v); setSpaceSearch("") }}
+                style={{ display: "inline-flex", alignItems: "center", gap: "4px", padding: "4px 10px", borderRadius: "20px", fontSize: "12px", color: showSpaceDropdown ? "var(--accent)" : "var(--text-3)", background: "transparent", border: `1px dashed ${showSpaceDropdown ? "var(--border-accent)" : "var(--border)"}`, cursor: "pointer", transition: "color 0.15s, border-color 0.15s" }}
+                onMouseEnter={(e) => { e.currentTarget.style.color = "var(--accent)"; e.currentTarget.style.borderColor = "var(--border-accent)" }}
+                onMouseLeave={(e) => { if (!showSpaceDropdown) { e.currentTarget.style.color = "var(--text-3)"; e.currentTarget.style.borderColor = "var(--border)" } }}>
+                <span style={{ color: "var(--accent)", fontWeight: 600 }}>@</span>
+                Add space
+              </button>
+
+              {/* Dropdown */}
+              {showSpaceDropdown && (
+                <div style={{ position: "absolute", left: "24px", right: "24px", top: "100%", marginTop: "-4px", background: "var(--bg-surface)", border: "1px solid var(--border)", borderRadius: "10px", boxShadow: "var(--shadow-lg)", zIndex: 50, overflow: "hidden" }}>
+                  <div style={{ padding: "10px 10px 8px" }}>
+                    <input type="text" placeholder="Search spaces…" value={spaceSearch} onChange={(e) => setSpaceSearch(e.target.value)}
+                      autoFocus
+                      style={{ width: "100%", background: "var(--bg-elevated)", border: "1px solid var(--border)", borderRadius: "7px", padding: "6px 10px", fontSize: "13px", color: "var(--text-1)", outline: "none", boxSizing: "border-box" }} />
+                  </div>
+                  <div style={{ maxHeight: "180px", overflowY: "auto" }}>
+                    {filteredSpaceDropdown.length === 0 ? (
+                      <div style={{ padding: "10px 14px 12px", fontSize: "13px", color: "var(--text-3)" }}>
+                        {spaceSearch ? "No spaces match" : "No spaces available"}
+                      </div>
+                    ) : filteredSpaceDropdown.map((space) => (
+                      <button key={space.id} onClick={() => handleAddSpace(space)}
+                        style={{ width: "100%", textAlign: "left", display: "flex", alignItems: "center", gap: "6px", padding: "9px 14px", background: "transparent", border: "none", cursor: "pointer", fontSize: "14px", color: "var(--text-1)", transition: "background 0.12s" }}
+                        onMouseEnter={(e) => { e.currentTarget.style.background = "var(--bg-hover)" }}
+                        onMouseLeave={(e) => { e.currentTarget.style.background = "transparent" }}>
+                        <span style={{ color: "var(--accent)", fontWeight: 600, fontSize: "13px" }}>@</span>
+                        {space.name}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* ── E. Entities section (edit mode only) ── */}
+            <div style={{ padding: "16px 24px 24px", borderTop: "1px solid var(--border-subtle)" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "6px", marginBottom: "12px" }}>
+                <span style={{ fontSize: "11px", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--text-3)", fontFamily: "var(--font-geist-mono, monospace)" }}>
+                  Entities
+                </span>
+                <span style={{ fontSize: "11px", color: "var(--text-3)", fontStyle: "italic" }}>· auto-detected</span>
+              </div>
+
+              {panelMode === "create" ? (
+                <p style={{ fontSize: "13px", color: "var(--text-3)", fontStyle: "italic", margin: 0 }}>
+                  Entities will be auto-detected on save
+                </p>
+              ) : selectedNote && selectedNote.entities.length > 0 ? (
+                <div style={{ display: "flex", flexWrap: "wrap", gap: "6px" }}>
+                  {selectedNote.entities.map((entity) => {
+                    const s = entityStyle(entity.type)
+                    return (
+                      <span key={entity.id} style={{ display: "inline-flex", alignItems: "center", gap: "5px", padding: "4px 9px", borderRadius: "8px", background: s.bg, border: `1px solid ${s.border}` }}>
+                        <span style={{ fontSize: "10px", color: s.text, fontFamily: "var(--font-geist-mono, monospace)", textTransform: "uppercase", letterSpacing: "0.04em", opacity: 0.8 }}>
+                          {entity.type}
+                        </span>
+                        <span style={{ fontSize: "12px", fontWeight: 600, color: s.text }}>
+                          {entity.name}
+                        </span>
+                      </span>
+                    )
+                  })}
+                </div>
+              ) : (
+                <p style={{ fontSize: "13px", color: "var(--text-3)", fontStyle: "italic", margin: 0 }}>
+                  {panelSaved ? "Entities will update shortly" : "No entities detected yet"}
+                </p>
+              )}
+            </div>
+          </div>
+
+          {/* ── F. Sticky save / status bar ── */}
+          <div style={{ padding: "14px 20px", borderTop: "1px solid var(--border)", flexShrink: 0, background: "var(--bg-elevated)" }}>
+            {panelMode === "create" ? (
+              <button onClick={handleCreateNote} disabled={!panelText.trim() || panelCreating}
+                style={{
+                  width: "100%", padding: "11px", borderRadius: "10px", fontSize: "14px", fontWeight: 600,
+                  background: panelText.trim() ? "var(--accent)" : "var(--bg-hover)",
+                  color: panelText.trim() ? "#FFFFFF" : "var(--text-3)",
+                  border: "none", cursor: panelText.trim() ? "pointer" : "default",
+                  boxShadow: panelText.trim() ? "0 0 20px rgba(212, 119, 92, 0.25)" : "none",
+                  transition: "all 0.2s ease",
+                }}
+                onMouseEnter={(e) => { if (panelText.trim()) e.currentTarget.style.background = "var(--accent-hover)" }}
+                onMouseLeave={(e) => { if (panelText.trim()) e.currentTarget.style.background = "var(--accent)" }}>
+                {panelCreating ? "Creating…" : "Create Note"}
+              </button>
+            ) : (
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                <span style={{ fontSize: "12px", color: "var(--text-3)", fontFamily: "var(--font-geist-mono, monospace)" }}>
+                  {panelSaving ? "Saving…" : panelSaved ? "Saved" : "Auto-save on"}
+                </span>
+                <div style={{ width: "6px", height: "6px", borderRadius: "50%", background: panelSaving ? "#FFD60A" : panelSaved ? "#34C759" : "var(--text-3)", transition: "background 0.3s ease" }} />
               </div>
             )}
           </div>
