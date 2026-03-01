@@ -398,6 +398,63 @@ if (text.startsWith("/task")) {
   return new Response("ok");
 }
 
+// =========================
+// TODO COMMAND
+// =========================
+
+if (text === "/todo") {
+  try {
+    const { data: tasks } = await supabase
+      .from("tasks")
+      .select("title, status, due_date, priority")
+      .eq("user_id", userUuid)
+      .in("status", ["doing", "waiting", "inbox"])
+      .order("created_at", { ascending: false })
+      .limit(10)
+
+    if (!tasks || tasks.length === 0) {
+      await sendTelegram(chatId, "📋 No active tasks. Create one with /task <title>")
+      return new Response("ok")
+    }
+
+    const PRIORITY_ORDER = { high: 0, medium: 1, low: 2 }
+    tasks.sort((a, b) => (PRIORITY_ORDER[a.priority] ?? 3) - (PRIORITY_ORDER[b.priority] ?? 3))
+
+    const sections = [
+      { status: "doing", label: "🔵 Doing" },
+      { status: "waiting", label: "⏳ Waiting" },
+      { status: "inbox", label: "📥 Inbox" },
+    ]
+
+    const today = new Date(); today.setHours(0, 0, 0, 0)
+    const tomorrow = new Date(today); tomorrow.setDate(today.getDate() + 1)
+
+    let msg = "📋 Tasks\n"
+    for (const { status, label } of sections) {
+      const group = tasks.filter(t => t.status === status)
+      if (group.length === 0) continue
+      msg += `\n${label}\n`
+      for (const t of group) {
+        msg += `• ${t.title}`
+        if (t.due_date) {
+          const d = new Date(t.due_date); d.setHours(0, 0, 0, 0)
+          if (d.getTime() === today.getTime()) msg += " (today)"
+          else if (d.getTime() === tomorrow.getTime()) msg += " (tomorrow)"
+          else if (d < today) msg += " (⚠ overdue)"
+          else msg += ` (${d.toLocaleDateString("en-US", { month: "short", day: "numeric" })})`
+        }
+        msg += "\n"
+      }
+    }
+
+    await sendTelegram(chatId, msg.trim())
+  } catch (err) {
+    console.error("[Todo Command] Error:", err)
+    await sendTelegram(chatId, "❌ Failed to load tasks.")
+  }
+  return new Response("ok")
+}
+
   // =========================
   // DAILY LIMIT CHECK
   // =========================
