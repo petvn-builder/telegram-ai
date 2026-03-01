@@ -174,6 +174,52 @@ function NoteCard({ note, selected, onClick, isLast }: NoteCardProps) {
   )
 }
 
+// ── EntityTag ─────────────────────────────────────────────────────────────────
+
+interface EntityTagProps {
+  label: string
+  count: number
+  active: boolean
+  onClick: () => void
+}
+
+function EntityTag({ label, count, active, onClick }: EntityTagProps) {
+  const [hovered, setHovered] = useState(false)
+  return (
+    <button
+      onClick={onClick}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      style={{
+        display: "inline-flex",
+        alignItems: "center",
+        gap: "4px",
+        padding: "6px 12px",
+        borderRadius: "999px",
+        fontSize: "13px",
+        fontWeight: 500,
+        whiteSpace: "nowrap",
+        flexShrink: 0,
+        cursor: "pointer",
+        background: active
+          ? "var(--accent-dim)"
+          : hovered
+          ? "var(--bg-elevated)"
+          : "var(--bg-hover)",
+        borderTop: "1px solid transparent",
+        borderRight: "1px solid transparent",
+        borderBottom: "1px solid transparent",
+        borderLeft: active ? "2px solid var(--accent)" : "1px solid transparent",
+        color: active ? "var(--text-1)" : "var(--text-2)",
+        transition: "background 0.16s ease-in-out, color 0.16s ease-in-out",
+      }}
+    >
+      {label}
+      <span style={{ fontSize: "12px", opacity: 0.65 }}>{count}</span>
+    </button>
+  )
+}
+
 // ── Main page ─────────────────────────────────────────────────────────────────
 
 const DETAIL_W = 400
@@ -201,8 +247,12 @@ function NotesPageInner() {
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [deleting, setDeleting] = useState(false)
   const [activeSpaceName, setActiveSpaceName] = useState<string | null>(null)
+  const [activeEntityId, setActiveEntityId] = useState<string | null>(searchParams.get("entity"))
+  const [groupByEntity, setGroupByEntity] = useState(false)
+  const [listFading, setListFading] = useState(false)
   const detailRef = useRef<HTMLDivElement>(null)
   const composerTopRef = useRef<HTMLDivElement>(null)
+  const scrollContainerRef = useRef<HTMLDivElement>(null)
   const justAddedId = useRef<string | null>(null)
   const confirmDeleteTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
@@ -241,12 +291,56 @@ function NotesPageInner() {
       .catch(() => {})
   }, [activeSpaceId, activeSpaceName])
 
+  useEffect(() => {
+    setActiveEntityId(searchParams.get("entity"))
+  }, [searchParams])
+
+  // Aggregate entities across all notes, sorted by note count descending
+  const entityStats = useMemo(() => {
+    const map = new Map<string, { entity: Entity; count: number; notes: NoteWithEntities[] }>()
+    for (const note of notes) {
+      for (const entity of note.entities) {
+        const entry = map.get(entity.id)
+        if (entry) {
+          entry.count++
+          entry.notes.push(note)
+        } else {
+          map.set(entity.id, { entity, count: 1, notes: [note] })
+        }
+      }
+    }
+    return Array.from(map.values()).sort((a, b) => b.count - a.count)
+  }, [notes])
+
   const filteredNotes = useMemo(() => {
-    return notes.filter((note) =>
-      searchQuery === "" ||
-      note.content.toLowerCase().includes(searchQuery.toLowerCase())
-    )
-  }, [notes, searchQuery])
+    let result = notes
+    if (searchQuery) {
+      result = result.filter((n) =>
+        n.content.toLowerCase().includes(searchQuery.toLowerCase())
+      )
+    }
+    if (activeEntityId) {
+      result = result.filter((n) => n.entities.some((e) => e.id === activeEntityId))
+    }
+    return result
+  }, [notes, searchQuery, activeEntityId])
+
+  function setEntityFilter(entityId: string | null) {
+    const params = new URLSearchParams(searchParams.toString())
+    if (entityId) params.set("entity", entityId)
+    else params.delete("entity")
+    router.push(`/notes?${params}`, { scroll: false })
+    setActiveEntityId(entityId)
+    scrollContainerRef.current?.scrollTo({ top: 0 })
+  }
+
+  function toggleGroupMode() {
+    setListFading(true)
+    setTimeout(() => {
+      setGroupByEntity((prev) => !prev)
+      setListFading(false)
+    }, 120)
+  }
 
   function handleNoteClick(note: NoteWithEntities) {
     setSelectedNote((prev) => (prev?.id === note.id ? null : note))
@@ -305,6 +399,43 @@ function NotesPageInner() {
     })
   }
 
+  function renderGrouped() {
+    return entityStats.map(({ entity, notes: entityNotes }) => {
+      // When an entity filter is active, skip all other entity sections
+      if (activeEntityId && activeEntityId !== entity.id) return null
+      // Apply search filter within this group
+      const items = searchQuery
+        ? entityNotes.filter((n) =>
+            n.content.toLowerCase().includes(searchQuery.toLowerCase())
+          )
+        : entityNotes
+      if (items.length === 0) return null
+      return (
+        <div key={entity.id}>
+          <div
+            style={{
+              position: "sticky",
+              top: 0,
+              background: "var(--bg-base)",
+              zIndex: 2,
+              padding: "12px 24px 8px",
+              borderBottom: "1px solid var(--border-subtle)",
+              display: "flex",
+              alignItems: "baseline",
+              gap: "6px",
+            }}
+          >
+            <span style={{ fontSize: "14px", fontWeight: 600, color: "var(--text-1)" }}>
+              {entity.name}
+            </span>
+            <span style={{ fontSize: "13px", color: "var(--text-3)" }}>({items.length})</span>
+          </div>
+          {renderCards(items)}
+        </div>
+      )
+    })
+  }
+
   function renderMain() {
     if (loading) {
       return (
@@ -335,6 +466,9 @@ function NotesPageInner() {
     }
 
     if (filteredNotes.length === 0) {
+      const activeEntityName = activeEntityId
+        ? entityStats.find((s) => s.entity.id === activeEntityId)?.entity.name
+        : null
       return (
         <div
           style={{
@@ -349,13 +483,34 @@ function NotesPageInner() {
         >
           <span style={{ fontSize: "24px", opacity: 0.4 }}>◌</span>
           <p style={{ fontSize: "15px", margin: 0, color: "var(--text-2)" }}>
-            {searchQuery
+            {activeEntityName
+              ? `No notes linked to ${activeEntityName} yet`
+              : searchQuery
               ? "No notes match your search"
               : activeSpaceId
               ? `No notes in ${activeSpaceName ? `@${activeSpaceName}` : "this space"} yet`
               : "No notes saved yet"}
           </p>
-          {!searchQuery && !activeSpaceId && (
+          {activeEntityName && (
+            <button
+              onClick={() => setShowComposer(true)}
+              style={{
+                fontSize: "13px",
+                color: "var(--accent)",
+                background: "transparent",
+                border: "1px solid var(--border-accent)",
+                borderRadius: "8px",
+                padding: "6px 14px",
+                cursor: "pointer",
+                transition: "opacity 0.16s",
+              }}
+              onMouseEnter={(e) => { e.currentTarget.style.opacity = "0.7" }}
+              onMouseLeave={(e) => { e.currentTarget.style.opacity = "1" }}
+            >
+              Create note mentioning {activeEntityName}
+            </button>
+          )}
+          {!searchQuery && !activeSpaceId && !activeEntityName && (
             <p style={{ fontSize: "13px", margin: 0, color: "var(--text-3)" }}>
               Use{" "}
               <code
@@ -377,13 +532,22 @@ function NotesPageInner() {
     }
 
     return (
-      <div style={{ display: "flex", flexDirection: "column" }}>
-        {renderCards(filteredNotes)}
+      <div
+        style={{
+          display: "flex",
+          flexDirection: "column",
+          opacity: listFading ? 0 : 1,
+          transition: "opacity 150ms ease-in-out",
+        }}
+      >
+        {groupByEntity ? renderGrouped() : renderCards(filteredNotes)}
       </div>
     )
   }
 
   // ── Layout ────────────────────────────────────────────────────────────────
+
+  const showEntityTags = !loading && entityStats.length > 0
 
   return (
     <div
@@ -414,7 +578,7 @@ function NotesPageInner() {
               alignItems: "center",
               justifyContent: "space-between",
               gap: "12px",
-              marginBottom: "24px",
+              marginBottom: showEntityTags ? "16px" : "24px",
             }}
           >
             {/* Title / breadcrumb */}
@@ -463,8 +627,52 @@ function NotesPageInner() {
               )}
             </div>
 
-            {/* Right controls: search + new note */}
+            {/* Right controls: group + search + new note */}
             <div style={{ display: "flex", alignItems: "center", gap: "10px", flexShrink: 0 }}>
+              {/* Group by Entity toggle */}
+              <button
+                onClick={toggleGroupMode}
+                title={groupByEntity ? "Ungroup notes" : "Group by entity"}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "5px",
+                  padding: "7px 14px",
+                  background: groupByEntity ? "var(--accent-dim)" : "transparent",
+                  border: groupByEntity
+                    ? "1px solid var(--border-accent)"
+                    : "1px solid var(--border)",
+                  borderRadius: "8px",
+                  cursor: "pointer",
+                  color: groupByEntity ? "var(--accent)" : "var(--text-2)",
+                  fontSize: "14px",
+                  transition: "color 0.16s, border-color 0.16s, background 0.16s",
+                  flexShrink: 0,
+                }}
+                onMouseEnter={(e) => {
+                  if (!groupByEntity) {
+                    e.currentTarget.style.color = "var(--text-1)"
+                    e.currentTarget.style.borderColor = "var(--border-hover)"
+                    e.currentTarget.style.background = "var(--bg-surface)"
+                  }
+                }}
+                onMouseLeave={(e) => {
+                  if (!groupByEntity) {
+                    e.currentTarget.style.color = "var(--text-2)"
+                    e.currentTarget.style.borderColor = "var(--border)"
+                    e.currentTarget.style.background = "transparent"
+                  }
+                }}
+              >
+                <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                  <rect x="1" y="1" width="6" height="6" rx="1" />
+                  <rect x="9" y="1" width="6" height="6" rx="1" />
+                  <rect x="1" y="9" width="6" height="6" rx="1" />
+                  <rect x="9" y="9" width="6" height="6" rx="1" />
+                </svg>
+                Group
+              </button>
+
               {/* Search */}
               <div style={{ position: "relative" }}>
                 <span
@@ -555,12 +763,48 @@ function NotesPageInner() {
             </div>
           </div>
 
+          {/* Entity Tags Row */}
+          {showEntityTags && (
+            <div style={{ position: "relative", marginBottom: "16px" }}>
+              <div className="entity-tags-scroll" style={{ display: "flex", gap: "8px", overflowX: "auto", paddingBottom: "2px" }}>
+                <EntityTag
+                  label="All"
+                  count={notes.length}
+                  active={activeEntityId === null}
+                  onClick={() => setEntityFilter(null)}
+                />
+                {entityStats.map(({ entity, count }) => (
+                  <EntityTag
+                    key={entity.id}
+                    label={entity.name}
+                    count={count}
+                    active={activeEntityId === entity.id}
+                    onClick={() => setEntityFilter(activeEntityId === entity.id ? null : entity.id)}
+                  />
+                ))}
+              </div>
+              {/* Right fade mask */}
+              <div
+                style={{
+                  position: "absolute",
+                  right: 0,
+                  top: 0,
+                  bottom: "2px",
+                  width: "48px",
+                  background: "linear-gradient(to right, transparent, var(--bg-base))",
+                  pointerEvents: "none",
+                }}
+              />
+            </div>
+          )}
+
           {/* Divider line */}
           <div style={{ height: "1px", background: "var(--border-subtle)" }} />
         </div>
 
         {/* Cards scroll area */}
         <div
+          ref={scrollContainerRef}
           style={{
             flex: 1,
             overflowY: "auto",
