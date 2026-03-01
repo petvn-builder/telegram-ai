@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react"
 import type { TaskStatus, TaskPriority, TaskWithEntities } from "@/lib/tasks"
 import CreateTaskModal from "./CreateTaskModal"
+import TaskDetailModal from "./TaskDetailModal"
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -42,27 +43,41 @@ function TaskCardItem({
   task,
   onDragStart,
   onDelete,
+  onCheck,
+  onMoveBack,
+  onMoveForward,
+  onClick,
+  canMoveBack,
+  canMoveForward,
 }: {
   task: TaskWithEntities
   onDragStart: (taskId: string) => void
   onDelete: (taskId: string) => void
+  onCheck: (taskId: string) => void
+  onMoveBack: (taskId: string) => void
+  onMoveForward: (taskId: string) => void
+  onClick: (task: TaskWithEntities) => void
+  canMoveBack: boolean
+  canMoveForward: boolean
 }) {
   const visibleEntities = task.entities.slice(0, 3)
   const overflow = task.entities.length - visibleEntities.length
   const dueInfo = task.due_date ? formatDueDate(task.due_date) : null
+  const isDone = task.status === "done"
 
   return (
     <div
       draggable
       onDragStart={() => onDragStart(task.id)}
+      onClick={() => onClick(task)}
       style={{
         background: "var(--bg-elevated)",
         border: "1px solid var(--border)",
         borderRadius: "8px",
         padding: "12px 14px",
-        cursor: "grab",
+        cursor: "pointer",
         boxShadow: "0 1px 3px rgba(0,0,0,0.05)",
-        transition: "box-shadow 0.18s, opacity 0.18s",
+        transition: "box-shadow 0.18s",
         userSelect: "none",
       }}
       onMouseEnter={(e) => { e.currentTarget.style.boxShadow = "0 2px 8px rgba(0,0,0,0.09)" }}
@@ -70,6 +85,34 @@ function TaskCardItem({
     >
       {/* Title row */}
       <div style={{ display: "flex", alignItems: "flex-start", gap: "8px", marginBottom: "8px" }}>
+        {/* Checkbox */}
+        <button
+          onClick={(e) => { e.stopPropagation(); onCheck(task.id) }}
+          title={isDone ? "Mark undone" : "Mark done"}
+          style={{
+            width: "15px",
+            height: "15px",
+            borderRadius: "50%",
+            border: `2px solid ${isDone ? "var(--accent)" : "var(--border)"}`,
+            background: isDone ? "var(--accent)" : "transparent",
+            flexShrink: 0,
+            marginTop: "3px",
+            cursor: "pointer",
+            padding: 0,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            transition: "all 0.18s",
+          }}
+        >
+          {isDone && (
+            <svg width="7" height="7" viewBox="0 0 8 8" fill="none">
+              <polyline points="1,4 3,6 7,2" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          )}
+        </button>
+
+        {/* Priority dot */}
         <span
           title={task.priority}
           style={{
@@ -81,19 +124,21 @@ function TaskCardItem({
             marginTop: "6px",
           }}
         />
+
         <p style={{
           margin: 0,
           fontSize: "14px",
           lineHeight: 1.5,
-          color: task.status === "done" ? "var(--text-3)" : "var(--text-1)",
-          textDecoration: task.status === "done" ? "line-through" : "none",
+          color: isDone ? "var(--text-3)" : "var(--text-1)",
+          textDecoration: isDone ? "line-through" : "none",
           flex: 1,
           wordBreak: "break-word",
         }}>
           {task.title}
         </p>
+
         <button
-          onClick={() => onDelete(task.id)}
+          onClick={(e) => { e.stopPropagation(); onDelete(task.id) }}
           style={{
             background: "transparent",
             border: "none",
@@ -117,7 +162,30 @@ function TaskCardItem({
       </div>
 
       {/* Meta row */}
-      <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: "6px", flexWrap: "wrap" }}>
+        {/* Back arrow */}
+        {canMoveBack && (
+          <button
+            onClick={(e) => { e.stopPropagation(); onMoveBack(task.id) }}
+            title="Move to previous column"
+            style={{
+              background: "transparent",
+              border: "1px solid var(--border)",
+              borderRadius: "4px",
+              cursor: "pointer",
+              color: "var(--text-3)",
+              padding: "1px 5px",
+              fontSize: "11px",
+              lineHeight: 1.4,
+              transition: "color 0.18s, border-color 0.18s",
+            }}
+            onMouseEnter={(e) => { e.currentTarget.style.color = "var(--text-1)"; e.currentTarget.style.borderColor = "var(--text-3)" }}
+            onMouseLeave={(e) => { e.currentTarget.style.color = "var(--text-3)"; e.currentTarget.style.borderColor = "var(--border)" }}
+          >
+            ←
+          </button>
+        )}
+
         {/* Due date */}
         {dueInfo && (
           <span style={{
@@ -160,6 +228,32 @@ function TaskCardItem({
         {overflow > 0 && (
           <span style={{ fontSize: "11px", color: "var(--text-3)" }}>+{overflow}</span>
         )}
+
+        {/* Spacer */}
+        <span style={{ flex: 1 }} />
+
+        {/* Forward arrow */}
+        {canMoveForward && (
+          <button
+            onClick={(e) => { e.stopPropagation(); onMoveForward(task.id) }}
+            title="Move to next column"
+            style={{
+              background: "transparent",
+              border: "1px solid var(--border)",
+              borderRadius: "4px",
+              cursor: "pointer",
+              color: "var(--text-3)",
+              padding: "1px 5px",
+              fontSize: "11px",
+              lineHeight: 1.4,
+              transition: "color 0.18s, border-color 0.18s",
+            }}
+            onMouseEnter={(e) => { e.currentTarget.style.color = "var(--text-1)"; e.currentTarget.style.borderColor = "var(--text-3)" }}
+            onMouseLeave={(e) => { e.currentTarget.style.color = "var(--text-3)"; e.currentTarget.style.borderColor = "var(--border)" }}
+          >
+            →
+          </button>
+        )}
       </div>
     </div>
   )
@@ -177,6 +271,12 @@ function TaskColumn({
   onDragLeave,
   onDragStart,
   onDelete,
+  onCheck,
+  onMoveBack,
+  onMoveForward,
+  onClickTask,
+  onAddTask,
+  colIndex,
 }: {
   status: TaskStatus
   label: string
@@ -187,8 +287,16 @@ function TaskColumn({
   onDragLeave: () => void
   onDragStart: (taskId: string) => void
   onDelete: (taskId: string) => void
+  onCheck: (taskId: string) => void
+  onMoveBack: (taskId: string) => void
+  onMoveForward: (taskId: string) => void
+  onClickTask: (task: TaskWithEntities) => void
+  onAddTask: () => void
+  colIndex: number
 }) {
   const wipWarning = status === "doing" && tasks.length > 3
+  const canMoveBack = colIndex > 0
+  const canMoveForward = colIndex < COLUMNS.length - 1
 
   return (
     <div
@@ -253,9 +361,44 @@ function TaskColumn({
             task={task}
             onDragStart={onDragStart}
             onDelete={onDelete}
+            onCheck={onCheck}
+            onMoveBack={onMoveBack}
+            onMoveForward={onMoveForward}
+            onClick={onClickTask}
+            canMoveBack={canMoveBack}
+            canMoveForward={canMoveForward}
           />
         ))}
       </div>
+
+      {/* Add task button */}
+      <button
+        onClick={onAddTask}
+        style={{
+          marginTop: "6px",
+          padding: "7px 10px",
+          borderRadius: "7px",
+          background: "transparent",
+          border: "1px dashed var(--border)",
+          color: "var(--text-3)",
+          fontSize: "12px",
+          cursor: "pointer",
+          textAlign: "left",
+          transition: "color 0.18s, border-color 0.18s, background 0.18s",
+        }}
+        onMouseEnter={(e) => {
+          e.currentTarget.style.color = "var(--text-1)"
+          e.currentTarget.style.borderColor = "var(--accent)"
+          e.currentTarget.style.background = "var(--accent-dim)"
+        }}
+        onMouseLeave={(e) => {
+          e.currentTarget.style.color = "var(--text-3)"
+          e.currentTarget.style.borderColor = "var(--border)"
+          e.currentTarget.style.background = "transparent"
+        }}
+      >
+        + Add task
+      </button>
     </div>
   )
 }
@@ -265,7 +408,8 @@ function TaskColumn({
 export default function TasksPage() {
   const [tasks, setTasks] = useState<TaskWithEntities[]>([])
   const [loading, setLoading] = useState(true)
-  const [showModal, setShowModal] = useState(false)
+  const [createInColumn, setCreateInColumn] = useState<TaskStatus | null>(null)
+  const [selectedTask, setSelectedTask] = useState<TaskWithEntities | null>(null)
   const [dragId, setDragId] = useState<string | null>(null)
   const [dragOver, setDragOver] = useState<TaskStatus | null>(null)
 
@@ -295,8 +439,29 @@ export default function TasksPage() {
 
   function deleteTask(taskId: string) {
     setTasks((prev) => prev.filter((t) => t.id !== taskId))
+    setSelectedTask((prev) => prev?.id === taskId ? null : prev)
     fetch(`/api/tasks/${taskId}`, { method: "DELETE" })
       .catch(() => fetchTasks())
+  }
+
+  function handleCheck(taskId: string) {
+    const task = tasks.find((t) => t.id === taskId)
+    if (!task) return
+    moveTask(taskId, task.status === "done" ? "inbox" : "done")
+  }
+
+  function handleMoveBack(taskId: string) {
+    const task = tasks.find((t) => t.id === taskId)
+    if (!task) return
+    const idx = COLUMNS.findIndex((c) => c.status === task.status)
+    if (idx > 0) moveTask(taskId, COLUMNS[idx - 1].status)
+  }
+
+  function handleMoveForward(taskId: string) {
+    const task = tasks.find((t) => t.id === taskId)
+    if (!task) return
+    const idx = COLUMNS.findIndex((c) => c.status === task.status)
+    if (idx < COLUMNS.length - 1) moveTask(taskId, COLUMNS[idx + 1].status)
   }
 
   function handleDragStart(taskId: string) {
@@ -321,6 +486,11 @@ export default function TasksPage() {
   function handleDragEnd() {
     setDragId(null)
     setDragOver(null)
+  }
+
+  function handleTaskUpdated(updated: TaskWithEntities) {
+    setTasks((prev) => prev.map((t) => t.id === updated.id ? updated : t))
+    setSelectedTask(null)
   }
 
   const totalActive = tasks.filter((t) => t.status !== "done").length
@@ -363,7 +533,7 @@ export default function TasksPage() {
         </div>
 
         <button
-          onClick={() => setShowModal(true)}
+          onClick={() => setCreateInColumn("inbox")}
           style={{
             display: "flex",
             alignItems: "center",
@@ -401,7 +571,7 @@ export default function TasksPage() {
           paddingBottom: "24px",
           alignItems: "flex-start",
         }}>
-          {COLUMNS.map(({ status, label }) => {
+          {COLUMNS.map(({ status, label }, colIndex) => {
             const columnTasks = tasks.filter((t) => t.status === status)
             return (
               <TaskColumn
@@ -415,13 +585,19 @@ export default function TasksPage() {
                 onDragLeave={() => setDragOver(null)}
                 onDragStart={handleDragStart}
                 onDelete={deleteTask}
+                onCheck={handleCheck}
+                onMoveBack={handleMoveBack}
+                onMoveForward={handleMoveForward}
+                onClickTask={setSelectedTask}
+                onAddTask={() => setCreateInColumn(status)}
+                colIndex={colIndex}
               />
             )
           })}
         </div>
       )}
 
-      {/* Show delete button on card hover (CSS trick via inline style injection) */}
+      {/* Show delete button on card hover */}
       <style>{`
         div:hover > div > .task-delete-btn,
         div:hover > .task-delete-btn {
@@ -429,13 +605,23 @@ export default function TasksPage() {
         }
       `}</style>
 
-      {showModal && (
+      {createInColumn !== null && (
         <CreateTaskModal
-          onClose={() => setShowModal(false)}
+          onClose={() => setCreateInColumn(null)}
+          initialStatus={createInColumn}
           onCreated={(task) => {
             setTasks((prev) => [task, ...prev])
-            setShowModal(false)
+            setCreateInColumn(null)
           }}
+        />
+      )}
+
+      {selectedTask && (
+        <TaskDetailModal
+          task={selectedTask}
+          onClose={() => setSelectedTask(null)}
+          onUpdated={handleTaskUpdated}
+          onDeleted={deleteTask}
         />
       )}
     </div>
