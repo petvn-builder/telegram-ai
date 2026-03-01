@@ -26,6 +26,17 @@ function shortDate(iso: string): string {
   return new Date(iso).toLocaleDateString("en", { month: "short", day: "numeric" })
 }
 
+function dateLabel(iso: string): string {
+  const d = new Date(iso)
+  d.setHours(0, 0, 0, 0)
+  const today = new Date(); today.setHours(0, 0, 0, 0)
+  const yesterday = new Date(today); yesterday.setDate(today.getDate() - 1)
+  if (d.getTime() === today.getTime()) return "Today"
+  if (d.getTime() === yesterday.getTime()) return "Yesterday"
+  const sameYear = d.getFullYear() === today.getFullYear()
+  return d.toLocaleDateString("en-US", { month: "short", day: "numeric", ...(sameYear ? {} : { year: "numeric" }) })
+}
+
 function titleAndBody(content: string): { title: string; body: string } {
   const trimmed = content.trim()
   const newlineIdx = trimmed.indexOf("\n")
@@ -163,6 +174,7 @@ function NotesPageInner() {
   const searchParams = useSearchParams()
   const router = useRouter()
   const activeSpaceId = searchParams.get("space")
+  const openNoteId = searchParams.get("open")
 
   // ── Core data
   const [notes, setNotes] = useState<NoteWithEntities[]>([])
@@ -197,6 +209,7 @@ function NotesPageInner() {
   const [addingTask, setAddingTask] = useState(false)
   const [editingTaskId, setEditingTaskId] = useState<string | null>(null)
   const [editingTaskTitle, setEditingTaskTitle] = useState("")
+  const [pendingTasks, setPendingTasks] = useState<{ title: string; due_date: string | null }[]>([])
 
   // ── Panel delete
   const [confirmDelete, setConfirmDelete] = useState(false)
@@ -258,6 +271,17 @@ function NotesPageInner() {
   useEffect(() => {
     setActiveEntityId(searchParams.get("entity"))
   }, [searchParams])
+
+  // Open note in panel when navigated with ?open=NOTE_ID
+  useEffect(() => {
+    if (!openNoteId || loading || notes.length === 0) return
+    const note = notes.find((n) => n.id === openNoteId)
+    if (note) {
+      setSelectedNote(note)
+      setPanelMode("edit")
+      router.replace("/notes", { scroll: false })
+    }
+  }, [openNoteId, loading, notes]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Panel open/close effects
   useEffect(() => {
@@ -340,6 +364,20 @@ function NotesPageInner() {
         const note: NoteWithEntities = await res.json()
         justAddedId.current = note.id
         setNotes((prev) => [note, ...prev])
+        // Post any pending tasks linked to the new note
+        if (pendingTasks.length > 0) {
+          const results = await Promise.all(
+            pendingTasks.map((pt) =>
+              fetch("/api/tasks", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ title: pt.title, due_date: pt.due_date, linked_note_id: note.id, status: "inbox" }),
+              }).then((r) => r.ok ? r.json() : null)
+            )
+          )
+          setNoteTasks(results.filter(Boolean))
+          setPendingTasks([])
+        }
         setSelectedNote(note)
         setPanelMode("edit")
       }
@@ -372,7 +410,14 @@ function NotesPageInner() {
 
   // ── Tasks
   async function handleAddTask() {
-    if (!taskTitle.trim() || !selectedNote || addingTask) return
+    if (!taskTitle.trim() || addingTask) return
+    if (panelMode === "create") {
+      setPendingTasks((prev) => [...prev, { title: taskTitle.trim(), due_date: taskDue || null }])
+      setTaskTitle("")
+      setTaskDue("")
+      return
+    }
+    if (!selectedNote) return
     setAddingTask(true)
     try {
       const res = await fetch("/api/tasks", {
@@ -472,6 +517,10 @@ function NotesPageInner() {
     setPanelText("")
     setPanelSpaces([])
     setPanelSaved(false)
+    setPendingTasks([])
+    setNoteTasks([])
+    setTaskTitle("")
+    setTaskDue("")
     setPanelMode("create")
   }
 
@@ -546,6 +595,31 @@ function NotesPageInner() {
     })
   }
 
+  function renderCardsWithDates(items: NoteWithEntities[]) {
+    const result: React.ReactNode[] = []
+    let lastLabel = ""
+    items.forEach((note, idx) => {
+      const label = dateLabel(note.created_at)
+      if (label !== lastLabel) {
+        lastLabel = label
+        result.push(
+          <div key={`date-${label}`} style={{ padding: "10px 24px 6px", fontSize: "11px", fontWeight: 600, color: "var(--text-3)", textTransform: "uppercase", letterSpacing: "0.06em", fontFamily: "var(--font-geist-mono, monospace)" }}>
+            {label}
+          </div>
+        )
+      }
+      const isNew = note.id === justAddedId.current
+      result.push(
+        <div key={note.id} style={isNew ? { animation: "fadeInUp 180ms ease-in-out both" } : undefined}
+          onAnimationEnd={() => { if (isNew) justAddedId.current = null }}>
+          <NoteCard note={note} selected={selectedNote?.id === note.id && panelMode === "edit"}
+            onClick={() => handleNoteClick(note)} isLast={idx === items.length - 1} />
+        </div>
+      )
+    })
+    return result
+  }
+
   function renderGrouped() {
     return entityStats.map(({ entity, notes: entityNotes }) => {
       if (activeEntityId && activeEntityId !== entity.id) return null
@@ -599,7 +673,7 @@ function NotesPageInner() {
     }
     return (
       <div style={{ display: "flex", flexDirection: "column", opacity: listFading ? 0 : 1, transition: "opacity 150ms ease-in-out" }}>
-        {groupByEntity ? renderGrouped() : renderCards(filteredNotes)}
+        {groupByEntity ? renderGrouped() : renderCardsWithDates(filteredNotes)}
       </div>
     )
   }
@@ -608,7 +682,7 @@ function NotesPageInner() {
   const showEntityTags = !loading && entityStats.length > 0
   const panelOpen = panelMode !== null
   const tasksDone = noteTasks.filter((t) => t.status === "done").length
-  const tasksTotal = noteTasks.length
+  const tasksTotal = panelMode === "create" ? pendingTasks.length : noteTasks.length
 
   // ── Icon buttons shared style
   const iconBtnStyle: React.CSSProperties = {
@@ -795,8 +869,8 @@ function NotesPageInner() {
               />
             </div>
 
-            {/* ── C. Tasks section (edit mode only) ── */}
-            {panelMode === "edit" && (
+            {/* ── C. Tasks section ── */}
+            {panelMode !== null && (
               <div style={{ padding: "16px 24px", borderTop: "1px solid var(--border-subtle)" }}>
                 {/* Header */}
                 <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "12px" }}>
@@ -806,19 +880,47 @@ function NotesPageInner() {
                     </span>
                     {tasksTotal > 0 && (
                       <span style={{ fontSize: "11px", color: "var(--text-3)", fontFamily: "var(--font-geist-mono, monospace)" }}>
-                        {tasksDone}/{tasksTotal}
+                        {panelMode === "create" ? tasksTotal : `${tasksDone}/${tasksTotal}`}
                       </span>
                     )}
                   </div>
-                  <Link href="/tasks" style={{ fontSize: "12px", color: "var(--accent)", textDecoration: "none", transition: "opacity 0.15s" }}
-                    onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.opacity = "0.7" }}
-                    onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.opacity = "1" }}>
-                    Tasks →
-                  </Link>
+                  {panelMode === "edit" && (
+                    <Link href="/tasks" style={{ fontSize: "12px", color: "var(--accent)", textDecoration: "none", transition: "opacity 0.15s" }}
+                      onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.opacity = "0.7" }}
+                      onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.opacity = "1" }}>
+                      Tasks →
+                    </Link>
+                  )}
                 </div>
 
-                {/* Task rows */}
-                {noteTasks.length > 0 && (
+                {/* Pending task rows (create mode) */}
+                {panelMode === "create" && pendingTasks.length > 0 && (
+                  <div style={{ display: "flex", flexDirection: "column", marginBottom: "14px" }}>
+                    {pendingTasks.map((pt, idx) => (
+                      <div key={idx} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "7px 0", borderBottom: "1px solid var(--border-subtle)", gap: "10px" }}>
+                        <span style={{ fontSize: "13px", color: "var(--text-1)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1 }}>
+                          {pt.title}
+                        </span>
+                        <div style={{ display: "flex", alignItems: "center", gap: "8px", flexShrink: 0 }}>
+                          {pt.due_date && (
+                            <span style={{ fontSize: "11px", color: "var(--text-3)", fontFamily: "var(--font-geist-mono, monospace)" }}>
+                              {shortDate(pt.due_date)}
+                            </span>
+                          )}
+                          <button onClick={() => setPendingTasks((prev) => prev.filter((_, i) => i !== idx))}
+                            style={{ background: "transparent", border: "none", cursor: "pointer", color: "var(--text-3)", fontSize: "14px", lineHeight: 1, padding: "2px", borderRadius: "4px", transition: "color 0.15s" }}
+                            onMouseEnter={(e) => { e.currentTarget.style.color = "#FF453A" }}
+                            onMouseLeave={(e) => { e.currentTarget.style.color = "var(--text-3)" }}>
+                            ×
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* Real task rows (edit mode) */}
+                {panelMode === "edit" && noteTasks.length > 0 && (
                   <div style={{ display: "flex", flexDirection: "column", marginBottom: "14px" }}>
                     {noteTasks.map((task) => {
                       const done = task.status === "done"
@@ -872,10 +974,14 @@ function NotesPageInner() {
                     <input type="text" placeholder="Add a task…" value={taskTitle}
                       onChange={(e) => setTaskTitle(e.target.value)}
                       onKeyDown={(e) => { if (e.key === "Enter") handleAddTask() }}
+                      onBlur={() => { if (taskTitle.trim()) handleAddTask() }}
                       style={{ flex: 1, border: "1px solid var(--border)", borderRadius: "8px", padding: "7px 10px", fontSize: "13px", color: "var(--text-1)", background: "var(--bg-surface)", outline: "none", fontFamily: "inherit", transition: "border-color 0.15s" }}
-                      onFocus={(e) => { e.currentTarget.style.borderColor = "var(--border-hover)" }}
-                      onBlur={(e) => { e.currentTarget.style.borderColor = "var(--border)" }} />
-                    <input type="date" value={taskDue} onChange={(e) => setTaskDue(e.target.value)}
+                      onFocus={(e) => { e.currentTarget.style.borderColor = "var(--border-hover)" }} />
+                    <input type="date" value={taskDue}
+                      onChange={(e) => {
+                        setTaskDue(e.target.value)
+                        if (taskTitle.trim()) setTimeout(handleAddTask, 0)
+                      }}
                       style={{ border: "1px solid var(--border)", borderRadius: "8px", padding: "7px 8px", fontSize: "12px", background: "var(--bg-surface)", color: taskDue ? "var(--text-1)" : "var(--text-3)", outline: "none", fontFamily: "inherit", width: "110px", flexShrink: 0 }} />
                   </div>
                   <div style={{ display: "flex", justifyContent: "flex-end" }}>

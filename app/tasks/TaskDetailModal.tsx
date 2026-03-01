@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useRef, useState } from "react"
+import Link from "next/link"
 import type { TaskPriority, TaskStatus, TaskWithEntities } from "@/lib/tasks"
 
 interface Props {
@@ -237,7 +238,12 @@ export default function TaskDetailModal({ task, onClose, onUpdated, onDeleted }:
 
           {/* Note link */}
           {task.linked_note_id && (
-            <p style={{ margin: 0, fontSize: "12px", color: "var(--text-3)" }}>📄 Linked to a note</p>
+            <Link href={`/notes?open=${task.linked_note_id}`} onClick={onClose}
+              style={{ display: "inline-flex", alignItems: "center", gap: "5px", fontSize: "12px", color: "var(--accent)", textDecoration: "none", transition: "opacity 0.15s" }}
+              onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.opacity = "0.7" }}
+              onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.opacity = "1" }}>
+              📄 View linked note →
+            </Link>
           )}
 
           {/* Footer */}
