@@ -7,12 +7,20 @@ import TaskDetailModal from "./TaskDetailModal"
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
+// Logical order used for ← → arrow navigation
 const COLUMNS: Array<{ status: TaskStatus; label: string }> = [
-  { status: "inbox", label: "Inbox" },
-  { status: "next", label: "Next" },
-  { status: "doing", label: "Doing" },
+  { status: "inbox",   label: "Inbox"   },
+  { status: "next",    label: "Next"    },
+  { status: "doing",   label: "Doing"   },
   { status: "waiting", label: "Waiting" },
-  { status: "done", label: "Done" },
+  { status: "done",    label: "Done"    },
+]
+
+// Visual layout: 3 outer columns, some stacked
+const BOARD_LAYOUT: Array<Array<{ status: TaskStatus; label: string }>> = [
+  [{ status: "next", label: "Next" }, { status: "inbox", label: "Inbox" }],
+  [{ status: "doing", label: "Doing" }],
+  [{ status: "done", label: "Done" }, { status: "waiting", label: "Waiting" }],
 ]
 
 const PRIORITY_DOT: Record<TaskPriority, string> = {
@@ -186,7 +194,6 @@ function TaskCardItem({
           </button>
         )}
 
-        {/* Due date */}
         {dueInfo && (
           <span style={{
             fontSize: "11px",
@@ -196,32 +203,24 @@ function TaskCardItem({
             alignItems: "center",
             gap: "3px",
           }}>
-            {dueInfo.overdue ? "⚠ " : ""}
-            {dueInfo.label}
+            {dueInfo.overdue ? "⚠ " : ""}{dueInfo.label}
           </span>
         )}
 
-        {/* Linked note icon */}
         {task.linked_note_id && (
-          <span title="Linked to a note" style={{ color: "var(--text-3)", fontSize: "11px" }}>
-            📄
-          </span>
+          <span title="Linked to a note" style={{ color: "var(--text-3)", fontSize: "11px" }}>📄</span>
         )}
 
-        {/* Entity badges */}
         {visibleEntities.map((e) => (
-          <span
-            key={e.id}
-            style={{
-              fontSize: "11px",
-              padding: "2px 7px",
-              borderRadius: "999px",
-              background: "rgba(91,110,174,0.08)",
-              color: "var(--accent)",
-              border: "1px solid rgba(91,110,174,0.16)",
-              whiteSpace: "nowrap",
-            }}
-          >
+          <span key={e.id} style={{
+            fontSize: "11px",
+            padding: "2px 7px",
+            borderRadius: "999px",
+            background: "rgba(91,110,174,0.08)",
+            color: "var(--accent)",
+            border: "1px solid rgba(91,110,174,0.16)",
+            whiteSpace: "nowrap",
+          }}>
             {e.name}
           </span>
         ))}
@@ -229,7 +228,6 @@ function TaskCardItem({
           <span style={{ fontSize: "11px", color: "var(--text-3)" }}>+{overflow}</span>
         )}
 
-        {/* Spacer */}
         <span style={{ flex: 1 }} />
 
         {/* Forward arrow */}
@@ -299,21 +297,13 @@ function TaskColumn({
   const canMoveForward = colIndex < COLUMNS.length - 1
 
   return (
-    <div
-      style={{
-        width: "280px",
-        flexShrink: 0,
-        display: "flex",
-        flexDirection: "column",
-        gap: "0",
-      }}
-    >
-      {/* Column header */}
+    <div style={{ display: "flex", flexDirection: "column", gap: "0" }}>
+      {/* Column header with inline + button */}
       <div style={{
         display: "flex",
         alignItems: "center",
         gap: "8px",
-        marginBottom: "10px",
+        marginBottom: "8px",
         padding: "0 2px",
       }}>
         <span style={{ fontSize: "13px", fontWeight: 600, color: "var(--text-2)", letterSpacing: "0.02em" }}>
@@ -335,6 +325,35 @@ function TaskColumn({
             ⚡ WIP
           </span>
         )}
+        <span style={{ flex: 1 }} />
+        {/* + Add task button in header */}
+        <button
+          onClick={onAddTask}
+          title={`Add task to ${label}`}
+          style={{
+            background: "transparent",
+            border: "1px solid var(--border)",
+            borderRadius: "6px",
+            cursor: "pointer",
+            color: "var(--text-3)",
+            padding: "2px 8px",
+            fontSize: "16px",
+            lineHeight: 1.2,
+            transition: "color 0.18s, border-color 0.18s, background 0.18s",
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.color = "var(--accent)"
+            e.currentTarget.style.borderColor = "var(--accent)"
+            e.currentTarget.style.background = "var(--accent-dim)"
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.color = "var(--text-3)"
+            e.currentTarget.style.borderColor = "var(--border)"
+            e.currentTarget.style.background = "transparent"
+          }}
+        >
+          +
+        </button>
       </div>
 
       {/* Drop zone */}
@@ -344,7 +363,7 @@ function TaskColumn({
         onDragLeave={onDragLeave}
         style={{
           flex: 1,
-          minHeight: "200px",
+          minHeight: "160px",
           display: "flex",
           flexDirection: "column",
           gap: "8px",
@@ -370,35 +389,6 @@ function TaskColumn({
           />
         ))}
       </div>
-
-      {/* Add task button */}
-      <button
-        onClick={onAddTask}
-        style={{
-          marginTop: "6px",
-          padding: "7px 10px",
-          borderRadius: "7px",
-          background: "transparent",
-          border: "1px dashed var(--border)",
-          color: "var(--text-3)",
-          fontSize: "12px",
-          cursor: "pointer",
-          textAlign: "left",
-          transition: "color 0.18s, border-color 0.18s, background 0.18s",
-        }}
-        onMouseEnter={(e) => {
-          e.currentTarget.style.color = "var(--text-1)"
-          e.currentTarget.style.borderColor = "var(--accent)"
-          e.currentTarget.style.background = "var(--accent-dim)"
-        }}
-        onMouseLeave={(e) => {
-          e.currentTarget.style.color = "var(--text-3)"
-          e.currentTarget.style.borderColor = "var(--border)"
-          e.currentTarget.style.background = "transparent"
-        }}
-      >
-        + Add task
-      </button>
     </div>
   )
 }
@@ -440,8 +430,7 @@ export default function TasksPage() {
   function deleteTask(taskId: string) {
     setTasks((prev) => prev.filter((t) => t.id !== taskId))
     setSelectedTask((prev) => prev?.id === taskId ? null : prev)
-    fetch(`/api/tasks/${taskId}`, { method: "DELETE" })
-      .catch(() => fetchTasks())
+    fetch(`/api/tasks/${taskId}`, { method: "DELETE" }).catch(() => fetchTasks())
   }
 
   function handleCheck(taskId: string) {
@@ -464,10 +453,6 @@ export default function TasksPage() {
     if (idx < COLUMNS.length - 1) moveTask(taskId, COLUMNS[idx + 1].status)
   }
 
-  function handleDragStart(taskId: string) {
-    setDragId(taskId)
-  }
-
   function handleDragOver(e: React.DragEvent, status: TaskStatus) {
     e.preventDefault()
     setDragOver(status)
@@ -479,11 +464,6 @@ export default function TasksPage() {
       const task = tasks.find((t) => t.id === dragId)
       if (task && task.status !== status) moveTask(dragId, status)
     }
-    setDragId(null)
-    setDragOver(null)
-  }
-
-  function handleDragEnd() {
     setDragId(null)
     setDragOver(null)
   }
@@ -505,7 +485,7 @@ export default function TasksPage() {
         display: "flex",
         flexDirection: "column",
       }}
-      onDragEnd={handleDragEnd}
+      onDragEnd={() => { setDragId(null); setDragOver(null) }}
     >
       {/* Header */}
       <div style={{
@@ -513,22 +493,14 @@ export default function TasksPage() {
         alignItems: "baseline",
         justifyContent: "space-between",
         marginBottom: "32px",
-        maxWidth: "1500px",
+        maxWidth: "1000px",
       }}>
         <div>
-          <h1 style={{
-            margin: "0 0 4px",
-            fontSize: "22px",
-            fontWeight: 600,
-            color: "var(--text-1)",
-            letterSpacing: "-0.02em",
-          }}>
+          <h1 style={{ margin: "0 0 4px", fontSize: "22px", fontWeight: 600, color: "var(--text-1)", letterSpacing: "-0.02em" }}>
             Tasks
           </h1>
           {!loading && (
-            <p style={{ margin: 0, fontSize: "13px", color: "var(--text-3)" }}>
-              {totalActive} active
-            </p>
+            <p style={{ margin: 0, fontSize: "13px", color: "var(--text-3)" }}>{totalActive} active</p>
           )}
         </div>
 
@@ -555,49 +527,59 @@ export default function TasksPage() {
         </button>
       </div>
 
-      {/* Loading */}
       {loading && (
-        <div style={{ color: "var(--text-3)", fontSize: "14px", padding: "48px 0" }}>
-          Loading…
-        </div>
+        <div style={{ color: "var(--text-3)", fontSize: "14px", padding: "48px 0" }}>Loading…</div>
       )}
 
-      {/* Board */}
+      {/* Board — 3 outer columns */}
       {!loading && (
         <div style={{
           display: "flex",
-          gap: "16px",
+          gap: "20px",
           overflowX: "auto",
           paddingBottom: "24px",
           alignItems: "flex-start",
         }}>
-          {COLUMNS.map(({ status, label }, colIndex) => {
-            const columnTasks = tasks.filter((t) => t.status === status)
-            return (
-              <TaskColumn
-                key={status}
-                status={status}
-                label={label}
-                tasks={columnTasks}
-                isDragOver={dragOver === status}
-                onDragOver={(e) => handleDragOver(e, status)}
-                onDrop={(e) => handleDrop(e, status)}
-                onDragLeave={() => setDragOver(null)}
-                onDragStart={handleDragStart}
-                onDelete={deleteTask}
-                onCheck={handleCheck}
-                onMoveBack={handleMoveBack}
-                onMoveForward={handleMoveForward}
-                onClickTask={setSelectedTask}
-                onAddTask={() => setCreateInColumn(status)}
-                colIndex={colIndex}
-              />
-            )
-          })}
+          {BOARD_LAYOUT.map((boardCol, bcIdx) => (
+            <div
+              key={bcIdx}
+              style={{
+                width: "300px",
+                flexShrink: 0,
+                display: "flex",
+                flexDirection: "column",
+                gap: "20px",
+              }}
+            >
+              {boardCol.map(({ status, label }) => {
+                const colIndex = COLUMNS.findIndex((c) => c.status === status)
+                const columnTasks = tasks.filter((t) => t.status === status)
+                return (
+                  <TaskColumn
+                    key={status}
+                    status={status}
+                    label={label}
+                    tasks={columnTasks}
+                    isDragOver={dragOver === status}
+                    onDragOver={(e) => handleDragOver(e, status)}
+                    onDrop={(e) => handleDrop(e, status)}
+                    onDragLeave={() => setDragOver(null)}
+                    onDragStart={(id) => setDragId(id)}
+                    onDelete={deleteTask}
+                    onCheck={handleCheck}
+                    onMoveBack={handleMoveBack}
+                    onMoveForward={handleMoveForward}
+                    onClickTask={setSelectedTask}
+                    onAddTask={() => setCreateInColumn(status)}
+                    colIndex={colIndex}
+                  />
+                )
+              })}
+            </div>
+          ))}
         </div>
       )}
 
-      {/* Show delete button on card hover */}
       <style>{`
         div:hover > div > .task-delete-btn,
         div:hover > .task-delete-btn {
