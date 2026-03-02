@@ -1,12 +1,12 @@
 "use client"
 
 import { usePathname } from "next/navigation"
-import { lazy, Suspense } from "react"
+import dynamic from "next/dynamic"
 import Sidebar from "./Sidebar"
 import { useAiPanel } from "./AiPanelContext"
 
-const AiPanel = lazy(() => import("./AiPanel"))
-const CommandBar = lazy(() => import("./CommandBar"))
+const AiPanel = dynamic(() => import("./AiPanel"), { ssr: false })
+const CommandBar = dynamic(() => import("./CommandBar"), { ssr: false })
 
 const AUTH_PATHS = ["/login", "/signup"]
 
@@ -43,15 +43,11 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         {children}
       </main>
 
-      {/* AI Panel — lazy loaded, only mounts when open */}
-      <Suspense fallback={null}>
-        {aiPanelOpen && <AiPanel />}
-      </Suspense>
+      {/* AI Panel — client-only, only mounts when open */}
+      {aiPanelOpen && <AiPanel />}
 
-      {/* Command Bar — always mounted, hidden until ⌘K */}
-      <Suspense fallback={null}>
-        <CommandBar />
-      </Suspense>
+      {/* Command Bar — client-only, hidden until ⌘K */}
+      <CommandBar />
     </div>
   )
 }
