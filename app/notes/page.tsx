@@ -164,7 +164,9 @@ function EntityTag({ label, count, active, onClick }: EntityTagProps) {
 
 // ── Constants ──────────────────────────────────────────────────────────────────
 
-const DETAIL_W = 440
+const DETAIL_W_DEFAULT = 560
+const DETAIL_W_MIN = 360
+const DETAIL_W_MAX = 900
 
 // ── Main page ─────────────────────────────────────────────────────────────────
 
@@ -206,7 +208,7 @@ function NotesPageInner() {
   const [noteTasks, setNoteTasks] = useState<TaskWithEntities[]>([])
   const [taskTitle, setTaskTitle] = useState("")
   const [taskDue, setTaskDue] = useState("")
-  const [addingTask, setAddingTask] = useState(false)
+
   const [editingTaskId, setEditingTaskId] = useState<string | null>(null)
   const [editingTaskTitle, setEditingTaskTitle] = useState("")
   const [pendingTasks, setPendingTasks] = useState<{ title: string; due_date: string | null }[]>([])
@@ -214,6 +216,12 @@ function NotesPageInner() {
   // ── Panel delete
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [deleting, setDeleting] = useState(false)
+
+  // ── Panel width (resizable)
+  const [panelWidth, setPanelWidth] = useState(DETAIL_W_DEFAULT)
+  const isResizing = useRef(false)
+  const resizeStartX = useRef(0)
+  const resizeStartW = useRef(0)
 
   // ── Refs
   const detailRef = useRef<HTMLDivElement>(null)
@@ -419,32 +427,62 @@ function NotesPageInner() {
     }
   }
 
-  // ── Tasks
-  async function handleAddTask() {
-    if (!taskTitle.trim() || addingTask) return
+  // ── Tasks (optimistic — clears inputs + adds to list instantly, POSTs in background)
+  function handleAddTask() {
+    const title = taskTitle.trim()
+    const due = taskDue || null
+    if (!title) return
+
+    // Clear inputs immediately
+    setTaskTitle("")
+    setTaskDue("")
+
     if (panelMode === "create") {
-      setPendingTasks((prev) => [...prev, { title: taskTitle.trim(), due_date: taskDue || null }])
-      setTaskTitle("")
-      setTaskDue("")
+      setPendingTasks((prev) => [...prev, { title, due_date: due }])
       return
     }
+
     if (!selectedNote) return
-    setAddingTask(true)
-    try {
-      const res = await fetch("/api/tasks", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ title: taskTitle.trim(), due_date: taskDue || null, linked_note_id: selectedNote.id, status: "inbox" }),
-      })
-      if (res.ok) {
-        const task: TaskWithEntities = await res.json()
-        setNoteTasks((prev) => [...prev, task])
-        setTaskTitle("")
-        setTaskDue("")
-      }
-    } finally {
-      setAddingTask(false)
+
+    // Add to list instantly with temp ID
+    const tempId = `temp-${Date.now()}`
+    const now = new Date().toISOString()
+    const tempTask: TaskWithEntities = {
+      id: tempId,
+      user_id: "",
+      title,
+      description: null,
+      due_date: due ? new Date(due).toISOString() : null,
+      status: "inbox",
+      priority: "medium",
+      linked_note_id: selectedNote.id,
+      created_from: "note",
+      telegram_message_id: null,
+      created_at: now,
+      updated_at: now,
+      entities: [],
     }
+    setNoteTasks((prev) => [...prev, tempTask])
+
+    // Background POST
+    fetch("/api/tasks", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        title,
+        due_date: due ? new Date(due).toISOString() : null,
+        linked_note_id: selectedNote.id,
+        status: "inbox",
+      }),
+    })
+      .then((r) => (r.ok ? r.json() : Promise.reject()))
+      .then((saved: TaskWithEntities) => {
+        setNoteTasks((prev) => prev.map((t) => (t.id === tempId ? saved : t)))
+      })
+      .catch(() => {
+        // Remove failed optimistic task
+        setNoteTasks((prev) => prev.filter((t) => t.id !== tempId))
+      })
   }
 
   async function handleSaveTaskTitle(taskId: string) {
@@ -542,6 +580,31 @@ function NotesPageInner() {
     }
     setSelectedNote(null)
     setPanelMode(null)
+  }
+
+  // ── Panel resize
+  function handleResizeStart(e: React.MouseEvent) {
+    e.preventDefault()
+    isResizing.current = true
+    resizeStartX.current = e.clientX
+    resizeStartW.current = panelWidth
+
+    function onMove(ev: MouseEvent) {
+      if (!isResizing.current) return
+      const delta = resizeStartX.current - ev.clientX // drag left = wider
+      setPanelWidth(Math.max(DETAIL_W_MIN, Math.min(DETAIL_W_MAX, resizeStartW.current + delta)))
+    }
+    function onUp() {
+      isResizing.current = false
+      document.removeEventListener("mousemove", onMove)
+      document.removeEventListener("mouseup", onUp)
+      document.body.style.cursor = ""
+      document.body.style.userSelect = ""
+    }
+    document.addEventListener("mousemove", onMove)
+    document.addEventListener("mouseup", onUp)
+    document.body.style.cursor = "col-resize"
+    document.body.style.userSelect = "none"
   }
 
   // ── Filter/group helpers
@@ -719,7 +782,7 @@ function NotesPageInner() {
       <div style={{
         flex: 1, display: "flex", flexDirection: "column", overflow: "hidden",
         transition: "padding-right 0.22s cubic-bezier(0.4, 0, 0.2, 1)",
-        paddingRight: panelOpen ? `${DETAIL_W}px` : "0",
+        paddingRight: panelOpen ? `${panelWidth}px` : "0",
       }}>
         {/* Page header */}
         <div style={{ padding: "28px 32px 0", flexShrink: 0 }}>
@@ -807,10 +870,20 @@ function NotesPageInner() {
       {/* ── Detail / Create panel ── */}
       {panelOpen && (
         <div ref={detailRef} className="panel-slide-in" style={{
-          position: "fixed", top: 0, right: 0, bottom: 0, width: DETAIL_W,
+          position: "fixed", top: 0, right: 0, bottom: 0, width: panelWidth,
           background: "var(--bg-surface)", borderLeft: "1px solid var(--border)",
           display: "flex", flexDirection: "column", zIndex: 40,
         }}>
+          {/* Drag-to-resize handle */}
+          <div
+            onMouseDown={handleResizeStart}
+            style={{
+              position: "absolute", left: 0, top: 0, bottom: 0, width: "6px",
+              cursor: "col-resize", zIndex: 1, transition: "background 0.15s",
+            }}
+            onMouseEnter={(e) => { e.currentTarget.style.background = "var(--accent-dim)" }}
+            onMouseLeave={(e) => { e.currentTarget.style.background = "transparent" }}
+          />
 
           {/* ── A. Toolbar ── */}
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "13px 18px", borderBottom: "1px solid var(--border)", flexShrink: 0 }}>
@@ -875,10 +948,20 @@ function NotesPageInner() {
                 value={panelText}
                 placeholder="What's on your mind…"
                 onChange={(e) => {
-                  setPanelText(e.target.value)
+                  const val = e.target.value
+                  setPanelText(val)
                   e.target.style.height = "auto"
                   e.target.style.height = e.target.scrollHeight + "px"
-                  if (panelMode === "edit") { setPanelDirty(true); setPanelSaved(false) }
+                  if (panelMode === "edit") {
+                    setPanelDirty(true)
+                    setPanelSaved(false)
+                    // Debounced auto-save — 1.2s after last keystroke
+                    if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
+                    saveTimerRef.current = setTimeout(() => {
+                      doSave(val, panelSpacesRef.current)
+                      setPanelDirty(false)
+                    }, 1200)
+                  }
                 }}
                 style={{
                   width: "100%", resize: "none", border: "none", outline: "none",
@@ -989,28 +1072,32 @@ function NotesPageInner() {
                   </div>
                 )}
 
-                {/* Quick-add */}
-                <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                {/* Quick-add — save on Enter, +Add click, or blur away from the area */}
+                <div
+                  onBlur={(e) => {
+                    if (!e.currentTarget.contains(e.relatedTarget as Node) && taskTitle.trim()) {
+                      handleAddTask()
+                    }
+                  }}
+                  style={{ display: "flex", flexDirection: "column", gap: "6px" }}
+                >
                   <div style={{ display: "flex", gap: "6px" }}>
                     <input type="text" placeholder="Add a task…" value={taskTitle}
                       onChange={(e) => setTaskTitle(e.target.value)}
                       onKeyDown={(e) => { if (e.key === "Enter") handleAddTask() }}
-                      onBlur={() => { if (taskTitle.trim()) handleAddTask() }}
                       style={{ flex: 1, border: "1px solid var(--border)", borderRadius: "8px", padding: "7px 10px", fontSize: "13px", color: "var(--text-1)", background: "var(--bg-surface)", outline: "none", fontFamily: "inherit", transition: "border-color 0.15s" }}
-                      onFocus={(e) => { e.currentTarget.style.borderColor = "var(--border-hover)" }} />
+                      onFocus={(e) => { e.currentTarget.style.borderColor = "var(--border-hover)" }}
+                      onBlur={(e) => { e.currentTarget.style.borderColor = "var(--border)" }} />
                     <input type="date" value={taskDue}
-                      onChange={(e) => {
-                        setTaskDue(e.target.value)
-                        if (taskTitle.trim()) setTimeout(handleAddTask, 0)
-                      }}
+                      onChange={(e) => setTaskDue(e.target.value)}
                       style={{ border: "1px solid var(--border)", borderRadius: "8px", padding: "7px 8px", fontSize: "12px", background: "var(--bg-surface)", color: taskDue ? "var(--text-1)" : "var(--text-3)", outline: "none", fontFamily: "inherit", width: "110px", flexShrink: 0 }} />
                   </div>
                   <div style={{ display: "flex", justifyContent: "flex-end" }}>
-                    <button onClick={handleAddTask} disabled={!taskTitle.trim() || addingTask}
+                    <button onClick={handleAddTask} disabled={!taskTitle.trim()}
                       style={{ fontSize: "12px", color: taskTitle.trim() ? "var(--accent)" : "var(--text-3)", background: "transparent", border: "1px solid var(--border-accent)", borderRadius: "7px", padding: "5px 12px", cursor: taskTitle.trim() ? "pointer" : "default", transition: "opacity 0.15s", opacity: taskTitle.trim() ? 1 : 0.4 }}
                       onMouseEnter={(e) => { if (taskTitle.trim()) e.currentTarget.style.opacity = "0.7" }}
                       onMouseLeave={(e) => { if (taskTitle.trim()) e.currentTarget.style.opacity = "1" }}>
-                      {addingTask ? "Adding…" : "+ Add"}
+                      + Add
                     </button>
                   </div>
                 </div>

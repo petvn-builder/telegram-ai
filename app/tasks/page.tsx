@@ -302,7 +302,7 @@ function TaskColumn({
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "0" }}>
-      {/* Column header with inline + button */}
+      {/* Column header — no + button, count + WIP only */}
       <div style={{
         display: "flex",
         alignItems: "center",
@@ -329,35 +329,6 @@ function TaskColumn({
             ⚡ WIP
           </span>
         )}
-        <span style={{ flex: 1 }} />
-        {/* + Add task button in header */}
-        <button
-          onClick={onAddTask}
-          title={`Add task to ${label}`}
-          style={{
-            background: "transparent",
-            border: "1px solid var(--border)",
-            borderRadius: "6px",
-            cursor: "pointer",
-            color: "var(--text-3)",
-            padding: "2px 8px",
-            fontSize: "16px",
-            lineHeight: 1.2,
-            transition: "color 0.18s, border-color 0.18s, background 0.18s",
-          }}
-          onMouseEnter={(e) => {
-            e.currentTarget.style.color = "var(--accent)"
-            e.currentTarget.style.borderColor = "var(--accent)"
-            e.currentTarget.style.background = "var(--accent-dim)"
-          }}
-          onMouseLeave={(e) => {
-            e.currentTarget.style.color = "var(--text-3)"
-            e.currentTarget.style.borderColor = "var(--border)"
-            e.currentTarget.style.background = "transparent"
-          }}
-        >
-          +
-        </button>
       </div>
 
       {/* Drop zone */}
@@ -392,6 +363,37 @@ function TaskColumn({
             canMoveForward={canMoveForward}
           />
         ))}
+
+        {/* Inline "Click to add task" footer */}
+        <button
+          onClick={onAddTask}
+          style={{
+            width: "100%",
+            padding: "7px 10px",
+            fontSize: "12px",
+            color: "var(--text-3)",
+            background: "transparent",
+            border: "1px dashed transparent",
+            borderRadius: "7px",
+            cursor: "pointer",
+            textAlign: "left",
+            transition: "color 0.15s, border-color 0.15s",
+            display: "flex",
+            alignItems: "center",
+            gap: "5px",
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.color = "var(--text-2)"
+            e.currentTarget.style.borderColor = "var(--border)"
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.color = "var(--text-3)"
+            e.currentTarget.style.borderColor = "transparent"
+          }}
+        >
+          <span style={{ fontSize: "14px", lineHeight: 1 }}>+</span>
+          Click to add task
+        </button>
       </div>
     </div>
   )
@@ -651,9 +653,19 @@ function TasksPageInner() {
         <CreateTaskModal
           onClose={() => setCreateInColumn(null)}
           initialStatus={createInColumn}
-          onCreated={(task) => {
-            mutate([task, ...tasks], false)
+          onCreated={(optimisticTasks) => {
+            mutate([...optimisticTasks, ...tasks], false)
             setCreateInColumn(null)
+          }}
+          onBackgroundResolved={(pairs) => {
+            mutate(
+              (current) =>
+                (current ?? []).map((t) => {
+                  const match = pairs.find((p) => p.tempId === t.id)
+                  return match?.real ?? t
+                }),
+              false
+            )
           }}
         />
       )}

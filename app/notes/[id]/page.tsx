@@ -480,9 +480,17 @@ export default function NoteDetailPage() {
           linkedNoteId={note.id}
           initialTitle={note.content.split("\n")[0].slice(0, 80)}
           onClose={() => setShowTaskModal(false)}
-          onCreated={(task) => {
-            setRelatedTasks((prev) => [task, ...prev])
+          onCreated={(optimisticTasks) => {
+            setRelatedTasks((prev) => [...optimisticTasks, ...prev])
             setShowTaskModal(false)
+          }}
+          onBackgroundResolved={(pairs) => {
+            setRelatedTasks((prev) =>
+              prev.map((t) => {
+                const match = pairs.find((p) => p.tempId === t.id)
+                return match?.real ?? t
+              })
+            )
           }}
         />
       )}
