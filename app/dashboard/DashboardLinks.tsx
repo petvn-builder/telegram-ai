@@ -145,10 +145,11 @@ function TodayTasksWidget() {
 // ── Recent Notes Widget ────────────────────────────────────────────────────────
 
 function RecentNotesWidget() {
-  const { data: notes = [] } = useSWR<NoteWithEntities[]>("/api/notes?limit=5", fetcher, {
+  const { data: notesRes } = useSWR("/api/notes?limit=5", fetcher, {
     revalidateOnFocus: false,
     dedupingInterval: 30_000,
   })
+  const notes: NoteWithEntities[] = notesRes?.notes ?? []
 
   return (
     <div style={{ background: "var(--bg-surface)", border: "1px solid var(--border)", borderRadius: "14px", overflow: "hidden" }}>

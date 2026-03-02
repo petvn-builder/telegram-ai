@@ -184,7 +184,8 @@ export default function AiPanel() {
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
 
-  const { data: notes = [] } = useSWR<NoteWithEntities[]>("/api/notes?limit=50", fetcher, { revalidateOnFocus: false, dedupingInterval: 60_000 })
+  const { data: notesRes } = useSWR("/api/notes?limit=50", fetcher, { revalidateOnFocus: false, dedupingInterval: 60_000 })
+  const notes: NoteWithEntities[] = notesRes?.notes ?? []
 
   // Handle pending command injected from outside (e.g., CommandBar or note detail)
   useEffect(() => {

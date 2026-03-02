@@ -76,11 +76,12 @@ export default function CommandBar() {
   const { sendCommand } = useAiPanel()
 
   // Lazy load data — only after first open
-  const { data: notes = [] } = useSWR<NoteWithEntities[]>(
+  const { data: notesRes } = useSWR(
     hasFetched ? "/api/notes?limit=20" : null,
     fetcher,
     { revalidateOnFocus: false, dedupingInterval: 60_000 }
   )
+  const notes: NoteWithEntities[] = notesRes?.notes ?? []
   const { data: tasks = [] } = useSWR<TaskWithEntities[]>(
     hasFetched ? "/api/tasks" : null,
     fetcher,
