@@ -1,6 +1,0 @@
-{
-  "crons": [
-    { "path": "/api/cron/telegram-send?slot=am", "schedule": "0 0  * * *" },
-    { "path": "/api/cron/telegram-send?slot=pm", "schedule": "0 14 * * *" }
-  ]
-}

@@ -1,8 +1,6 @@
 import { redirect } from "next/navigation"
 import { getSupabaseServer } from "@/lib/supabase/server"
-import { getSupabaseAdmin } from "@/lib/supabase/admin"
 import TelegramConnectPanel from "./TelegramConnectPanel"
-import ScheduledJobsPanel from "./ScheduledJobsPanel"
 
 export default async function SettingsPage() {
   const supabase = await getSupabaseServer()
@@ -10,9 +8,7 @@ export default async function SettingsPage() {
 
   if (!user) redirect("/login")
 
-  const admin = getSupabaseAdmin()
-
-  const { data: identity } = await admin
+  const { data: identity } = await supabase
     .from("user_identities")
     .select("telegram_user_id, telegram_username, created_at")
     .eq("user_id", user.id)
@@ -90,7 +86,6 @@ export default async function SettingsPage() {
           border: "1px solid var(--border)",
           borderRadius: "14px",
           padding: "28px",
-          marginBottom: "20px",
         }}>
           <h2 style={{
             fontSize: "13px",
@@ -102,33 +97,6 @@ export default async function SettingsPage() {
           </h2>
 
           <TelegramConnectPanel existingIdentity={identity ?? null} />
-        </div>
-
-        {/* Automation section */}
-        <div style={{
-          background: "var(--bg-surface)",
-          border: "1px solid var(--border)",
-          borderRadius: "14px",
-          padding: "28px",
-        }}>
-          <h2 style={{
-            fontSize: "13px",
-            fontWeight: 500,
-            color: "var(--text-2)",
-            margin: "0 0 6px",
-          }}>
-            Automation
-          </h2>
-          <p style={{
-            fontSize: "12px",
-            color: "var(--text-3)",
-            margin: "0 0 20px",
-            lineHeight: 1.5,
-          }}>
-            Scheduled messages sent automatically to your Telegram.
-          </p>
-
-          <ScheduledJobsPanel hasTelegram={!!identity} />
         </div>
 
       </div>
