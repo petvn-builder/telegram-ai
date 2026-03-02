@@ -3,23 +3,11 @@
 import Link from "next/link"
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
 import { Suspense, useEffect, useState } from "react"
+import useSWR from "swr"
 import { getSupabaseBrowser } from "@/lib/supabase/browser"
 import type { User } from "@supabase/supabase-js"
 import type { Space } from "@/app/notes/types"
-
-// Module-level cache: survives component remounts during same session (SPA navigation)
-let _spacesCache: { data: Space[]; ts: number } | null = null
-const SPACES_CACHE_TTL = 30_000 // 30 seconds
-
-async function fetchSpaces(): Promise<Space[]> {
-  if (_spacesCache && Date.now() - _spacesCache.ts < SPACES_CACHE_TTL) {
-    return _spacesCache.data
-  }
-  const res = await fetch("/api/spaces")
-  const data: Space[] = res.ok ? await res.json() : []
-  _spacesCache = { data, ts: Date.now() }
-  return data
-}
+import { fetcher } from "@/lib/fetcher"
 
 const PRIMARY_LINKS = [
   {
@@ -159,7 +147,6 @@ function SidebarInner() {
   const router = useRouter()
   const [user, setUser] = useState<User | null>(null)
   const [theme, setTheme] = useState<"dark" | "light">("light")
-  const [spaces, setSpaces] = useState<Space[]>([])
   const [spacesOpen, setSpacesOpen] = useState(true)
 
   const activeSpaceId = searchParams.get("space")
@@ -202,10 +189,11 @@ function SidebarInner() {
     return () => subscription.unsubscribe()
   }, [])
 
-  useEffect(() => {
-    if (!user) return
-    fetchSpaces().then(setSpaces).catch(() => {})
-  }, [user])
+  const { data: spaces = [] } = useSWR<Space[]>(
+    user ? "/api/spaces" : null,
+    fetcher,
+    { revalidateOnFocus: false, dedupingInterval: 60_000 }
+  )
 
   async function handleSignOut() {
     const supabase = getSupabaseBrowser()

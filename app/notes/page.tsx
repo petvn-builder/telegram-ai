@@ -3,7 +3,9 @@
 import { Suspense, useEffect, useMemo, useRef, useState } from "react"
 import { useSearchParams, useRouter } from "next/navigation"
 import Link from "next/link"
+import useSWR from "swr"
 import type { Entity, Space, NoteWithEntities, TaskWithEntities } from "./types"
+import { fetcher } from "@/lib/fetcher"
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -177,12 +179,10 @@ function NotesPageInner() {
   const openNoteId = searchParams.get("open")
 
   // ── Core data
-  const [notes, setNotes] = useState<NoteWithEntities[]>([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
+  const [offset, setOffset] = useState(0)
+  const [accumulatedNotes, setAccumulatedNotes] = useState<NoteWithEntities[]>([])
   const [selectedNote, setSelectedNote] = useState<NoteWithEntities | null>(null)
   const [searchQuery, setSearchQuery] = useState("")
-  const [activeSpaceName, setActiveSpaceName] = useState<string | null>(null)
   const [activeEntityId, setActiveEntityId] = useState<string | null>(searchParams.get("entity"))
   const [groupByEntity, setGroupByEntity] = useState(false)
   const [listFading, setListFading] = useState(false)
@@ -197,7 +197,6 @@ function NotesPageInner() {
 
   // ── Panel spaces
   const [panelSpaces, setPanelSpaces] = useState<Space[]>([])
-  const [allSpaces, setAllSpaces] = useState<Space[]>([])
   const [showSpaceInput, setShowSpaceInput] = useState(false)
   const [spaceInput, setSpaceInput] = useState("")
   const [creatingSpace, setCreatingSpace] = useState(false)
@@ -227,46 +226,41 @@ function NotesPageInner() {
   // Keep ref in sync with state
   useEffect(() => { panelSpacesRef.current = panelSpaces }, [panelSpaces])
 
-  // ── Fetch notes
+  // ── SWR: notes (paginated) + spaces (shared cache)
+  const notesKey = `/api/notes?${activeSpaceId ? `spaceId=${activeSpaceId}&` : ""}preview=1&limit=30&offset=${offset}`
+  const { data: notesPage, isLoading: loading, error: notesError, mutate: mutateNotes } =
+    useSWR<{ notes: NoteWithEntities[]; total: number; hasMore: boolean; offset: number }>(
+      notesKey, fetcher, { revalidateOnFocus: false, dedupingInterval: 60_000 }
+    )
+  const { data: allSpaces = [], mutate: mutateSpaces } =
+    useSWR<Space[]>("/api/spaces", fetcher, { revalidateOnFocus: false, dedupingInterval: 60_000 })
+
+  const error = (notesError as Error | undefined)?.message ?? null
+  const hasMore = notesPage?.hasMore ?? false
+  const notes = accumulatedNotes
+
+  const activeSpaceName = useMemo(
+    () => allSpaces.find((s) => s.id === activeSpaceId)?.name ?? null,
+    [activeSpaceId, allSpaces]
+  )
+
+  // Reset pagination and panel when space filter changes
   useEffect(() => {
-    setLoading(true)
-    setNotes([])
+    setOffset(0)
+    setAccumulatedNotes([])
     setSelectedNote(null)
     setPanelMode(null)
-    setActiveSpaceName(null)
-    const url = activeSpaceId ? `/api/notes?spaceId=${activeSpaceId}` : "/api/notes"
-    fetch(url)
-      .then((r) => { if (!r.ok) throw new Error("Failed to load notes"); return r.json() })
-      .then((data: NoteWithEntities[]) => {
-        setNotes(data)
-        if (activeSpaceId && data.length > 0) {
-          const space = data[0].spaces?.find((s) => s.id === activeSpaceId)
-          if (space) setActiveSpaceName(space.name)
-        }
-      })
-      .catch((e: Error) => setError(e.message))
-      .finally(() => setLoading(false))
   }, [activeSpaceId])
 
-  // Fetch activeSpaceName fallback
+  // Merge SWR pages into the accumulated notes list
   useEffect(() => {
-    if (!activeSpaceId || activeSpaceName) return
-    fetch("/api/spaces")
-      .then((r) => r.ok ? r.json() : [])
-      .then((spaces: { id: string; name: string }[]) => {
-        const found = spaces.find((s) => s.id === activeSpaceId)
-        if (found) setActiveSpaceName(found.name)
-      })
-      .catch(() => {})
-  }, [activeSpaceId, activeSpaceName])
-
-  // Fetch all spaces for the add-space dropdown
-  useEffect(() => {
-    fetch("/api/spaces")
-      .then((r) => r.ok ? r.json() : [])
-      .then(setAllSpaces)
-      .catch(() => {})
-  }, [])
+    if (!notesPage) return
+    if (notesPage.offset === 0) {
+      setAccumulatedNotes(notesPage.notes)
+    } else {
+      setAccumulatedNotes((prev) => [...prev, ...notesPage.notes])
+    }
+  }, [notesPage])
 
   useEffect(() => {
     setActiveEntityId(searchParams.get("entity"))
@@ -341,7 +335,8 @@ function NotesPageInner() {
       })
       if (res.ok) {
         const updated: NoteWithEntities = await res.json()
-        setNotes((prev) => prev.map((n) => (n.id === updated.id ? updated : n)))
+        setAccumulatedNotes((prev) => prev.map((n) => (n.id === updated.id ? updated : n)))
+        mutateNotes((current) => current ? { ...current, notes: current.notes.map((n) => n.id === updated.id ? updated : n) } : current, false)
         setSelectedNote(updated)
         setPanelSaved(true)
       }
@@ -363,7 +358,8 @@ function NotesPageInner() {
       if (res.ok) {
         const note: NoteWithEntities = await res.json()
         justAddedId.current = note.id
-        setNotes((prev) => [note, ...prev])
+        setAccumulatedNotes((prev) => [note, ...prev])
+        mutateNotes((current) => current ? { ...current, notes: [note, ...current.notes], total: current.total + 1 } : current, false)
         // Post any pending tasks linked to the new note
         if (pendingTasks.length > 0) {
           const results = await Promise.all(
@@ -399,7 +395,9 @@ function NotesPageInner() {
     try {
       const res = await fetch(`/api/notes/${selectedNote.id}`, { method: "DELETE" })
       if (!res.ok) throw new Error()
-      setNotes((prev) => prev.filter((n) => n.id !== selectedNote.id))
+      const deletedId = selectedNote.id
+      setAccumulatedNotes((prev) => prev.filter((n) => n.id !== deletedId))
+      mutateNotes((current) => current ? { ...current, notes: current.notes.filter((n) => n.id !== deletedId), total: current.total - 1 } : current, false)
       setSelectedNote(null)
       setPanelMode(null)
     } catch {
@@ -493,7 +491,7 @@ function NotesPageInner() {
       })
       if (res.ok) {
         const space: Space = await res.json()
-        setAllSpaces((prev) => [...prev, space])
+        mutateSpaces((prev = []) => [...prev, space], false)
         handleAddSpace(space)
       }
     } finally {
@@ -674,6 +672,16 @@ function NotesPageInner() {
     return (
       <div style={{ display: "flex", flexDirection: "column", opacity: listFading ? 0 : 1, transition: "opacity 150ms ease-in-out" }}>
         {groupByEntity ? renderGrouped() : renderCardsWithDates(filteredNotes)}
+        {!groupByEntity && hasMore && !searchQuery && !activeEntityId && (
+          <button
+            onClick={() => setOffset((o) => o + 30)}
+            style={{ padding: "12px 24px", background: "transparent", border: "none", color: "var(--text-3)", fontSize: "13px", cursor: "pointer", textAlign: "left", transition: "color 0.15s" }}
+            onMouseEnter={(e) => { e.currentTarget.style.color = "var(--text-2)" }}
+            onMouseLeave={(e) => { e.currentTarget.style.color = "var(--text-3)" }}
+          >
+            Load more
+          </button>
+        )}
       </div>
     )
   }

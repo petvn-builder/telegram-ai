@@ -109,6 +109,13 @@ async function fetchSpacesForNotes(
 
 // ── GET /api/notes ─────────────────────────────────────────────────────────
 
+export interface PaginatedNotesResponse {
+  notes: NoteWithEntities[]
+  total: number
+  hasMore: boolean
+  offset: number
+}
+
 export async function GET(req: NextRequest) {
   try {
     const authClient = await getSupabaseServer()
@@ -121,12 +128,16 @@ export async function GET(req: NextRequest) {
     const db = getSupabaseAdmin()
     const { searchParams } = new URL(req.url)
     const spaceId = searchParams.get("spaceId")
+    const preview = searchParams.get("preview") === "1"
+    const limit = Math.min(parseInt(searchParams.get("limit") ?? "30", 10), 100)
+    const offset = Math.max(parseInt(searchParams.get("offset") ?? "0", 10), 0)
 
-    let noteIds: string[] | null = null
+    const empty: PaginatedNotesResponse = { notes: [], total: 0, hasMore: false, offset }
 
-    // If filtering by space, get the note IDs in that space first
+    let allSpaceNoteIds: string[] | null = null
+
+    // If filtering by space, get all note IDs in that space first (for total count)
     if (spaceId) {
-      // Verify space belongs to user
       const { data: space } = await db
         .from("spaces")
         .select("id")
@@ -134,33 +145,52 @@ export async function GET(req: NextRequest) {
         .eq("user_id", userId)
         .maybeSingle()
 
-      if (!space) return NextResponse.json([])
+      if (!space) return NextResponse.json(empty)
 
       const { data: nsRows } = await db
         .from("note_spaces")
         .select("note_id")
         .eq("space_id", spaceId)
 
-      noteIds = (nsRows ?? []).map((r) => r.note_id)
-      if (noteIds.length === 0) return NextResponse.json([])
+      allSpaceNoteIds = (nsRows ?? []).map((r) => r.note_id)
+      if (allSpaceNoteIds.length === 0) return NextResponse.json(empty)
     }
 
-    // 1. Fetch notes
-    let query = db
-      .from("knowledge")
-      .select("id, content, created_at")
-      .eq("role", "note")
-      .eq("user_id", userId)
-      .order("created_at", { ascending: false })
+    let total: number
+    let notes: { id: string; content: string; created_at: string }[]
 
-    if (noteIds !== null) {
-      query = query.in("id", noteIds)
+    if (allSpaceNoteIds !== null) {
+      // Space-filtered path: paginate the ID list client-side, total is already known
+      total = allSpaceNoteIds.length
+      const pageIds = allSpaceNoteIds.slice(offset, offset + limit)
+      if (pageIds.length === 0) return NextResponse.json({ ...empty, total })
+
+      const { data, error } = await db
+        .from("knowledge")
+        .select("id, content, created_at")
+        .eq("role", "note")
+        .eq("user_id", userId)
+        .in("id", pageIds)
+        .order("created_at", { ascending: false })
+
+      if (error) throw error
+      notes = data ?? []
+    } else {
+      // No filter: use count + range from DB
+      const { data, error, count } = await db
+        .from("knowledge")
+        .select("id, content, created_at", { count: "exact" })
+        .eq("role", "note")
+        .eq("user_id", userId)
+        .order("created_at", { ascending: false })
+        .range(offset, offset + limit - 1)
+
+      if (error) throw error
+      notes = data ?? []
+      total = count ?? 0
     }
 
-    const { data: notes, error: notesError } = await query
-
-    if (notesError) throw notesError
-    if (!notes || notes.length === 0) return NextResponse.json([])
+    if (notes.length === 0) return NextResponse.json({ ...empty, total })
 
     const fetchedNoteIds = notes.map((n) => n.id)
 
@@ -179,7 +209,7 @@ export async function GET(req: NextRequest) {
     const entityIds = [...new Set((links ?? []).map((l) => l.entity_id))]
 
     // 3. Fetch entities (depends on link results)
-    let entityMap = new Map<string, Entity>()
+    const entityMap = new Map<string, Entity>()
     if (entityIds.length > 0) {
       const { data: entities, error: entitiesError } = await db
         .from("entities")
@@ -206,13 +236,20 @@ export async function GET(req: NextRequest) {
     // 5. Assemble response
     const result: NoteWithEntities[] = notes.map((note) => ({
       id: note.id,
-      content: note.content,
+      content: preview ? note.content.slice(0, 300) : note.content,
       created_at: note.created_at,
       entities: noteEntityIndex.get(note.id) ?? [],
       spaces: noteSpacesIndex.get(note.id) ?? [],
     }))
 
-    return NextResponse.json(result)
+    const response: PaginatedNotesResponse = {
+      notes: result,
+      total,
+      hasMore: offset + result.length < total,
+      offset,
+    }
+
+    return NextResponse.json(response)
   } catch (error) {
     console.error("Notes API error:", error)
     return NextResponse.json({ error: "Internal error" }, { status: 500 })
