@@ -14,8 +14,8 @@ interface ScheduledJob {
 
 const REPEAT_OPTIONS = [
   { value: "everyday", label: "Every day" },
-  { value: "weekdays", label: "Weekdays only" },
-  { value: "weekends", label: "Weekends only" },
+  { value: "weekdays", label: "Weekdays" },
+  { value: "weekends", label: "Weekends" },
 ] as const
 
 const COMMON_TIMEZONES = [
@@ -48,23 +48,36 @@ function formatLastSent(iso: string | null): string {
   return `Last sent ${d.toLocaleDateString("en-US", { month: "short", day: "numeric" })} at ${d.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" })}`
 }
 
-interface AutoTodoCardProps {
+// AM = hour 5–12 stored as "07:00", PM = hour 17+ stored as "21:00"
+function hasAm(times: string[]): boolean {
+  return times.some((t) => { const h = parseInt(t.split(":")[0], 10); return h >= 5 && h <= 12 })
+}
+function hasPm(times: string[]): boolean {
+  return times.some((t) => parseInt(t.split(":")[0], 10) >= 17)
+}
+function buildTimes(am: boolean, pm: boolean): string[] {
+  const result: string[] = []
+  if (am) result.push("07:00")
+  if (pm) result.push("21:00")
+  return result
+}
+
+interface Props {
   hasTelegram: boolean
 }
 
-export default function ScheduledJobsPanel({ hasTelegram }: AutoTodoCardProps) {
+export default function ScheduledJobsPanel({ hasTelegram }: Props) {
   const [job, setJob] = useState<ScheduledJob | null>(null)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState(false)
 
-  // Editable state
   const [enabled, setEnabled] = useState(false)
-  const [sendTimes, setSendTimes] = useState<string[]>([])
+  const [amEnabled, setAmEnabled] = useState(false)
+  const [pmEnabled, setPmEnabled] = useState(false)
   const [repeat, setRepeat] = useState<"everyday" | "weekdays" | "weekends">("everyday")
   const [timezone, setTimezone] = useState("UTC")
-  const [newTime, setNewTime] = useState("07:00")
 
   const fetchJob = useCallback(async () => {
     setLoading(true)
@@ -75,14 +88,13 @@ export default function ScheduledJobsPanel({ hasTelegram }: AutoTodoCardProps) {
       setJob(todoJob)
       if (todoJob) {
         setEnabled(todoJob.enabled)
-        setSendTimes(todoJob.send_times ?? [])
+        setAmEnabled(hasAm(todoJob.send_times ?? []))
+        setPmEnabled(hasPm(todoJob.send_times ?? []))
         setRepeat(todoJob.repeat ?? "everyday")
         setTimezone(todoJob.timezone ?? "UTC")
       } else {
-        // Defaults — detect browser timezone
         const browserTz = Intl.DateTimeFormat().resolvedOptions().timeZone
-        const matched = COMMON_TIMEZONES.includes(browserTz) ? browserTz : "UTC"
-        setTimezone(matched)
+        setTimezone(COMMON_TIMEZONES.includes(browserTz) ? browserTz : "UTC")
       }
     } catch {
       setError("Failed to load automation settings.")
@@ -92,17 +104,6 @@ export default function ScheduledJobsPanel({ hasTelegram }: AutoTodoCardProps) {
   }, [])
 
   useEffect(() => { fetchJob() }, [fetchJob])
-
-  function addTime() {
-    if (sendTimes.length >= 5) return
-    if (sendTimes.includes(newTime)) return
-    const sorted = [...sendTimes, newTime].sort()
-    setSendTimes(sorted)
-  }
-
-  function removeTime(t: string) {
-    setSendTimes(sendTimes.filter((x) => x !== t))
-  }
 
   async function save() {
     setSaving(true)
@@ -115,7 +116,7 @@ export default function ScheduledJobsPanel({ hasTelegram }: AutoTodoCardProps) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           job_type: "todo",
-          send_times: sendTimes,
+          send_times: buildTimes(amEnabled, pmEnabled),
           repeat,
           timezone,
           enabled,
@@ -134,9 +135,7 @@ export default function ScheduledJobsPanel({ hasTelegram }: AutoTodoCardProps) {
   }
 
   if (loading) {
-    return (
-      <p style={{ fontSize: "13px", color: "var(--text-3)", margin: 0 }}>Loading…</p>
-    )
+    return <p style={{ fontSize: "13px", color: "var(--text-3)", margin: 0 }}>Loading…</p>
   }
 
   return (
@@ -164,22 +163,21 @@ export default function ScheduledJobsPanel({ hasTelegram }: AutoTodoCardProps) {
         padding: "20px",
         display: "flex",
         flexDirection: "column",
-        gap: "16px",
+        gap: "18px",
         opacity: hasTelegram ? 1 : 0.5,
         pointerEvents: hasTelegram ? "auto" : "none",
       }}>
-        {/* Header row */}
+
+        {/* Header + master enable toggle */}
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "12px" }}>
           <div>
             <p style={{ fontSize: "14px", fontWeight: 600, color: "var(--text-1)", margin: "0 0 2px" }}>
               Auto Todo
             </p>
             <p style={{ fontSize: "12px", color: "var(--text-3)", margin: 0 }}>
-              Sends your active task list to Telegram on a schedule
+              Sends your task list to Telegram on schedule
             </p>
           </div>
-
-          {/* Toggle */}
           <button
             onClick={() => setEnabled((v) => !v)}
             style={{
@@ -210,102 +208,117 @@ export default function ScheduledJobsPanel({ hasTelegram }: AutoTodoCardProps) {
           </button>
         </div>
 
-        {/* Last sent */}
-        {job?.last_sent_at !== undefined && (
-          <p style={{ fontSize: "11px", color: "var(--text-3)", margin: 0 }}>
+        {/* Last sent info */}
+        {job !== null && (
+          <p style={{ fontSize: "11px", color: "var(--text-3)", margin: "-10px 0 0" }}>
             {formatLastSent(job.last_sent_at)}
           </p>
         )}
 
-        {/* Time slots */}
+        {/* AM / PM send slots */}
         <div>
-          <p style={{ fontSize: "12px", fontWeight: 500, color: "var(--text-2)", margin: "0 0 8px" }}>
+          <p style={{ fontSize: "12px", fontWeight: 500, color: "var(--text-2)", margin: "0 0 10px" }}>
             Send times
           </p>
-
-          {/* Time chips */}
-          <div style={{ display: "flex", flexWrap: "wrap", gap: "6px", marginBottom: "10px" }}>
-            {sendTimes.length === 0 && (
-              <span style={{ fontSize: "12px", color: "var(--text-3)" }}>No times set</span>
-            )}
-            {sendTimes.map((t) => (
-              <span
-                key={t}
-                style={{
-                  display: "inline-flex",
-                  alignItems: "center",
-                  gap: "5px",
-                  background: "var(--accent-dim)",
-                  border: "1px solid var(--border-accent)",
-                  borderRadius: "6px",
-                  padding: "3px 8px",
-                  fontSize: "12px",
-                  fontWeight: 500,
-                  color: "var(--accent)",
-                }}
-              >
-                {t}
-                <button
-                  onClick={() => removeTime(t)}
-                  style={{
-                    background: "none",
-                    border: "none",
-                    cursor: "pointer",
-                    padding: 0,
-                    color: "var(--accent)",
-                    fontSize: "13px",
-                    lineHeight: 1,
-                    opacity: 0.7,
-                  }}
-                  aria-label={`Remove ${t}`}
-                >
-                  ×
-                </button>
-              </span>
-            ))}
-          </div>
-
-          {/* Add time row */}
-          {sendTimes.length < 5 && (
-            <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
-              <input
-                type="time"
-                value={newTime}
-                onChange={(e) => setNewTime(e.target.value)}
-                style={{
-                  padding: "6px 10px",
-                  background: "var(--bg-surface)",
-                  border: "1px solid var(--border)",
-                  borderRadius: "7px",
-                  color: "var(--text-1)",
-                  fontSize: "13px",
-                  outline: "none",
-                }}
-              />
+          <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+            {/* Morning */}
+            <div style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              padding: "12px 14px",
+              background: amEnabled ? "var(--accent-dim)" : "var(--bg-surface)",
+              border: `1px solid ${amEnabled ? "var(--border-accent)" : "var(--border)"}`,
+              borderRadius: "10px",
+              transition: "background 0.15s, border-color 0.15s",
+            }}>
+              <div>
+                <p style={{ fontSize: "13px", fontWeight: 500, color: "var(--text-1)", margin: "0 0 2px" }}>
+                  🌅 Morning
+                </p>
+                <p style={{ fontSize: "11px", color: "var(--text-3)", margin: 0 }}>
+                  Around 7 AM in your timezone
+                </p>
+              </div>
               <button
-                onClick={addTime}
+                onClick={() => setAmEnabled((v) => !v)}
                 style={{
-                  padding: "6px 12px",
-                  background: "transparent",
-                  border: "1px solid var(--border-hover)",
-                  borderRadius: "7px",
-                  color: "var(--text-1)",
-                  fontSize: "12px",
+                  position: "relative",
+                  width: "36px",
+                  height: "20px",
+                  borderRadius: "999px",
+                  border: "none",
                   cursor: "pointer",
-                  transition: "border-color 0.15s",
+                  background: amEnabled ? "var(--accent)" : "var(--border)",
+                  transition: "background 0.18s",
+                  flexShrink: 0,
+                  padding: 0,
                 }}
-                onMouseEnter={(e) => e.currentTarget.style.borderColor = "var(--accent)"}
-                onMouseLeave={(e) => e.currentTarget.style.borderColor = "var(--border-hover)"}
+                aria-label={amEnabled ? "Disable morning" : "Enable morning"}
               >
-                + Add
+                <span style={{
+                  position: "absolute",
+                  top: "2px",
+                  left: amEnabled ? "18px" : "2px",
+                  width: "16px",
+                  height: "16px",
+                  borderRadius: "50%",
+                  background: "white",
+                  transition: "left 0.18s",
+                  boxShadow: "0 1px 3px rgba(0,0,0,0.2)",
+                }} />
               </button>
             </div>
-          )}
-          {sendTimes.length >= 5 && (
-            <p style={{ fontSize: "11px", color: "var(--text-3)", margin: "4px 0 0" }}>
-              Maximum 5 times
-            </p>
-          )}
+
+            {/* Evening */}
+            <div style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              padding: "12px 14px",
+              background: pmEnabled ? "var(--accent-dim)" : "var(--bg-surface)",
+              border: `1px solid ${pmEnabled ? "var(--border-accent)" : "var(--border)"}`,
+              borderRadius: "10px",
+              transition: "background 0.15s, border-color 0.15s",
+            }}>
+              <div>
+                <p style={{ fontSize: "13px", fontWeight: 500, color: "var(--text-1)", margin: "0 0 2px" }}>
+                  🌙 Evening
+                </p>
+                <p style={{ fontSize: "11px", color: "var(--text-3)", margin: 0 }}>
+                  Around 9 PM in your timezone
+                </p>
+              </div>
+              <button
+                onClick={() => setPmEnabled((v) => !v)}
+                style={{
+                  position: "relative",
+                  width: "36px",
+                  height: "20px",
+                  borderRadius: "999px",
+                  border: "none",
+                  cursor: "pointer",
+                  background: pmEnabled ? "var(--accent)" : "var(--border)",
+                  transition: "background 0.18s",
+                  flexShrink: 0,
+                  padding: 0,
+                }}
+                aria-label={pmEnabled ? "Disable evening" : "Enable evening"}
+              >
+                <span style={{
+                  position: "absolute",
+                  top: "2px",
+                  left: pmEnabled ? "18px" : "2px",
+                  width: "16px",
+                  height: "16px",
+                  borderRadius: "50%",
+                  background: "white",
+                  transition: "left 0.18s",
+                  boxShadow: "0 1px 3px rgba(0,0,0,0.2)",
+                }} />
+              </button>
+            </div>
+          </div>
         </div>
 
         {/* Repeat */}
@@ -363,7 +376,7 @@ export default function ScheduledJobsPanel({ hasTelegram }: AutoTodoCardProps) {
           </select>
         </div>
 
-        {/* Save row */}
+        {/* Save */}
         <div style={{ display: "flex", alignItems: "center", gap: "12px", paddingTop: "4px" }}>
           <button
             onClick={save}
@@ -384,12 +397,8 @@ export default function ScheduledJobsPanel({ hasTelegram }: AutoTodoCardProps) {
             {saving ? "Saving…" : "Save"}
           </button>
 
-          {success && (
-            <span style={{ fontSize: "12px", color: "#34d399" }}>Saved</span>
-          )}
-          {error && (
-            <span style={{ fontSize: "12px", color: "#f87171" }}>{error}</span>
-          )}
+          {success && <span style={{ fontSize: "12px", color: "#34d399" }}>Saved</span>}
+          {error && <span style={{ fontSize: "12px", color: "#f87171" }}>{error}</span>}
         </div>
       </div>
     </div>

@@ -5,8 +5,7 @@ import { getSupabaseAdmin } from "@/lib/supabase/admin"
 type AnyRow = any
 
 /**
- * Convert a HH:MM time string and timezone to UTC HH:MM
- * using Intl.DateTimeFormat to avoid extra dependencies.
+ * Get the local HH:MM for a given UTC date and IANA timezone string.
  */
 function getLocalHHMM(date: Date, timezone: string): string {
   const parts = new Intl.DateTimeFormat("en-US", {
@@ -21,34 +20,45 @@ function getLocalHHMM(date: Date, timezone: string): string {
   return `${h.padStart(2, "0")}:${m.padStart(2, "0")}`
 }
 
-function timeToMinutes(hhmm: string): number {
-  const [h, m] = hhmm.split(":").map(Number)
-  return h * 60 + m
-}
-
-function shouldSendNow(job: AnyRow, nowUtc: Date): boolean {
+/**
+ * Determine whether a job should be sent now.
+ *
+ * slot = "am" → fires at midnight UTC (≈7AM UTC+7). Match if user's local hour is 5–12
+ *              AND user has an AM-window time configured (hour 5–12).
+ * slot = "pm" → fires at 14:00 UTC (≈9PM UTC+7). Match if user's local hour is 17–24
+ *              AND user has a PM-window time configured (hour 17–23).
+ *
+ * Matching by window (not exact minute) handles Hobby cron's ±59 min precision.
+ */
+function shouldSendNow(job: AnyRow, nowUtc: Date, slot: "am" | "pm"): boolean {
   if (!job.send_times || job.send_times.length === 0) return false
 
   const timezone = job.timezone ?? "UTC"
   const localHHMM = getLocalHHMM(nowUtc, timezone)
-  const localMinutes = timeToMinutes(localHHMM)
+  const localHour = parseInt(localHHMM.split(":")[0], 10)
 
-  // Check day-of-week filter using local time
-  const localDate = new Intl.DateTimeFormat("en-US", {
+  // Day-of-week filter using local time
+  const localWeekday = new Intl.DateTimeFormat("en-US", {
     timeZone: timezone,
     weekday: "short",
   }).format(nowUtc)
-  const isWeekend = localDate === "Sat" || localDate === "Sun"
-
+  const isWeekend = localWeekday === "Sat" || localWeekday === "Sun"
   if (job.repeat === "weekdays" && isWeekend) return false
   if (job.repeat === "weekends" && !isWeekend) return false
 
-  // Match within ±7 minutes of a scheduled time (cron fires every 15 min)
-  return job.send_times.some((t: string) => {
-    const diff = Math.abs(timeToMinutes(t) - localMinutes)
-    // Also handle midnight wraparound (e.g. 23:55 vs 00:02)
-    return diff <= 7 || diff >= 1440 - 7
+  // Check user has a configured time in the relevant window
+  const hasAmTime = job.send_times.some((t: string) => {
+    const h = parseInt(t.split(":")[0], 10)
+    return h >= 5 && h <= 12
   })
+  const hasPmTime = job.send_times.some((t: string) => {
+    const h = parseInt(t.split(":")[0], 10)
+    return h >= 17
+  })
+
+  if (slot === "am") return hasAmTime && localHour >= 5 && localHour <= 12
+  if (slot === "pm") return hasPmTime && localHour >= 17
+  return false
 }
 
 async function sendTelegramMessage(chatId: string, text: string): Promise<void> {
@@ -112,9 +122,13 @@ async function buildTodoMessage(userId: string): Promise<string> {
 }
 
 /**
- * GET /api/cron/telegram-send
- * Called by Vercel Cron every 15 minutes.
- * Sends scheduled Telegram messages to users who have due jobs.
+ * GET /api/cron/telegram-send?slot=am|pm
+ *
+ * Called by Vercel Cron twice a day:
+ *   - ?slot=am  at 0:00 UTC  (≈7 AM UTC+7)
+ *   - ?slot=pm  at 14:00 UTC (≈9 PM UTC+7)
+ *
+ * Sends scheduled Telegram messages to users whose jobs match the current slot.
  */
 export async function GET(req: NextRequest) {
   // Verify this is a legitimate Vercel cron invocation
@@ -124,6 +138,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   }
 
+  const slot = (new URL(req.url).searchParams.get("slot") ?? "am") as "am" | "pm"
   const nowUtc = new Date()
   const admin = getSupabaseAdmin()
 
@@ -154,13 +169,13 @@ export async function GET(req: NextRequest) {
   let sent = 0
 
   for (const job of jobs) {
-    // Skip if sent in the last 60 minutes (prevent duplicate fires within the same window)
+    // Skip if sent in the last 20 hours — prevents double-send when AM/PM crons fire near window boundaries
     if (job.last_sent_at) {
       const msSinceLast = nowUtc.getTime() - new Date(job.last_sent_at).getTime()
-      if (msSinceLast < 60 * 60 * 1000) continue
+      if (msSinceLast < 20 * 60 * 60 * 1000) continue
     }
 
-    if (!shouldSendNow(job, nowUtc)) continue
+    if (!shouldSendNow(job, nowUtc, slot)) continue
 
     const telegramUserId = job.user_identities?.telegram_user_id
     if (!telegramUserId) continue
@@ -174,18 +189,17 @@ export async function GET(req: NextRequest) {
 
       await sendTelegramMessage(telegramUserId, message)
 
-      // Update last_sent_at
       await admin
         .from("telegram_scheduled_jobs")
         .update({ last_sent_at: nowUtc.toISOString() })
         .eq("id", job.id)
 
       sent++
-      console.log(`[Cron] Sent '${job.job_type}' job ${job.id} to user ${job.user_id}`)
+      console.log(`[Cron/${slot}] Sent '${job.job_type}' job ${job.id} to user ${job.user_id}`)
     } catch (err) {
-      console.error(`[Cron] Failed to send job ${job.id}:`, err)
+      console.error(`[Cron/${slot}] Failed to send job ${job.id}:`, err)
     }
   }
 
-  return NextResponse.json({ sent, checked: jobs.length })
+  return NextResponse.json({ sent, checked: jobs.length, slot })
 }
