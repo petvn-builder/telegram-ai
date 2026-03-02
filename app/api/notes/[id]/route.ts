@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { getSupabaseServer } from "@/lib/supabase/server"
 import { getSupabaseAdmin } from "@/lib/supabase/admin"
 import type { NoteDetail } from "@/app/notes/types"
-import { syncNoteSpaces } from "@/app/api/notes/route"
+import { syncNoteSpaces, extractTagTokens, syncNoteTags } from "@/app/api/notes/route"
 
 // Shared entity upsert + link helper
 async function upsertEntitiesAndLink(
@@ -149,7 +149,10 @@ export async function PUT(
     if (!rawContent) return NextResponse.json({ error: "Empty content" }, { status: 400 })
 
     const spaceNames: string[] = Array.isArray(body.spaces) ? body.spaces.map(String) : []
-    const content = rawContent
+
+    // Extract #tag tokens and strip from stored content
+    const { tagNames, cleanContent: contentAfterTags } = extractTagTokens(rawContent)
+    const content = contentAfterTags
 
     const db = getSupabaseAdmin()
 
@@ -167,8 +170,11 @@ export async function PUT(
       return NextResponse.json({ error: "Update failed" }, { status: 500 })
     }
 
-    // Sync spaces immediately (fast, no AI)
-    const spaces = await syncNoteSpaces(db, user.id, id, spaceNames)
+    // Sync spaces + tags immediately (fast, no AI)
+    const [spaces, tags] = await Promise.all([
+      syncNoteSpaces(db, user.id, id, spaceNames),
+      syncNoteTags(db, user.id, id, tagNames),
+    ])
 
     // Re-extract entities in background after response is sent
     const backgroundWork = (async () => {
@@ -202,6 +208,7 @@ export async function PUT(
       created_at: knowledge.created_at,
       entities: [],
       spaces,
+      tags,
       processing: true,
     })
   } catch (error) {

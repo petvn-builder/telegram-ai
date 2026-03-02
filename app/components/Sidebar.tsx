@@ -174,6 +174,8 @@ function SidebarInner() {
   const [user, setUser] = useState<User | null>(null)
   const [theme, setTheme] = useState<"dark" | "light">("light")
   const [spacesOpen, setSpacesOpen] = useState(true)
+  const [hoveredSpaceId, setHoveredSpaceId] = useState<string | null>(null)
+  const [deletingSpaceId, setDeletingSpaceId] = useState<string | null>(null)
   const { isOpen: aiPanelOpen, toggle: toggleAiPanel } = useAiPanel()
 
   const activeSpaceId = searchParams.get("space")
@@ -209,11 +211,30 @@ function SidebarInner() {
     return () => subscription.unsubscribe()
   }, [])
 
-  const { data: spaces = [] } = useSWR<Space[]>(
+  const { data: spaces = [], mutate: mutateSpaces } = useSWR<Space[]>(
     user ? "/api/spaces" : null,
     fetcher,
     { revalidateOnFocus: false, dedupingInterval: 60_000 }
   )
+
+  async function handleDeleteSpace(e: React.MouseEvent, spaceId: string) {
+    e.preventDefault()
+    e.stopPropagation()
+    if (deletingSpaceId) return
+    setDeletingSpaceId(spaceId)
+    // Optimistic remove
+    mutateSpaces(spaces.filter((s) => s.id !== spaceId), false)
+    try {
+      await fetch(`/api/spaces/${spaceId}`, { method: "DELETE" })
+      mutateSpaces()
+      // If we're currently viewing the deleted space, go back to /notes
+      if (activeSpaceId === spaceId) router.push("/notes")
+    } catch {
+      mutateSpaces() // revalidate on error
+    } finally {
+      setDeletingSpaceId(null)
+    }
+  }
 
   async function handleSignOut() {
     const supabase = getSupabaseBrowser()
@@ -393,39 +414,70 @@ function SidebarInner() {
               <div style={{ display: "flex", flexDirection: "column", gap: "1px" }}>
                 {spaces.map((space) => {
                   const isActiveSpace = pathname === "/notes" && activeSpaceId === space.id
+                  const isHovered = hoveredSpaceId === space.id
                   return (
-                    <Link
+                    <div
                       key={space.id}
-                      href={`/notes?space=${space.id}`}
-                      style={{
-                        display: "flex",
-                        alignItems: "center",
-                        gap: "6px",
-                        padding: "8px 14px",
-                        borderRadius: "8px",
-                        fontSize: "14px",
-                        fontWeight: isActiveSpace ? 500 : 400,
-                        color: isActiveSpace ? "var(--text-1)" : "var(--text-2)",
-                        textDecoration: "none",
-                        background: isActiveSpace ? "var(--accent-dim)" : "transparent",
-                        transition: "color 0.16s, background 0.16s",
-                      }}
-                      onMouseEnter={(e) => {
-                        if (!isActiveSpace) {
-                          ;(e.currentTarget as HTMLElement).style.color = "var(--text-1)"
-                          ;(e.currentTarget as HTMLElement).style.background = "var(--bg-hover)"
-                        }
-                      }}
-                      onMouseLeave={(e) => {
-                        if (!isActiveSpace) {
-                          ;(e.currentTarget as HTMLElement).style.color = "var(--text-2)"
-                          ;(e.currentTarget as HTMLElement).style.background = "transparent"
-                        }
-                      }}
+                      style={{ position: "relative" }}
+                      onMouseEnter={() => setHoveredSpaceId(space.id)}
+                      onMouseLeave={() => setHoveredSpaceId(null)}
                     >
-                      <span style={{ fontSize: "11px", color: isActiveSpace ? "var(--accent)" : "var(--text-3)", fontWeight: 600, flexShrink: 0, transition: "color 0.16s" }}>@</span>
-                      <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{space.name}</span>
-                    </Link>
+                      <Link
+                        href={`/notes?space=${space.id}`}
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: "6px",
+                          padding: "8px 32px 8px 14px",
+                          borderRadius: "8px",
+                          fontSize: "14px",
+                          fontWeight: isActiveSpace ? 500 : 400,
+                          color: isActiveSpace ? "var(--text-1)" : "var(--text-2)",
+                          textDecoration: "none",
+                          background: isActiveSpace ? "var(--accent-dim)" : isHovered ? "var(--bg-hover)" : "transparent",
+                          transition: "color 0.16s, background 0.16s",
+                        }}
+                      >
+                        <span style={{ fontSize: "11px", color: isActiveSpace ? "var(--accent)" : "var(--text-3)", fontWeight: 600, flexShrink: 0, transition: "color 0.16s" }}>@</span>
+                        <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{space.name}</span>
+                      </Link>
+                      {/* Delete button — shown on hover */}
+                      {isHovered && (
+                        <button
+                          onClick={(e) => handleDeleteSpace(e, space.id)}
+                          title="Delete space"
+                          style={{
+                            position: "absolute",
+                            right: "8px",
+                            top: "50%",
+                            transform: "translateY(-50%)",
+                            width: "18px",
+                            height: "18px",
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            background: "transparent",
+                            border: "none",
+                            borderRadius: "4px",
+                            cursor: "pointer",
+                            color: "var(--text-3)",
+                            fontSize: "14px",
+                            lineHeight: 1,
+                            transition: "color 0.15s, background 0.15s",
+                          }}
+                          onMouseEnter={(e) => {
+                            e.currentTarget.style.color = "#FF453A"
+                            e.currentTarget.style.background = "rgba(255,69,58,0.1)"
+                          }}
+                          onMouseLeave={(e) => {
+                            e.currentTarget.style.color = "var(--text-3)"
+                            e.currentTarget.style.background = "transparent"
+                          }}
+                        >
+                          ×
+                        </button>
+                      )}
+                    </div>
                   )
                 })}
               </div>

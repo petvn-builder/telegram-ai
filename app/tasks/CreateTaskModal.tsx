@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useRef, useState } from "react"
+import { createPortal } from "react-dom"
 import type { TaskPriority, TaskStatus, TaskWithEntities } from "@/lib/tasks"
 
 interface TaskRow {
@@ -47,11 +48,13 @@ export default function CreateTaskModal({
 }: Props) {
   const [rows, setRows] = useState<TaskRow[]>(() => [newRow(initialTitle)])
   const [status, setStatus] = useState<TaskStatus>(initialStatus)
+  const [mounted, setMounted] = useState(false)
 
   const firstInputRef = useRef<HTMLInputElement>(null)
   const rowRefs = useRef<Map<string, HTMLInputElement>>(new Map())
 
   useEffect(() => {
+    setMounted(true)
     firstInputRef.current?.focus()
     firstInputRef.current?.select()
   }, [])
@@ -147,7 +150,9 @@ export default function CreateTaskModal({
 
   const anyValid = rows.some((r) => r.title.trim())
 
-  return (
+  if (!mounted) return null
+
+  return createPortal(
     <div
       style={{
         position: "fixed",
@@ -389,6 +394,7 @@ export default function CreateTaskModal({
           </div>
         </form>
       </div>
-    </div>
+    </div>,
+    document.body
   )
 }

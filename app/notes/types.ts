@@ -10,6 +10,11 @@ export interface Space {
   note_count: number
 }
 
+export interface Tag {
+  id: string
+  name: string
+}
+
 export interface Note {
   id: string
   user_id: string
@@ -23,6 +28,7 @@ export interface NoteWithEntities {
   created_at: string
   entities: Entity[]
   spaces: Space[]
+  tags: Tag[]
 }
 
 export interface NoteDetail {

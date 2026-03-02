@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getSupabaseServer } from "@/lib/supabase/server"
 import { getSupabaseAdmin } from "@/lib/supabase/admin"
-import type { NoteWithEntities, Entity, Space } from "@/app/notes/types"
+import type { NoteWithEntities, Entity, Space, Tag } from "@/app/notes/types"
 
 // ── Space token parsing ───────────────────────────────────────────────────────
 
@@ -58,6 +58,96 @@ export async function syncNoteSpaces(
   }
 
   return spaceResults
+}
+
+// ── Tag token parsing ─────────────────────────────────────────────────────────
+
+export function extractTagTokens(content: string): { tagNames: string[]; cleanContent: string } {
+  const tagNames: string[] = []
+  const cleanContent = content
+    .replace(/(^|\s)#([a-zA-Z0-9_-]+)/g, (_, prefix: string, name: string) => {
+      tagNames.push(name.toLowerCase())
+      return prefix
+    })
+    .replace(/[ \t]+/g, " ")
+    .trim()
+  return { tagNames: [...new Set(tagNames)], cleanContent }
+}
+
+// ── Sync note ↔ tags ──────────────────────────────────────────────────────────
+
+export async function syncNoteTags(
+  db: ReturnType<typeof getSupabaseAdmin>,
+  userId: string,
+  noteId: string,
+  tagNames: string[]
+): Promise<Tag[]> {
+  if (tagNames.length === 0) {
+    await db.from("note_tags").delete().eq("note_id", noteId)
+    return []
+  }
+
+  const tagIds: string[] = []
+  const tagResults: Tag[] = []
+
+  for (const name of tagNames) {
+    const { data } = await db
+      .from("tags")
+      .upsert({ user_id: userId, name }, { onConflict: "user_id,name" })
+      .select("id, name")
+      .single()
+
+    if (data) {
+      tagIds.push(data.id)
+      tagResults.push({ id: data.id, name: data.name })
+    }
+  }
+
+  await db.from("note_tags").delete().eq("note_id", noteId)
+
+  if (tagIds.length > 0) {
+    await db.from("note_tags").insert(
+      tagIds.map((tag_id) => ({ note_id: noteId, tag_id }))
+    )
+  }
+
+  return tagResults
+}
+
+// ── Fetch tags for a set of note IDs ─────────────────────────────────────────
+
+export async function fetchTagsForNotes(
+  db: ReturnType<typeof getSupabaseAdmin>,
+  noteIds: string[]
+): Promise<Map<string, Tag[]>> {
+  if (noteIds.length === 0) return new Map()
+
+  const { data: noteTagRows } = await db
+    .from("note_tags")
+    .select("note_id, tag_id")
+    .in("note_id", noteIds)
+
+  if (!noteTagRows || noteTagRows.length === 0) return new Map()
+
+  const uniqueTagIds = [...new Set(noteTagRows.map((r) => r.tag_id))]
+
+  const { data: tagRows } = await db
+    .from("tags")
+    .select("id, name")
+    .in("id", uniqueTagIds)
+
+  const tagMap = new Map<string, Tag>()
+  for (const t of tagRows ?? []) tagMap.set(t.id, { id: t.id, name: t.name })
+
+  const result = new Map<string, Tag[]>()
+  for (const r of noteTagRows) {
+    const tag = tagMap.get(r.tag_id)
+    if (!tag) continue
+    if (!result.has(r.note_id)) result.set(r.note_id, [])
+    result.get(r.note_id)!.push(tag)
+  }
+
+  return result
 }
 
 // ── Fetch spaces for a set of note IDs ───────────────────────────────────────
@@ -194,13 +284,14 @@ export async function GET(req: NextRequest) {
 
     const fetchedNoteIds = notes.map((n) => n.id)
 
-    // 2. Fetch links + spaces in parallel (both depend only on note IDs)
-    const [linksResult, noteSpacesIndex] = await Promise.all([
+    // 2. Fetch links + spaces + tags in parallel (all depend only on note IDs)
+    const [linksResult, noteSpacesIndex, noteTagsIndex] = await Promise.all([
       db.from("knowledge_links")
         .select("knowledge_id, entity_id")
         .eq("user_id", userId)
         .in("knowledge_id", fetchedNoteIds),
       fetchSpacesForNotes(db, fetchedNoteIds),
+      fetchTagsForNotes(db, fetchedNoteIds),
     ])
 
     if (linksResult.error) throw linksResult.error
@@ -240,6 +331,7 @@ export async function GET(req: NextRequest) {
       created_at: note.created_at,
       entities: noteEntityIndex.get(note.id) ?? [],
       spaces: noteSpacesIndex.get(note.id) ?? [],
+      tags: noteTagsIndex.get(note.id) ?? [],
     }))
 
     const response: PaginatedNotesResponse = {
@@ -327,7 +419,10 @@ export async function POST(req: NextRequest) {
     if (!rawContent) return NextResponse.json({ error: "Empty content" }, { status: 400 })
 
     const spaceNames: string[] = Array.isArray(body.spaces) ? body.spaces.map(String) : []
-    const content = rawContent
+
+    // Extract #tag tokens and strip from stored content
+    const { tagNames, cleanContent: contentAfterTags } = extractTagTokens(rawContent)
+    const content = contentAfterTags
 
     const db = getSupabaseAdmin()
 
@@ -343,8 +438,11 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Save failed" }, { status: 500 })
     }
 
-    // Sync spaces immediately (fast, no AI)
-    const spaces = await syncNoteSpaces(db, user.id, knowledge.id, spaceNames)
+    // Sync spaces + tags immediately (fast, no AI)
+    const [spaces, tags] = await Promise.all([
+      syncNoteSpaces(db, user.id, knowledge.id, spaceNames),
+      syncNoteTags(db, user.id, knowledge.id, tagNames),
+    ])
 
     // Run embedding + entity extraction in background after response is sent
     const backgroundWork = (async () => {
@@ -379,6 +477,7 @@ export async function POST(req: NextRequest) {
       created_at: knowledge.created_at,
       entities: [],       // populated asynchronously; client polls after ~3s
       spaces,
+      tags,
       processing: true,   // signals the client that entities are being extracted
     })
   } catch (error) {

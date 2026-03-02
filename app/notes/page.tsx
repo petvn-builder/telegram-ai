@@ -4,13 +4,18 @@ import { Suspense, useEffect, useMemo, useRef, useState } from "react"
 import { useSearchParams, useRouter } from "next/navigation"
 import Link from "next/link"
 import useSWR from "swr"
-import type { Entity, Space, NoteWithEntities, TaskWithEntities } from "./types"
+import type { Entity, Space, Tag, NoteWithEntities, TaskWithEntities } from "./types"
 import { fetcher } from "@/lib/fetcher"
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
+// Normalize ISO timestamp: Supabase may omit 'Z', causing JS to parse as local time
+function parseUTC(iso: string): Date {
+  return new Date(/[Z+]/.test(iso) ? iso : iso + "Z")
+}
+
 function relativeTime(iso: string): string {
-  const diff = Date.now() - new Date(iso).getTime()
+  const diff = Date.now() - parseUTC(iso).getTime()
   const mins = Math.floor(diff / 60000)
   if (mins < 1) return "just now"
   if (mins < 60) return `${mins}m ago`
@@ -29,7 +34,7 @@ function shortDate(iso: string): string {
 }
 
 function dateLabel(iso: string): string {
-  const d = new Date(iso)
+  const d = parseUTC(iso)
   d.setHours(0, 0, 0, 0)
   const today = new Date(); today.setHours(0, 0, 0, 0)
   const yesterday = new Date(today); yesterday.setDate(today.getDate() - 1)
@@ -89,6 +94,7 @@ function NoteCard({ note, selected, onClick, isLast }: NoteCardProps) {
   const [hovered, setHovered] = useState(false)
   const { title, body } = titleAndBody(note.content)
   const spaceName = note.spaces?.[0]?.name ?? null
+  const tags = note.tags ?? []
 
   return (
     <button
@@ -104,32 +110,46 @@ function NoteCard({ note, selected, onClick, isLast }: NoteCardProps) {
         borderRight: "none",
         borderLeft: "none",
         borderRadius: "0",
-        padding: "18px 24px",
+        padding: "16px 24px",
         cursor: "pointer",
-        transition: "background 0.15s ease, border-color 0.15s ease",
+        transition: "background 0.15s ease",
         display: "flex",
         flexDirection: "column",
-        gap: "5px",
+        gap: "4px",
       }}
     >
       <p style={{ fontSize: "14px", fontWeight: 500, lineHeight: 1.4, color: "var(--text-1)", margin: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
         {title || "Untitled"}
       </p>
       {body && (
-        <p style={{ fontSize: "13px", lineHeight: 1.5, color: "var(--text-2)", margin: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+        <p style={{ fontSize: "12.5px", lineHeight: 1.5, color: "var(--text-2)", margin: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
           {body}
         </p>
       )}
-      <div style={{ display: "flex", alignItems: "center", gap: "5px", marginTop: "2px" }}>
-        {spaceName && (
-          <>
-            <span style={{ fontSize: "11px", color: "var(--accent)", fontWeight: 500 }}>@{spaceName}</span>
-            <span style={{ fontSize: "11px", color: "var(--text-3)" }}>·</span>
-          </>
-        )}
-        <span style={{ fontSize: "11px", color: "var(--text-3)", fontFamily: "var(--font-geist-mono, monospace)" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: "6px", marginTop: "3px", flexWrap: "wrap" }}>
+        <span style={{ fontSize: "11px", color: "var(--text-3)" }}>
           {relativeTime(note.created_at)}
         </span>
+        {spaceName && (
+          <>
+            <span style={{ fontSize: "10px", color: "var(--text-3)", opacity: 0.5 }}>·</span>
+            <span style={{ fontSize: "11px", color: "var(--accent)", fontWeight: 500 }}>@{spaceName}</span>
+          </>
+        )}
+        {tags.length > 0 && (
+          <>
+            <span style={{ fontSize: "10px", color: "var(--text-3)", opacity: 0.5 }}>·</span>
+            {tags.map((tag) => (
+              <span key={tag.id} style={{
+                fontSize: "10px", color: "var(--text-3)",
+                background: "var(--bg-hover)", borderRadius: "3px",
+                padding: "1px 4px", letterSpacing: "0.01em",
+              }}>
+                #{tag.name}
+              </span>
+            ))}
+          </>
+        )}
       </div>
     </button>
   )
@@ -187,7 +207,7 @@ function NotesPageInner() {
   const [selectedNote, setSelectedNote] = useState<NoteWithEntities | null>(null)
   const [searchQuery, setSearchQuery] = useState("")
   const [activeEntityId, setActiveEntityId] = useState<string | null>(searchParams.get("entity"))
-  const [groupByEntity, setGroupByEntity] = useState(false)
+  const [groupMode, setGroupMode] = useState<"none" | "entity" | "tag">("none")
   const [listFading, setListFading] = useState(false)
 
   // ── Panel
@@ -619,7 +639,10 @@ function NotesPageInner() {
 
   function toggleGroupMode() {
     setListFading(true)
-    setTimeout(() => { setGroupByEntity((prev) => !prev); setListFading(false) }, 120)
+    setTimeout(() => {
+      setGroupMode((prev) => prev === "none" ? "entity" : prev === "entity" ? "tag" : "none")
+      setListFading(false)
+    }, 120)
   }
 
   // ── Memos
@@ -630,6 +653,18 @@ function NotesPageInner() {
         const entry = map.get(entity.id)
         if (entry) { entry.count++; entry.notes.push(note) }
         else map.set(entity.id, { entity, count: 1, notes: [note] })
+      }
+    }
+    return Array.from(map.values()).sort((a, b) => b.count - a.count)
+  }, [notes])
+
+  const tagStats = useMemo(() => {
+    const map = new Map<string, { tag: Tag; count: number; notes: NoteWithEntities[] }>()
+    for (const note of notes) {
+      for (const tag of note.tags ?? []) {
+        const entry = map.get(tag.id)
+        if (entry) { entry.count++; entry.notes.push(note) }
+        else map.set(tag.id, { tag, count: 1, notes: [note] })
       }
     }
     return Array.from(map.values()).sort((a, b) => b.count - a.count)
@@ -672,15 +707,23 @@ function NotesPageInner() {
   function renderCardsWithDates(items: NoteWithEntities[]) {
     const result: React.ReactNode[] = []
     let lastLabel = ""
+    let isFirstGroup = true
     items.forEach((note, idx) => {
       const label = dateLabel(note.created_at)
       if (label !== lastLabel) {
         lastLabel = label
         result.push(
-          <div key={`date-${label}`} style={{ padding: "10px 24px 6px", fontSize: "11px", fontWeight: 600, color: "var(--text-3)", textTransform: "uppercase", letterSpacing: "0.06em", fontFamily: "var(--font-geist-mono, monospace)" }}>
-            {label}
+          <div key={`date-${label}`} style={{
+            padding: isFirstGroup ? "16px 24px 8px" : "24px 24px 8px",
+            display: "flex", alignItems: "center", gap: "10px",
+          }}>
+            <span style={{ fontSize: "11px", fontWeight: 600, color: "var(--text-2)", letterSpacing: "0.03em" }}>
+              {label}
+            </span>
+            <div style={{ flex: 1, height: "1px", background: "var(--border-subtle)" }} />
           </div>
         )
+        isFirstGroup = false
       }
       const isNew = note.id === justAddedId.current
       result.push(
@@ -702,13 +745,44 @@ function NotesPageInner() {
       return (
         <div key={entity.id}>
           <div style={{ position: "sticky", top: 0, background: "var(--bg-base)", zIndex: 2, padding: "12px 24px 8px", borderBottom: "1px solid var(--border-subtle)", display: "flex", alignItems: "baseline", gap: "6px" }}>
-            <span style={{ fontSize: "14px", fontWeight: 600, color: "var(--text-1)" }}>{entity.name}</span>
-            <span style={{ fontSize: "13px", color: "var(--text-3)" }}>({items.length})</span>
+            <span style={{ fontSize: "13px", fontWeight: 600, color: "var(--text-1)" }}>{entity.name}</span>
+            <span style={{ fontSize: "12px", color: "var(--text-3)" }}>{items.length}</span>
           </div>
           {renderCards(items)}
         </div>
       )
     })
+  }
+
+  function renderGroupedByTags() {
+    const untagged = filteredNotes.filter((n) => (n.tags ?? []).length === 0)
+    return (
+      <>
+        {tagStats.map(({ tag, notes: tagNotes }) => {
+          const items = searchQuery ? tagNotes.filter((n) => n.content.toLowerCase().includes(searchQuery.toLowerCase())) : tagNotes
+          if (items.length === 0) return null
+          return (
+            <div key={tag.id}>
+              <div style={{ position: "sticky", top: 0, background: "var(--bg-base)", zIndex: 2, padding: "12px 24px 8px", borderBottom: "1px solid var(--border-subtle)", display: "flex", alignItems: "center", gap: "6px" }}>
+                <span style={{ fontSize: "11px", color: "var(--text-3)" }}>#</span>
+                <span style={{ fontSize: "13px", fontWeight: 600, color: "var(--text-1)" }}>{tag.name}</span>
+                <span style={{ fontSize: "12px", color: "var(--text-3)" }}>{items.length}</span>
+              </div>
+              {renderCards(items)}
+            </div>
+          )
+        })}
+        {untagged.length > 0 && (
+          <div key="untagged">
+            <div style={{ position: "sticky", top: 0, background: "var(--bg-base)", zIndex: 2, padding: "12px 24px 8px", borderBottom: "1px solid var(--border-subtle)", display: "flex", alignItems: "baseline", gap: "6px" }}>
+              <span style={{ fontSize: "13px", fontWeight: 600, color: "var(--text-3)" }}>Untagged</span>
+              <span style={{ fontSize: "12px", color: "var(--text-3)" }}>{untagged.length}</span>
+            </div>
+            {renderCards(untagged)}
+          </div>
+        )}
+      </>
+    )
   }
 
   function renderMain() {
@@ -747,8 +821,8 @@ function NotesPageInner() {
     }
     return (
       <div style={{ display: "flex", flexDirection: "column", opacity: listFading ? 0 : 1, transition: "opacity 150ms ease-in-out" }}>
-        {groupByEntity ? renderGrouped() : renderCardsWithDates(filteredNotes)}
-        {!groupByEntity && hasMore && !searchQuery && !activeEntityId && (
+        {groupMode === "entity" ? renderGrouped() : groupMode === "tag" ? renderGroupedByTags() : renderCardsWithDates(filteredNotes)}
+        {groupMode === "none" && hasMore && !searchQuery && !activeEntityId && (
           <button
             onClick={() => setOffset((o) => o + 30)}
             style={{ padding: "12px 24px", background: "transparent", border: "none", color: "var(--text-3)", fontSize: "13px", cursor: "pointer", textAlign: "left", transition: "color 0.15s" }}
@@ -764,6 +838,8 @@ function NotesPageInner() {
 
   // ── Layout
   const showEntityTags = !loading && entityStats.length > 0
+  const groupActive = groupMode !== "none"
+  const groupLabel = groupMode === "entity" ? "Entity" : groupMode === "tag" ? "Tag" : "Group"
   const panelOpen = panelMode !== null
   const tasksDone = noteTasks.filter((t) => t.status === "done").length
   const tasksTotal = panelMode === "create" ? pendingTasks.length : noteTasks.length
@@ -807,34 +883,37 @@ function NotesPageInner() {
             </div>
 
             {/* Controls */}
-            <div style={{ display: "flex", alignItems: "center", gap: "8px", flexShrink: 0 }}>
-              {/* Group toggle */}
-              <button onClick={toggleGroupMode} title={groupByEntity ? "Ungroup" : "Group by entity"}
-                style={{ display: "flex", alignItems: "center", gap: "5px", padding: "6px 12px", background: groupByEntity ? "var(--accent-dim)" : "transparent", border: groupByEntity ? "1px solid var(--border-accent)" : "1px solid var(--border)", borderRadius: "8px", cursor: "pointer", color: groupByEntity ? "var(--accent)" : "var(--text-2)", fontSize: "13px", transition: "all 0.15s ease" }}
-                onMouseEnter={(e) => { if (!groupByEntity) { e.currentTarget.style.color = "var(--text-1)"; e.currentTarget.style.borderColor = "var(--border-hover)" } }}
-                onMouseLeave={(e) => { if (!groupByEntity) { e.currentTarget.style.color = "var(--text-2)"; e.currentTarget.style.borderColor = "var(--border)" } }}>
-                <svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+            <div style={{ display: "flex", alignItems: "center", gap: "6px", flexShrink: 0 }}>
+              {/* Group toggle — cycles none → entity → tag */}
+              <button onClick={toggleGroupMode} title="Cycle group mode: None → Entity → Tag"
+                style={{ display: "flex", alignItems: "center", gap: "5px", height: "30px", padding: "0 10px", background: groupActive ? "var(--accent-dim)" : "transparent", border: groupActive ? "1px solid var(--border-accent)" : "1px solid var(--border)", borderRadius: "7px", cursor: "pointer", color: groupActive ? "var(--accent)" : "var(--text-2)", fontSize: "12px", transition: "all 0.15s ease", whiteSpace: "nowrap" }}
+                onMouseEnter={(e) => { if (!groupActive) { e.currentTarget.style.color = "var(--text-1)"; e.currentTarget.style.borderColor = "var(--border-hover, var(--border))" } }}
+                onMouseLeave={(e) => { if (!groupActive) { e.currentTarget.style.color = "var(--text-2)"; e.currentTarget.style.borderColor = "var(--border)" } }}>
+                <svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
                   <rect x="1" y="1" width="6" height="6" rx="1" /><rect x="9" y="1" width="6" height="6" rx="1" />
                   <rect x="1" y="9" width="6" height="6" rx="1" /><rect x="9" y="9" width="6" height="6" rx="1" />
                 </svg>
-                Group
+                {groupLabel}
               </button>
+
+              {/* Divider */}
+              <div style={{ width: "1px", height: "18px", background: "var(--border)" }} />
 
               {/* Search */}
               <div style={{ position: "relative" }}>
-                <span style={{ position: "absolute", left: "10px", top: "50%", transform: "translateY(-50%)", color: "var(--text-3)", fontSize: "13px", pointerEvents: "none", lineHeight: 1 }}>⌕</span>
+                <span style={{ position: "absolute", left: "8px", top: "50%", transform: "translateY(-50%)", color: "var(--text-3)", fontSize: "13px", pointerEvents: "none", lineHeight: 1 }}>⌕</span>
                 <input type="text" placeholder="Search…" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)}
-                  style={{ width: "180px", background: "transparent", border: "1px solid transparent", borderRadius: "8px", padding: "6px 12px 6px 28px", fontSize: "13px", color: "var(--text-1)", outline: "none", transition: "border-color 0.15s, background 0.15s", boxSizing: "border-box" }}
+                  style={{ width: "148px", height: "30px", background: "transparent", border: "1px solid transparent", borderRadius: "7px", padding: "0 10px 0 26px", fontSize: "12px", color: "var(--text-1)", outline: "none", transition: "border-color 0.15s, background 0.15s, width 0.2s", boxSizing: "border-box" }}
                   onFocus={(e) => { e.currentTarget.style.borderColor = "var(--border)"; e.currentTarget.style.background = "var(--bg-surface)" }}
                   onBlur={(e) => { if (!e.currentTarget.value) { e.currentTarget.style.borderColor = "transparent"; e.currentTarget.style.background = "transparent" } }} />
               </div>
 
               {/* New note */}
               <button onClick={openCreatePanel} title="New note"
-                style={{ display: "flex", alignItems: "center", gap: "5px", padding: "6px 14px", background: panelMode === "create" ? "var(--accent-dim)" : "transparent", border: panelMode === "create" ? "1px solid var(--border-accent)" : "1px solid var(--border)", borderRadius: "8px", cursor: "pointer", color: panelMode === "create" ? "var(--accent)" : "var(--text-2)", fontSize: "13px", fontWeight: 500, transition: "all 0.15s ease" }}
-                onMouseEnter={(e) => { if (panelMode !== "create") { e.currentTarget.style.color = "var(--text-1)"; e.currentTarget.style.borderColor = "var(--border-hover)" } }}
-                onMouseLeave={(e) => { if (panelMode !== "create") { e.currentTarget.style.color = "var(--text-2)"; e.currentTarget.style.borderColor = "var(--border)" } }}>
-                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+                style={{ display: "flex", alignItems: "center", gap: "4px", height: "30px", padding: "0 12px", background: panelMode === "create" ? "var(--accent)" : "var(--accent)", border: "none", borderRadius: "7px", cursor: "pointer", color: "#fff", fontSize: "12px", fontWeight: 500, transition: "opacity 0.15s ease" }}
+                onMouseEnter={(e) => { e.currentTarget.style.opacity = "0.85" }}
+                onMouseLeave={(e) => { e.currentTarget.style.opacity = "1" }}>
+                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
                   <line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" />
                 </svg>
                 New

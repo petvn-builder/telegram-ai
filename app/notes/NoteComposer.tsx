@@ -1,12 +1,18 @@
 "use client"
 
 import { useEffect, useRef, useState } from "react"
-import type { NoteWithEntities, Space } from "./types"
+import type { NoteWithEntities, Space, Tag } from "./types"
 
 const SPACE_STYLE = {
   bg: "var(--accent-dim)",
   text: "var(--accent)",
   border: "var(--border-accent)",
+}
+
+const TAG_STYLE = {
+  bg: "var(--bg-hover)",
+  text: "var(--text-2)",
+  border: "var(--border)",
 }
 
 function Spinner() {
@@ -27,8 +33,12 @@ function Spinner() {
   )
 }
 
-type DropdownOption =
+type SpaceDropdownOption =
   | { type: "space"; space: Space }
+  | { type: "create"; name: string }
+
+type TagDropdownOption =
+  | { type: "tag"; tag: Tag }
   | { type: "create"; name: string }
 
 interface NoteComposerProps {
@@ -39,6 +49,25 @@ interface NoteComposerProps {
   noteId?: string
   onSave: (note: NoteWithEntities) => void
   onCancel: () => void
+}
+
+// Get the partial #word immediately before the cursor, or null
+function getTagWordAtCursor(text: string, cursorPos: number): string | null {
+  const before = text.slice(0, cursorPos)
+  const match = before.match(/#([a-zA-Z0-9_-]*)$/)
+  return match ? match[1] : null
+}
+
+// Replace the partial #word before cursor with the chosen tag
+function replaceTagWord(
+  text: string,
+  cursorPos: number,
+  tagName: string
+): { newText: string; newCursor: number } {
+  const before = text.slice(0, cursorPos)
+  const after = text.slice(cursorPos)
+  const newBefore = before.replace(/#([a-zA-Z0-9_-]*)$/, `#${tagName} `)
+  return { newText: newBefore + after, newCursor: newBefore.length }
 }
 
 export default function NoteComposer({
@@ -54,6 +83,8 @@ export default function NoteComposer({
   const [saving, setSaving] = useState(false)
   const [saveStatus, setSaveStatus] = useState<"idle" | "saving" | "saved">("idle")
   const [error, setError] = useState<string | null>(null)
+
+  // Space state
   const [availableSpaces, setAvailableSpaces] = useState<Space[]>([])
   const [assignedSpaces, setAssignedSpaces] = useState<string[]>(() =>
     initialSpaces.map((s) => s.name)
@@ -61,6 +92,11 @@ export default function NoteComposer({
   const [spaceInput, setSpaceInput] = useState("")
   const [spaceDropdownVisible, setSpaceDropdownVisible] = useState(false)
   const [spaceDropdownIndex, setSpaceDropdownIndex] = useState(0)
+
+  // Tag state
+  const [availableTags, setAvailableTags] = useState<Tag[]>([])
+  const [tagWord, setTagWord] = useState<string | null>(null) // partial word after #
+  const [tagDropdownIndex, setTagDropdownIndex] = useState(0)
 
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const spaceInputRef = useRef<HTMLInputElement>(null)
@@ -80,18 +116,54 @@ export default function NoteComposer({
     ta.style.height = ta.scrollHeight + "px"
   }, [value])
 
-  // Load available spaces
+  // Load available spaces and tags
   useEffect(() => {
     fetch("/api/spaces")
       .then((r) => r.ok ? r.json() : [])
       .then((data: Space[]) => setAvailableSpaces(data))
       .catch(() => {})
+    fetch("/api/tags")
+      .then((r) => r.ok ? r.json() : [])
+      .then((data: Tag[]) => setAvailableTags(data))
+      .catch(() => {})
   }, [])
 
-  // Reset dropdown index when input changes
-  useEffect(() => {
-    setSpaceDropdownIndex(0)
-  }, [spaceInput])
+  // Reset dropdown indices when inputs change
+  useEffect(() => { setSpaceDropdownIndex(0) }, [spaceInput])
+  useEffect(() => { setTagDropdownIndex(0) }, [tagWord])
+
+  // ── Tag helpers ───────────────────────────────────────────────────────────
+
+  const tagDropdownOptions: TagDropdownOption[] = (() => {
+    if (tagWord === null) return []
+    const q = tagWord.toLowerCase()
+    const filtered = availableTags.filter((t) => t.name.includes(q))
+    const options: TagDropdownOption[] = filtered.map((t) => ({ type: "tag", tag: t }))
+    const exactMatch = availableTags.some((t) => t.name === q)
+    if (q.length > 0 && !exactMatch) options.push({ type: "create", name: q })
+    return options
+  })()
+
+  function selectTagOption(opt: TagDropdownOption) {
+    const tagName = opt.type === "tag" ? opt.tag.name : opt.name
+    const ta = textareaRef.current
+    if (!ta) return
+    const cursorPos = ta.selectionStart ?? value.length
+    const { newText, newCursor } = replaceTagWord(value, cursorPos, tagName)
+    setValue(newText)
+    setTagWord(null)
+
+    // Add to available tags if new
+    if (opt.type === "create" && !availableTags.some((t) => t.name === tagName)) {
+      setAvailableTags((prev) => [...prev, { id: `temp-${tagName}`, name: tagName }])
+    }
+
+    // Restore cursor after re-render
+    requestAnimationFrame(() => {
+      ta.focus()
+      ta.setSelectionRange(newCursor, newCursor)
+    })
+  }
 
   // ── Space helpers ─────────────────────────────────────────────────────────
 
@@ -99,19 +171,19 @@ export default function NoteComposer({
     return (input.startsWith("@") ? input.slice(1) : input).toLowerCase().trim()
   }
 
-  const spaceDropdownOptions: DropdownOption[] = (() => {
+  const spaceDropdownOptions: SpaceDropdownOption[] = (() => {
     if (!spaceDropdownVisible || !spaceInput.trim()) return []
     const q = getSpaceQuery(spaceInput)
     const filtered = availableSpaces.filter(
       (s) => s.name.includes(q) && !assignedSpaces.includes(s.name)
     )
-    const options: DropdownOption[] = filtered.map((s) => ({ type: "space", space: s }))
+    const options: SpaceDropdownOption[] = filtered.map((s) => ({ type: "space", space: s }))
     const exactMatch = availableSpaces.some((s) => s.name === q) || assignedSpaces.includes(q)
     if (q.length > 0 && !exactMatch) options.push({ type: "create", name: q })
     return options
   })()
 
-  function selectSpaceOption(opt: DropdownOption) {
+  function selectSpaceOption(opt: SpaceDropdownOption) {
     const name = opt.type === "space" ? opt.space.name : opt.name
     if (!assignedSpaces.includes(name)) {
       setAssignedSpaces((prev) => [...prev, name])
@@ -163,6 +235,7 @@ export default function NoteComposer({
         ...note,
         spaces: note.spaces ?? [],
         entities: note.entities ?? [],
+        tags: note.tags ?? [],
       }
 
       if (!savedNoteIdRef.current) {
@@ -171,7 +244,7 @@ export default function NoteComposer({
 
       if (isAutoSave) {
         setSaveStatus("saved")
-        onSave(fullNote) // update list but parent handles whether to close
+        onSave(fullNote)
         setTimeout(() => setSaveStatus("idle"), 2500)
       } else {
         onSave(fullNote)
@@ -190,13 +263,50 @@ export default function NoteComposer({
     }
   }
 
+  function onTextareaChange(e: React.ChangeEvent<HTMLTextAreaElement>) {
+    const newValue = e.target.value
+    setValue(newValue)
+
+    // Detect #tag typing
+    const cursor = e.target.selectionStart ?? newValue.length
+    const word = getTagWordAtCursor(newValue, cursor)
+    setTagWord(word)
+  }
+
   function onKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
+    // Tag dropdown navigation
+    if (tagWord !== null && tagDropdownOptions.length > 0) {
+      if (e.key === "ArrowDown") {
+        e.preventDefault()
+        setTagDropdownIndex((i) => Math.min(i + 1, tagDropdownOptions.length - 1))
+        return
+      }
+      if (e.key === "ArrowUp") {
+        e.preventDefault()
+        setTagDropdownIndex((i) => Math.max(i - 1, 0))
+        return
+      }
+      if (e.key === "Enter" || e.key === "Tab") {
+        const opt = tagDropdownOptions[tagDropdownIndex]
+        if (opt) {
+          e.preventDefault()
+          selectTagOption(opt)
+          return
+        }
+      }
+      if (e.key === "Escape") {
+        e.preventDefault()
+        setTagWord(null)
+        return
+      }
+    }
+
     if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
       e.preventDefault()
       if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current)
       doSave(false)
     }
-    if (e.key === "Escape") {
+    if (e.key === "Escape" && tagWord === null) {
       e.preventDefault()
       onCancel()
     }
@@ -241,6 +351,7 @@ export default function NoteComposer({
   }
 
   const isEmpty = !value.trim()
+  const tagDropdownVisible = tagWord !== null && tagDropdownOptions.length > 0
 
   return (
     <div
@@ -254,31 +365,116 @@ export default function NoteComposer({
         gap: "16px",
       }}
     >
-      {/* Textarea */}
-      <textarea
-        ref={textareaRef}
-        value={value}
-        onChange={(e) => setValue(e.target.value)}
-        onKeyDown={onKeyDown}
-        placeholder="Write a note…"
-        rows={4}
-        style={{
-          width: "100%",
-          background: "transparent",
-          border: "none",
-          borderRadius: "0",
-          padding: "0",
-          fontSize: "16px",
-          lineHeight: 1.75,
-          color: "var(--text-1)",
-          resize: "none",
-          outline: "none",
-          fontFamily: "inherit",
-          overflowY: "hidden",
-          boxSizing: "border-box",
-          minHeight: "140px",
-        }}
-      />
+      {/* Textarea with tag dropdown */}
+      <div style={{ position: "relative" }}>
+        <textarea
+          ref={textareaRef}
+          value={value}
+          onChange={onTextareaChange}
+          onKeyDown={onKeyDown}
+          onSelect={() => {
+            // Update tag word on cursor move
+            const ta = textareaRef.current
+            if (!ta) return
+            const word = getTagWordAtCursor(ta.value, ta.selectionStart ?? 0)
+            setTagWord(word)
+          }}
+          placeholder="Write a note… use #tag to label"
+          rows={4}
+          style={{
+            width: "100%",
+            background: "transparent",
+            border: "none",
+            borderRadius: "0",
+            padding: "0",
+            fontSize: "16px",
+            lineHeight: 1.75,
+            color: "var(--text-1)",
+            resize: "none",
+            outline: "none",
+            fontFamily: "inherit",
+            overflowY: "hidden",
+            boxSizing: "border-box",
+            minHeight: "140px",
+          }}
+        />
+
+        {/* Tag autocomplete dropdown */}
+        {tagDropdownVisible && (
+          <div
+            style={{
+              position: "absolute",
+              top: "calc(100% + 4px)",
+              left: 0,
+              minWidth: "200px",
+              background: "var(--bg-elevated)",
+              border: "1px solid var(--border)",
+              borderRadius: "8px",
+              boxShadow: "0 4px 16px rgba(0,0,0,0.12)",
+              zIndex: 100,
+              overflow: "hidden",
+            }}
+          >
+            {tagDropdownOptions.map((opt, i) => {
+              const isActive = i === tagDropdownIndex
+              if (opt.type === "tag") {
+                return (
+                  <button
+                    key={opt.tag.id}
+                    onMouseDown={(e) => { e.preventDefault(); selectTagOption(opt) }}
+                    onMouseEnter={() => setTagDropdownIndex(i)}
+                    style={{
+                      width: "100%",
+                      textAlign: "left",
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "6px",
+                      padding: "8px 12px",
+                      fontSize: "13px",
+                      color: isActive ? "var(--text-1)" : "var(--text-2)",
+                      background: isActive ? "var(--bg-hover)" : "transparent",
+                      border: "none",
+                      cursor: "pointer",
+                      transition: "background 0.1s",
+                    }}
+                  >
+                    <span style={{ color: "var(--text-3)", fontSize: "12px" }}>#</span>
+                    <span>{opt.tag.name}</span>
+                  </button>
+                )
+              }
+              return (
+                <button
+                  key={`create-${opt.name}`}
+                  onMouseDown={(e) => { e.preventDefault(); selectTagOption(opt) }}
+                  onMouseEnter={() => setTagDropdownIndex(i)}
+                  style={{
+                    width: "100%",
+                    textAlign: "left",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "6px",
+                    padding: "8px 12px",
+                    fontSize: "13px",
+                    color: isActive ? "var(--text-1)" : "var(--text-2)",
+                    background: isActive ? "var(--bg-hover)" : "transparent",
+                    border: "none",
+                    borderTop: tagDropdownOptions.length > 1 ? "1px solid var(--border-subtle)" : "none",
+                    cursor: "pointer",
+                    transition: "background 0.1s",
+                  }}
+                >
+                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+                    <line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" />
+                  </svg>
+                  <span>Create </span>
+                  <span style={{ fontWeight: 500 }}>#{opt.name}</span>
+                </button>
+              )
+            })}
+          </div>
+        )}
+      </div>
 
       {/* Inline error */}
       {error && (
