@@ -1,7 +1,9 @@
 "use client"
 
-import { useCallback, useEffect, useState } from "react"
+import { useState } from "react"
+import useSWR from "swr"
 import type { TaskStatus, TaskPriority, TaskWithEntities } from "@/lib/tasks"
+import { fetcher } from "@/lib/fetcher"
 import CreateTaskModal from "./CreateTaskModal"
 import TaskDetailModal from "./TaskDetailModal"
 
@@ -396,41 +398,29 @@ function TaskColumn({
 // ── Main page ─────────────────────────────────────────────────────────────────
 
 export default function TasksPage() {
-  const [tasks, setTasks] = useState<TaskWithEntities[]>([])
-  const [loading, setLoading] = useState(true)
+  const { data: tasks = [], isLoading: loading, mutate } =
+    useSWR<TaskWithEntities[]>("/api/tasks", fetcher, {
+      revalidateOnFocus: false,
+      dedupingInterval: 60_000,
+    })
   const [createInColumn, setCreateInColumn] = useState<TaskStatus | null>(null)
   const [selectedTask, setSelectedTask] = useState<TaskWithEntities | null>(null)
   const [dragId, setDragId] = useState<string | null>(null)
   const [dragOver, setDragOver] = useState<TaskStatus | null>(null)
 
-  const fetchTasks = useCallback(async () => {
-    try {
-      const res = await fetch("/api/tasks")
-      if (!res.ok) throw new Error("Failed to load")
-      const data: TaskWithEntities[] = await res.json()
-      setTasks(data)
-    } catch {
-      // silently fail — board stays empty
-    } finally {
-      setLoading(false)
-    }
-  }, [])
-
-  useEffect(() => { fetchTasks() }, [fetchTasks])
-
   function moveTask(taskId: string, newStatus: TaskStatus) {
-    setTasks((prev) => prev.map((t) => t.id === taskId ? { ...t, status: newStatus } : t))
+    mutate(tasks.map((t) => t.id === taskId ? { ...t, status: newStatus } : t), false)
     fetch(`/api/tasks/${taskId}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ status: newStatus }),
-    }).catch(() => fetchTasks())
+    }).catch(() => mutate())
   }
 
   function deleteTask(taskId: string) {
-    setTasks((prev) => prev.filter((t) => t.id !== taskId))
+    mutate(tasks.filter((t) => t.id !== taskId), false)
     setSelectedTask((prev) => prev?.id === taskId ? null : prev)
-    fetch(`/api/tasks/${taskId}`, { method: "DELETE" }).catch(() => fetchTasks())
+    fetch(`/api/tasks/${taskId}`, { method: "DELETE" }).catch(() => mutate())
   }
 
   function handleCheck(taskId: string) {
@@ -469,7 +459,7 @@ export default function TasksPage() {
   }
 
   function handleTaskUpdated(updated: TaskWithEntities) {
-    setTasks((prev) => prev.map((t) => t.id === updated.id ? updated : t))
+    mutate(tasks.map((t) => t.id === updated.id ? updated : t), false)
     setSelectedTask(null)
   }
 
@@ -592,7 +582,7 @@ export default function TasksPage() {
           onClose={() => setCreateInColumn(null)}
           initialStatus={createInColumn}
           onCreated={(task) => {
-            setTasks((prev) => [task, ...prev])
+            mutate([task, ...tasks], false)
             setCreateInColumn(null)
           }}
         />
