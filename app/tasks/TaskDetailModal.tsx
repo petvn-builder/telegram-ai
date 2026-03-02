@@ -226,9 +226,9 @@ export default function TaskDetailModal({ task, onClose, onUpdated, onDeleted }:
                   fontSize: "11px",
                   padding: "2px 7px",
                   borderRadius: "999px",
-                  background: "rgba(91,110,174,0.08)",
+                  background: "var(--accent-dim)",
                   color: "var(--accent)",
-                  border: "1px solid rgba(91,110,174,0.16)",
+                  border: "1px solid var(--border-accent)",
                 }}>
                   {e.name}
                 </span>
@@ -388,7 +388,7 @@ export default function TaskDetailModal({ task, onClose, onUpdated, onDeleted }:
               <label style={{ display: "block", fontSize: "12px", color: "var(--text-3)", marginBottom: "6px", fontWeight: 500 }}>Entities</label>
               <div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
                 {task.entities.map((e) => (
-                  <span key={e.id} style={{ fontSize: "11px", padding: "2px 7px", borderRadius: "999px", background: "rgba(91,110,174,0.08)", color: "var(--accent)", border: "1px solid rgba(91,110,174,0.16)" }}>
+                  <span key={e.id} style={{ fontSize: "11px", padding: "2px 7px", borderRadius: "999px", background: "var(--accent-dim)", color: "var(--accent)", border: "1px solid var(--border-accent)" }}>
                     {e.name}
                   </span>
                 ))}

@@ -1,6 +1,8 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
+import { useSearchParams, useRouter } from "next/navigation"
+import { Suspense } from "react"
 import useSWR from "swr"
 import type { TaskStatus, TaskPriority, TaskWithEntities } from "@/lib/tasks"
 import { fetcher } from "@/lib/fetcher"
@@ -218,9 +220,9 @@ function TaskCardItem({
             fontSize: "11px",
             padding: "2px 7px",
             borderRadius: "999px",
-            background: "rgba(91,110,174,0.08)",
+            background: "var(--accent-dim)",
             color: "var(--accent)",
-            border: "1px solid rgba(91,110,174,0.16)",
+            border: "1px solid var(--border-accent)",
             whiteSpace: "nowrap",
           }}>
             {e.name}
@@ -398,6 +400,16 @@ function TaskColumn({
 // ── Main page ─────────────────────────────────────────────────────────────────
 
 export default function TasksPage() {
+  return (
+    <Suspense>
+      <TasksPageInner />
+    </Suspense>
+  )
+}
+
+function TasksPageInner() {
+  const searchParams = useSearchParams()
+  const router = useRouter()
   const { data: tasks = [], isLoading: loading, mutate } =
     useSWR<TaskWithEntities[]>("/api/tasks", fetcher, {
       revalidateOnFocus: false,
@@ -407,6 +419,14 @@ export default function TasksPage() {
   const [selectedTask, setSelectedTask] = useState<TaskWithEntities | null>(null)
   const [dragId, setDragId] = useState<string | null>(null)
   const [dragOver, setDragOver] = useState<TaskStatus | null>(null)
+
+  // Handle ?create=1 from sidebar "New Task" button
+  useEffect(() => {
+    if (searchParams.get("create") === "1") {
+      setCreateInColumn("inbox")
+      router.replace("/tasks", { scroll: false })
+    }
+  }, [searchParams]) // eslint-disable-line react-hooks/exhaustive-deps
 
   function moveTask(taskId: string, newStatus: TaskStatus) {
     mutate(tasks.map((t) => t.id === taskId ? { ...t, status: newStatus } : t), false)
@@ -465,6 +485,14 @@ export default function TasksPage() {
 
   const totalActive = tasks.filter((t) => t.status !== "done").length
 
+  // Today section: tasks due today or overdue (not done)
+  const todayTasks = tasks.filter((t) => {
+    if (t.status === "done" || !t.due_date) return false
+    const d = new Date(t.due_date); d.setHours(0, 0, 0, 0)
+    const today = new Date(); today.setHours(0, 0, 0, 0)
+    return d.getTime() <= today.getTime()
+  })
+
   return (
     <div
       className="page-fade-in"
@@ -521,6 +549,55 @@ export default function TasksPage() {
         <div style={{ color: "var(--text-3)", fontSize: "14px", padding: "48px 0" }}>Loading…</div>
       )}
 
+      {/* Today / Overdue section */}
+      {!loading && todayTasks.length > 0 && (
+        <div style={{ maxWidth: "1000px", marginBottom: "28px" }}>
+          <p style={{ fontSize: "11px", fontWeight: 600, color: "var(--text-3)", letterSpacing: "0.08em", textTransform: "uppercase", margin: "0 0 10px" }}>
+            Today · {todayTasks.length} task{todayTasks.length !== 1 ? "s" : ""}
+          </p>
+          <div style={{ display: "flex", gap: "10px", overflowX: "auto", paddingBottom: "4px" }} className="entity-tags-scroll">
+            {todayTasks.map((task) => {
+              const { label, overdue } = formatDueDate(task.due_date!)
+              return (
+                <div
+                  key={task.id}
+                  onClick={() => setSelectedTask(task)}
+                  style={{
+                    flexShrink: 0,
+                    background: "var(--bg-surface)",
+                    border: "1px solid var(--border)",
+                    borderRadius: "10px",
+                    padding: "10px 14px",
+                    cursor: "pointer",
+                    minWidth: "180px",
+                    maxWidth: "240px",
+                    transition: "border-color 0.16s, background 0.16s",
+                  }}
+                  onMouseEnter={(e) => {
+                    (e.currentTarget as HTMLElement).style.borderColor = "var(--border-hover)"
+                    ;(e.currentTarget as HTMLElement).style.background = "var(--bg-hover)"
+                  }}
+                  onMouseLeave={(e) => {
+                    (e.currentTarget as HTMLElement).style.borderColor = "var(--border)"
+                    ;(e.currentTarget as HTMLElement).style.background = "var(--bg-surface)"
+                  }}
+                >
+                  <div style={{ display: "flex", alignItems: "center", gap: "6px", marginBottom: "5px" }}>
+                    <div style={{ width: "6px", height: "6px", borderRadius: "50%", background: PRIORITY_DOT[task.priority], flexShrink: 0 }} />
+                    <p style={{ fontSize: "13px", color: "var(--text-1)", margin: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1 }}>
+                      {task.title}
+                    </p>
+                  </div>
+                  <p style={{ fontSize: "11px", color: overdue ? "#DC2626" : "var(--text-3)", margin: 0, fontWeight: overdue ? 500 : 400 }}>
+                    {overdue ? `Overdue · ${label}` : "Due today"} · {task.status}
+                  </p>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      )}
+
       {/* Board — 3 outer columns */}
       {!loading && (
         <div style={{
@@ -569,13 +646,6 @@ export default function TasksPage() {
           ))}
         </div>
       )}
-
-      <style>{`
-        div:hover > div > .task-delete-btn,
-        div:hover > .task-delete-btn {
-          opacity: 1 !important;
-        }
-      `}</style>
 
       {createInColumn !== null && (
         <CreateTaskModal

@@ -5,6 +5,7 @@ import { useParams } from "next/navigation"
 import Link from "next/link"
 import type { NoteDetail, TaskWithEntities, TaskStatus } from "../types"
 import CreateTaskModal from "@/app/tasks/CreateTaskModal"
+import { useAiPanel } from "@/app/components/AiPanelContext"
 
 function formatDate(iso: string): string {
   return new Date(iso).toLocaleDateString("en-US", {
@@ -114,6 +115,7 @@ function RelatedTaskRow({
 
 export default function NoteDetailPage() {
   const { id } = useParams<{ id: string }>()
+  const { sendCommand } = useAiPanel()
   const [note, setNote] = useState<NoteDetail | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -291,6 +293,49 @@ export default function NoteDetailPage() {
                   {note.content}
                 </p>
               )}
+            </div>
+
+            {/* AI Actions */}
+            <div style={{ borderTop: "1px solid var(--border-subtle)", paddingTop: "20px" }}>
+              <p style={{ fontSize: "11px", fontWeight: 600, color: "var(--ai-accent)", margin: "0 0 10px", display: "flex", alignItems: "center", gap: "5px", letterSpacing: "0.07em", textTransform: "uppercase" }}>
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M12 2l2.4 7.4H22l-6.2 4.5 2.4 7.4L12 17l-6.2 4.3 2.4-7.4L2 9.4h7.6z" />
+                </svg>
+                AI
+              </p>
+              <div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
+                {[
+                  { label: "Summarize", cmd: `summarize note: ${note.content.slice(0, 120)}` },
+                  { label: "Create tasks", cmd: `create tasks from: ${note.content.slice(0, 120)}` },
+                  { label: "Find related", cmd: `find notes about: ${note.content.split("\n")[0].slice(0, 60)}` },
+                ].map(({ label, cmd }) => (
+                  <button
+                    key={label}
+                    onClick={() => sendCommand(cmd)}
+                    style={{
+                      padding: "5px 12px",
+                      background: "var(--ai-accent-dim)",
+                      border: "1px solid var(--ai-border)",
+                      borderRadius: "7px",
+                      fontSize: "12px",
+                      color: "var(--ai-accent)",
+                      cursor: "pointer",
+                      transition: "background 0.16s, color 0.16s",
+                      fontWeight: 500,
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.background = "var(--ai-accent-glow)"
+                      e.currentTarget.style.color = "var(--ai-accent)"
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.background = "var(--ai-accent-dim)"
+                      e.currentTarget.style.color = "var(--ai-accent)"
+                    }}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
             </div>
 
             {/* Entities */}

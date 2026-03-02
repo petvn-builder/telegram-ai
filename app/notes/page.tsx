@@ -102,9 +102,9 @@ function NoteCard({ note, selected, onClick, isLast }: NoteCardProps) {
         borderBottom: isLast ? "none" : "1px solid var(--border-subtle)",
         borderTop: "none",
         borderRight: "none",
-        borderLeft: selected ? "3px solid var(--accent)" : "3px solid transparent",
+        borderLeft: "none",
         borderRadius: "0",
-        padding: "18px 22px 18px 21px",
+        padding: "18px 24px",
         cursor: "pointer",
         transition: "background 0.15s ease, border-color 0.15s ease",
         display: "flex",
@@ -177,6 +177,7 @@ function NotesPageInner() {
   const router = useRouter()
   const activeSpaceId = searchParams.get("space")
   const openNoteId = searchParams.get("open")
+  const composeParam = searchParams.get("compose")
 
   // ── Core data
   const [offset, setOffset] = useState(0)
@@ -276,6 +277,18 @@ function NotesPageInner() {
       router.replace("/notes", { scroll: false })
     }
   }, [openNoteId, loading, notes]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Auto-open compose panel when navigated with ?compose=1
+  useEffect(() => {
+    if (composeParam !== "1") return
+    setSelectedNote(null)
+    setPanelText(searchParams.get("text") ?? "")
+    setPanelSpaces([])
+    setPanelSaved(false)
+    setPanelDirty(false)
+    setPanelMode("create")
+    router.replace("/notes", { scroll: false })
+  }, [composeParam]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Panel open/close effects
   useEffect(() => {

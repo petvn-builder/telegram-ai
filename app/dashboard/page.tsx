@@ -2,14 +2,6 @@ import { redirect } from "next/navigation"
 import { getSupabaseServer } from "@/lib/supabase/server"
 import DashboardLinks from "./DashboardLinks"
 
-function formatDate(iso: string) {
-  return new Date(iso).toLocaleDateString("en-US", {
-    month: "long",
-    day: "numeric",
-    year: "numeric",
-  })
-}
-
 function getGreeting() {
   const h = new Date().getHours()
   if (h < 12) return "Good morning"
@@ -37,6 +29,8 @@ export default async function DashboardPage() {
     day: "numeric",
   })
 
+  const firstName = user.email?.split("@")[0] ?? ""
+
   return (
     <div
       className="page-fade-in"
@@ -46,125 +40,66 @@ export default async function DashboardPage() {
         padding: "48px 48px",
       }}
     >
-      <div style={{ maxWidth: "680px" }}>
+      <div style={{ maxWidth: "640px" }}>
 
         {/* Header */}
-        <div
-          style={{
-            display: "flex",
-            alignItems: "flex-start",
-            justifyContent: "space-between",
-            marginBottom: "40px",
-          }}
-        >
-          <div>
-            <h1
-              style={{
-                fontSize: "26px",
-                fontWeight: 600,
-                color: "var(--text-1)",
-                margin: "0 0 6px",
-                letterSpacing: "-0.02em",
-              }}
-            >
-              {getGreeting()}
+        <div style={{ marginBottom: "32px" }}>
+          <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: "16px" }}>
+            <h1 style={{
+              fontSize: "26px",
+              fontWeight: 600,
+              color: "var(--text-1)",
+              margin: 0,
+              letterSpacing: "-0.025em",
+            }}>
+              {getGreeting()}{firstName ? `, ${firstName}` : ""}
             </h1>
-            <p style={{ fontSize: "14px", color: "var(--text-3)", margin: 0 }}>
-              {user.email}
+            <p style={{ fontSize: "13px", color: "var(--text-3)", margin: 0, flexShrink: 0 }}>
+              {today}
             </p>
           </div>
-          <p
-            style={{
-              fontSize: "13px",
-              color: "var(--text-3)",
-              margin: 0,
-              paddingTop: "6px",
-              flexShrink: 0,
-            }}
-          >
-            {today}
+          <p style={{ fontSize: "14px", color: "var(--text-3)", margin: "5px 0 0" }}>
+            Here&apos;s your focus for today.
           </p>
         </div>
 
-        {/* Telegram status banner */}
-        <div
-          style={{
+        {/* Telegram banner — only when not connected */}
+        {!identity && (
+          <div style={{
             display: "flex",
             alignItems: "center",
             justifyContent: "space-between",
             gap: "16px",
-            padding: "18px 24px",
+            padding: "14px 18px",
             background: "var(--bg-surface)",
             border: "1px solid var(--border)",
-            borderRadius: "14px",
-            marginBottom: "36px",
-          }}
-        >
-          <div style={{ display: "flex", alignItems: "center", gap: "14px" }}>
-            <div
-              style={{
-                width: "7px",
-                height: "7px",
-                borderRadius: "50%",
-                background: identity ? "#16A34A" : "var(--text-3)",
-                flexShrink: 0,
-              }}
-            />
-            <div>
-              <p
-                style={{
-                  fontSize: "14px",
-                  fontWeight: 500,
-                  color: "var(--text-1)",
-                  margin: "0 0 3px",
-                }}
-              >
-                {identity
-                  ? `Telegram connected · @${identity.telegram_username}`
-                  : "Telegram not connected"}
-              </p>
-              <p style={{ fontSize: "13px", color: "var(--text-3)", margin: 0 }}>
-                {identity
-                  ? `Since ${formatDate(identity.created_at)}`
-                  : "Connect to start saving knowledge from Telegram"}
+            borderRadius: "10px",
+            marginBottom: "24px",
+          }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+              <div style={{ width: "6px", height: "6px", borderRadius: "50%", background: "var(--text-3)", flexShrink: 0 }} />
+              <p style={{ fontSize: "13px", color: "var(--text-2)", margin: 0 }}>
+                Connect Telegram to save notes from your phone
               </p>
             </div>
-          </div>
-
-          {!identity && (
-            <a
-              href="/settings"
-              style={{
-                flexShrink: 0,
-                padding: "7px 16px",
-                background: "transparent",
-                border: "1px solid var(--border-hover)",
-                borderRadius: "8px",
-                fontSize: "13px",
-                fontWeight: 500,
-                color: "var(--text-1)",
-                textDecoration: "none",
-                whiteSpace: "nowrap",
-                transition: "border-color 0.16s, background 0.16s",
-              }}
-            >
+            <a href="/settings" style={{
+              flexShrink: 0,
+              padding: "5px 12px",
+              background: "transparent",
+              border: "1px solid var(--border-hover)",
+              borderRadius: "7px",
+              fontSize: "12px",
+              fontWeight: 500,
+              color: "var(--text-1)",
+              textDecoration: "none",
+              whiteSpace: "nowrap",
+            }}>
               Connect →
             </a>
-          )}
-        </div>
+          </div>
+        )}
 
-        {/* Section label */}
-        <p
-          style={{
-            fontSize: "13px",
-            fontWeight: 400,
-            color: "var(--text-3)",
-            margin: "0 0 14px",
-          }}
-        >
-          Quick access
-        </p>
-
+        {/* Main widgets */}
         <DashboardLinks />
       </div>
     </div>
