@@ -47,13 +47,23 @@ export async function consumeLinkToken(
     throw new Error("Link token has expired. Please generate a new one in Settings.")
   }
 
+  // Upsert on user_id conflict — this replaces any previously linked Telegram account
+  // for this web user (enforces 1 Telegram per web account).
+  // We also delete any row that already holds this telegram_user_id to avoid
+  // the unique(telegram_user_id) constraint when switching accounts.
+  await admin
+    .from("user_identities")
+    .delete()
+    .eq("telegram_user_id", telegramUserId)
+    .neq("user_id", row.user_id)
+
   const { error: identityError } = await admin.from("user_identities").upsert(
     {
       user_id: row.user_id,
       telegram_user_id: telegramUserId,
       telegram_username: telegramUsername,
     },
-    { onConflict: "telegram_user_id" }
+    { onConflict: "user_id" }
   )
 
   if (identityError) {
@@ -61,6 +71,19 @@ export async function consumeLinkToken(
   }
 
   await admin.from("telegram_link_tokens").delete().eq("id", row.id)
+}
+
+export async function unlinkTelegram(userId: string): Promise<void> {
+  const admin: AdminClient = getSupabaseAdmin()
+
+  const { error } = await admin
+    .from("user_identities")
+    .delete()
+    .eq("user_id", userId)
+
+  if (error) {
+    throw new Error(`Failed to unlink Telegram: ${error.message}`)
+  }
 }
 
 export async function getWebUserIdForTelegram(

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
 import { getSupabaseServer } from "@/lib/supabase/server"
-import { generateLinkToken } from "@/lib/telegram-link"
+import { generateLinkToken, unlinkTelegram } from "@/lib/telegram-link"
 
 /**
  * POST /api/auth/telegram-link
@@ -37,6 +37,31 @@ export async function POST() {
     console.error("Telegram link token generation failed:", err)
     return NextResponse.json(
       { error: "Failed to generate link. Please try again." },
+      { status: 500 }
+    )
+  }
+}
+
+/**
+ * DELETE /api/auth/telegram-link
+ *
+ * Removes the authenticated user's Telegram account link.
+ */
+export async function DELETE() {
+  const supabase = await getSupabaseServer()
+  const { data: { user }, error: authError } = await supabase.auth.getUser()
+
+  if (authError || !user) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+  }
+
+  try {
+    await unlinkTelegram(user.id)
+    return NextResponse.json({ ok: true })
+  } catch (err) {
+    console.error("Telegram unlink failed:", err)
+    return NextResponse.json(
+      { error: "Failed to disconnect. Please try again." },
       { status: 500 }
     )
   }

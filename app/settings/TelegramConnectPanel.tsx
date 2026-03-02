@@ -21,8 +21,10 @@ function formatDate(iso: string) {
 }
 
 export default function TelegramConnectPanel({ existingIdentity }: Props) {
+  const [identity, setIdentity] = useState<ExistingIdentity | null>(existingIdentity)
   const [deepLink, setDeepLink] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
+  const [disconnecting, setDisconnecting] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   async function generateLink() {
@@ -42,7 +44,25 @@ export default function TelegramConnectPanel({ existingIdentity }: Props) {
     }
   }
 
-  if (existingIdentity && !deepLink) {
+  async function disconnect() {
+    if (!confirm("Disconnect your Telegram account? You can reconnect anytime.")) return
+    setDisconnecting(true)
+    setError(null)
+
+    try {
+      const res = await fetch("/api/auth/telegram-link", { method: "DELETE" })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error ?? "Failed to disconnect")
+      setIdentity(null)
+      setDeepLink(null)
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Unknown error")
+    } finally {
+      setDisconnecting(false)
+    }
+  }
+
+  if (identity && !deepLink) {
     return (
       <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
         {/* Connected state */}
@@ -58,10 +78,10 @@ export default function TelegramConnectPanel({ existingIdentity }: Props) {
         }}>
           <div>
             <p style={{ fontSize: "14px", fontWeight: 600, color: "var(--accent)", margin: "0 0 3px" }}>
-              @{existingIdentity.telegram_username}
+              @{identity.telegram_username}
             </p>
             <p style={{ fontSize: "11px", color: "var(--text-3)", margin: 0 }}>
-              Connected {formatDate(existingIdentity.created_at)}
+              Connected {formatDate(identity.created_at)}
             </p>
           </div>
           <span style={{
@@ -77,31 +97,60 @@ export default function TelegramConnectPanel({ existingIdentity }: Props) {
           </span>
         </div>
 
-        <button
-          onClick={generateLink}
-          disabled={loading}
-          style={{
-            alignSelf: "flex-start",
-            padding: "7px 14px",
-            background: "transparent",
-            border: "1px solid var(--border)",
-            borderRadius: "8px",
-            color: "var(--text-2)",
-            fontSize: "12px",
-            cursor: loading ? "not-allowed" : "pointer",
-            transition: "border-color 0.15s, color 0.15s",
-          }}
-          onMouseEnter={(e) => {
-            e.currentTarget.style.borderColor = "var(--border-hover)"
-            e.currentTarget.style.color = "var(--text-1)"
-          }}
-          onMouseLeave={(e) => {
-            e.currentTarget.style.borderColor = "var(--border)"
-            e.currentTarget.style.color = "var(--text-2)"
-          }}
-        >
-          {loading ? "Generating…" : "Re-link account"}
-        </button>
+        <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+          <button
+            onClick={generateLink}
+            disabled={loading || disconnecting}
+            style={{
+              padding: "7px 14px",
+              background: "transparent",
+              border: "1px solid var(--border)",
+              borderRadius: "8px",
+              color: "var(--text-2)",
+              fontSize: "12px",
+              cursor: loading || disconnecting ? "not-allowed" : "pointer",
+              transition: "border-color 0.15s, color 0.15s",
+            }}
+            onMouseEnter={(e) => {
+              if (!loading && !disconnecting) {
+                e.currentTarget.style.borderColor = "var(--border-hover)"
+                e.currentTarget.style.color = "var(--text-1)"
+              }
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.borderColor = "var(--border)"
+              e.currentTarget.style.color = "var(--text-2)"
+            }}
+          >
+            {loading ? "Generating…" : "Connect different account"}
+          </button>
+
+          <button
+            onClick={disconnect}
+            disabled={loading || disconnecting}
+            style={{
+              padding: "7px 14px",
+              background: "transparent",
+              border: "1px solid var(--border)",
+              borderRadius: "8px",
+              color: disconnecting ? "var(--text-3)" : "#f87171",
+              fontSize: "12px",
+              cursor: loading || disconnecting ? "not-allowed" : "pointer",
+              transition: "border-color 0.15s, color 0.15s",
+              opacity: disconnecting ? 0.6 : 1,
+            }}
+            onMouseEnter={(e) => {
+              if (!loading && !disconnecting) {
+                e.currentTarget.style.borderColor = "#f87171"
+              }
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.borderColor = "var(--border)"
+            }}
+          >
+            {disconnecting ? "Disconnecting…" : "Disconnect"}
+          </button>
+        </div>
 
         {error && (
           <p style={{ fontSize: "12px", color: "#f87171", margin: 0 }}>{error}</p>
