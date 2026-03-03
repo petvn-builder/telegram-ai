@@ -250,10 +250,14 @@ function NotesPageInner() {
   const confirmDeleteTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const panelSpacesRef = useRef<Space[]>([])
+  const panelTextRef = useRef(panelText)
+  const panelModeRef = useRef(panelMode)
   const panelTextareaRef = useRef<HTMLTextAreaElement>(null)
 
-  // Keep ref in sync with state
+  // Keep refs in sync with state
   useEffect(() => { panelSpacesRef.current = panelSpaces }, [panelSpaces])
+  useEffect(() => { panelTextRef.current = panelText }, [panelText])
+  useEffect(() => { panelModeRef.current = panelMode }, [panelMode])
 
   // ── SWR: notes (paginated) + spaces (shared cache)
   const notesKey = `/api/notes?${activeSpaceId ? `spaceId=${activeSpaceId}&` : ""}preview=1&limit=30&offset=${offset}`
@@ -336,7 +340,8 @@ function NotesPageInner() {
   // When selected note changes (edit mode)
   useEffect(() => {
     if (!selectedNote) return
-    setPanelText(selectedNote.content)
+    const tagPrefix = (selectedNote.tags ?? []).map((t) => `#${t.name}`).join(" ")
+    setPanelText(tagPrefix ? `${tagPrefix} ${selectedNote.content}` : selectedNote.content)
     setPanelSpaces(selectedNote.spaces ?? [])
     setPanelSaved(false)
     setPanelDirty(false)
@@ -363,6 +368,39 @@ function NotesPageInner() {
   // Cleanup save timer
   useEffect(() => {
     return () => { if (saveTimerRef.current) clearTimeout(saveTimerRef.current) }
+  }, [])
+
+  // Auto-save create-mode draft on navigate away or browser close
+  useEffect(() => {
+    const handleBeforeUnload = () => {
+      if (panelModeRef.current === "create" && panelTextRef.current.trim()) {
+        fetch("/api/notes", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            content: panelTextRef.current,
+            spaces: panelSpacesRef.current.map((s) => s.name),
+          }),
+          keepalive: true,
+        })
+      }
+    }
+    window.addEventListener("beforeunload", handleBeforeUnload)
+    return () => {
+      window.removeEventListener("beforeunload", handleBeforeUnload)
+      // SPA navigation (component unmount)
+      if (panelModeRef.current === "create" && panelTextRef.current.trim()) {
+        fetch("/api/notes", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            content: panelTextRef.current,
+            spaces: panelSpacesRef.current.map((s) => s.name),
+          }),
+          keepalive: true,
+        })
+      }
+    }
   }, [])
 
   async function doSave(text: string, spaces: Space[]) {
@@ -594,6 +632,19 @@ function NotesPageInner() {
   }
 
   function closePanel() {
+    if (panelMode === "create" && panelText.trim()) {
+      fetch("/api/notes", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ content: panelText, spaces: panelSpaces.map((s) => s.name) }),
+      }).then(async (res) => {
+        if (!res.ok) return
+        const note: NoteWithEntities = await res.json()
+        justAddedId.current = note.id
+        setAccumulatedNotes((prev) => [note, ...prev])
+        mutateNotes((current) => current ? { ...current, notes: [note, ...current.notes], total: current.total + 1 } : current, false)
+      }).catch(() => {})
+    }
     if (saveTimerRef.current) {
       clearTimeout(saveTimerRef.current)
       saveTimerRef.current = null
