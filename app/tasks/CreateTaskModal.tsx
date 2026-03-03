@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react"
 import { createPortal } from "react-dom"
 import type { TaskPriority, TaskStatus, TaskWithEntities } from "@/lib/tasks"
+import { useSidebar } from "@/app/components/SidebarContext"
 
 interface TaskRow {
   id: string
@@ -49,6 +50,7 @@ export default function CreateTaskModal({
   const [rows, setRows] = useState<TaskRow[]>(() => [newRow(initialTitle)])
   const [status, setStatus] = useState<TaskStatus>(initialStatus)
   const [mounted, setMounted] = useState(false)
+  const { isMobile } = useSidebar()
 
   const firstInputRef = useRef<HTMLInputElement>(null)
   const rowRefs = useRef<Map<string, HTMLInputElement>>(new Map())
@@ -160,25 +162,51 @@ export default function CreateTaskModal({
         background: "rgba(0,0,0,0.35)",
         zIndex: 100,
         display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        padding: "16px",
+        alignItems: isMobile ? "flex-end" : "center",
+        justifyContent: isMobile ? "stretch" : "center",
+        padding: isMobile ? "0" : "16px",
       }}
       onClick={(e) => { if (e.target === e.currentTarget) onClose() }}
     >
       <div
-        style={{
-          background: "var(--bg-elevated)",
-          border: "1px solid var(--border)",
-          borderRadius: "12px",
-          width: "100%",
-          maxWidth: "560px",
-          padding: "22px 24px",
-          display: "flex",
-          flexDirection: "column",
-          gap: "16px",
-        }}
+        style={isMobile
+          ? {
+              background: "var(--bg-elevated)",
+              border: "1px solid var(--border)",
+              borderRadius: "16px 16px 0 0",
+              width: "100%",
+              maxHeight: "85vh",
+              overflowY: "auto",
+              padding: "8px 20px 32px",
+              display: "flex",
+              flexDirection: "column",
+              gap: "16px",
+              animation: "slideUpFromBottom 260ms cubic-bezier(0.32, 0.72, 0, 1) both",
+            }
+          : {
+              background: "var(--bg-elevated)",
+              border: "1px solid var(--border)",
+              borderRadius: "12px",
+              width: "100%",
+              maxWidth: "560px",
+              padding: "22px 24px",
+              display: "flex",
+              flexDirection: "column",
+              gap: "16px",
+            }
+        }
       >
+        {/* Sheet drag handle pill (mobile only) */}
+        {isMobile && (
+          <div style={{
+            width: "36px", height: "4px",
+            background: "var(--border)",
+            borderRadius: "2px",
+            margin: "4px auto 4px",
+            flexShrink: 0,
+          }} />
+        )}
+
         {/* Header */}
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
           <p style={{ margin: 0, fontSize: "15px", fontWeight: 600, color: "var(--text-1)" }}>
@@ -199,30 +227,35 @@ export default function CreateTaskModal({
         </div>
 
         <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
-          {/* Column row labels */}
-          <div style={{
-            display: "grid",
-            gridTemplateColumns: "1fr 108px 66px 20px",
-            gap: "8px",
-            padding: "0 0 4px",
-          }}>
-            <span style={{ fontSize: "11px", color: "var(--text-3)", fontWeight: 500 }}>Task</span>
-            <span style={{ fontSize: "11px", color: "var(--text-3)", fontWeight: 500 }}>Due date</span>
-            <span style={{ fontSize: "11px", color: "var(--text-3)", fontWeight: 500 }}>Priority</span>
-            <span />
-          </div>
+          {/* Column row labels — desktop only */}
+          {!isMobile && (
+            <div style={{
+              display: "grid",
+              gridTemplateColumns: "1fr 108px 66px 20px",
+              gap: "8px",
+              padding: "0 0 4px",
+            }}>
+              <span style={{ fontSize: "11px", color: "var(--text-3)", fontWeight: 500 }}>Task</span>
+              <span style={{ fontSize: "11px", color: "var(--text-3)", fontWeight: 500 }}>Due date</span>
+              <span style={{ fontSize: "11px", color: "var(--text-3)", fontWeight: 500 }}>Priority</span>
+              <span />
+            </div>
+          )}
 
           {/* Task rows */}
-          <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+          <div style={{ display: "flex", flexDirection: "column", gap: isMobile ? "12px" : "6px" }}>
             {rows.map((row, idx) => (
               <div
                 key={row.id}
-                style={{
-                  display: "grid",
-                  gridTemplateColumns: "1fr 108px 66px 20px",
-                  gap: "8px",
-                  alignItems: "center",
-                }}
+                style={isMobile
+                  ? { display: "flex", flexDirection: "column", gap: "8px" }
+                  : {
+                      display: "grid",
+                      gridTemplateColumns: "1fr 108px 66px 20px",
+                      gap: "8px",
+                      alignItems: "center",
+                    }
+                }
               >
                 {/* Title */}
                 <input
@@ -236,7 +269,7 @@ export default function CreateTaskModal({
                   onKeyDown={(e) => handleRowKeyDown(e, row.id, idx)}
                   placeholder="What needs to be done?"
                   style={{
-                    width: "100%", padding: "8px 10px",
+                    width: "100%", padding: isMobile ? "10px 12px" : "8px 10px",
                     border: "1px solid var(--border)", borderRadius: "7px",
                     background: "var(--bg-surface)", color: "var(--text-1)",
                     fontSize: "14px", outline: "none", boxSizing: "border-box",
@@ -246,67 +279,132 @@ export default function CreateTaskModal({
                   onBlur={(e) => { e.currentTarget.style.borderColor = "var(--border)" }}
                 />
 
-                {/* Date */}
-                <input
-                  type="date"
-                  value={row.dueDate}
-                  onChange={(e) => updateRow(row.id, { dueDate: e.target.value })}
-                  style={{
-                    width: "100%", padding: "8px 8px",
-                    border: "1px solid var(--border)", borderRadius: "7px",
-                    background: "var(--bg-surface)",
-                    color: row.dueDate ? "var(--text-1)" : "var(--text-3)",
-                    fontSize: "13px", outline: "none", boxSizing: "border-box",
-                    transition: "border-color 0.18s",
-                  }}
-                  onFocus={(e) => { e.currentTarget.style.borderColor = "var(--accent)" }}
-                  onBlur={(e) => { e.currentTarget.style.borderColor = "var(--border)" }}
-                />
+                {/* On mobile: date + priority + delete in a flex row */}
+                {isMobile ? (
+                  <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+                    <input
+                      type="date"
+                      value={row.dueDate}
+                      onChange={(e) => updateRow(row.id, { dueDate: e.target.value })}
+                      style={{
+                        flex: 1, padding: "8px 10px",
+                        border: "1px solid var(--border)", borderRadius: "7px",
+                        background: "var(--bg-surface)",
+                        color: row.dueDate ? "var(--text-1)" : "var(--text-3)",
+                        fontSize: "13px", outline: "none", boxSizing: "border-box",
+                        transition: "border-color 0.18s",
+                      }}
+                      onFocus={(e) => { e.currentTarget.style.borderColor = "var(--accent)" }}
+                      onBlur={(e) => { e.currentTarget.style.borderColor = "var(--border)" }}
+                    />
+                    <div style={{ display: "flex", gap: "5px" }}>
+                      {PRIORITIES.map((p) => {
+                        const active = row.priority === p.value
+                        return (
+                          <button
+                            key={p.value}
+                            type="button"
+                            title={p.value}
+                            onClick={() => updateRow(row.id, { priority: p.value })}
+                            style={{
+                              width: "28px", height: "28px", borderRadius: "50%",
+                              border: `2px solid ${active ? p.color : "var(--border)"}`,
+                              background: active ? p.color : "transparent",
+                              cursor: "pointer", padding: 0, fontSize: "10px",
+                              color: active ? "#fff" : "var(--text-3)",
+                              fontWeight: 700, lineHeight: "24px",
+                              display: "flex", alignItems: "center", justifyContent: "center",
+                              transition: "all 0.15s",
+                              flexShrink: 0,
+                            }}
+                          >
+                            {p.label}
+                          </button>
+                        )
+                      })}
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => removeRow(row.id)}
+                      disabled={rows.length === 1}
+                      style={{
+                        background: "transparent", border: "none", cursor: rows.length > 1 ? "pointer" : "default",
+                        color: "var(--text-3)", fontSize: "18px", lineHeight: 1, padding: "2px 4px",
+                        opacity: rows.length === 1 ? 0 : 1, transition: "opacity 0.15s, color 0.15s",
+                        display: "flex", alignItems: "center", justifyContent: "center",
+                        flexShrink: 0,
+                      }}
+                      onMouseEnter={(e) => { if (rows.length > 1) e.currentTarget.style.color = "#DC2626" }}
+                      onMouseLeave={(e) => { e.currentTarget.style.color = "var(--text-3)" }}
+                    >
+                      ×
+                    </button>
+                  </div>
+                ) : (
+                  <>
+                    {/* Date */}
+                    <input
+                      type="date"
+                      value={row.dueDate}
+                      onChange={(e) => updateRow(row.id, { dueDate: e.target.value })}
+                      style={{
+                        width: "100%", padding: "8px 8px",
+                        border: "1px solid var(--border)", borderRadius: "7px",
+                        background: "var(--bg-surface)",
+                        color: row.dueDate ? "var(--text-1)" : "var(--text-3)",
+                        fontSize: "13px", outline: "none", boxSizing: "border-box",
+                        transition: "border-color 0.18s",
+                      }}
+                      onFocus={(e) => { e.currentTarget.style.borderColor = "var(--accent)" }}
+                      onBlur={(e) => { e.currentTarget.style.borderColor = "var(--border)" }}
+                    />
 
-                {/* Priority */}
-                <div style={{ display: "flex", gap: "4px", justifyContent: "center" }}>
-                  {PRIORITIES.map((p) => {
-                    const active = row.priority === p.value
-                    return (
-                      <button
-                        key={p.value}
-                        type="button"
-                        title={p.value}
-                        onClick={() => updateRow(row.id, { priority: p.value })}
-                        style={{
-                          width: "20px", height: "20px", borderRadius: "50%",
-                          border: `2px solid ${active ? p.color : "var(--border)"}`,
-                          background: active ? p.color : "transparent",
-                          cursor: "pointer", padding: 0, fontSize: "9px",
-                          color: active ? "#fff" : "var(--text-3)",
-                          fontWeight: 700, lineHeight: "16px",
-                          display: "flex", alignItems: "center", justifyContent: "center",
-                          transition: "all 0.15s",
-                          flexShrink: 0,
-                        }}
-                      >
-                        {p.label}
-                      </button>
-                    )
-                  })}
-                </div>
+                    {/* Priority */}
+                    <div style={{ display: "flex", gap: "4px", justifyContent: "center" }}>
+                      {PRIORITIES.map((p) => {
+                        const active = row.priority === p.value
+                        return (
+                          <button
+                            key={p.value}
+                            type="button"
+                            title={p.value}
+                            onClick={() => updateRow(row.id, { priority: p.value })}
+                            style={{
+                              width: "20px", height: "20px", borderRadius: "50%",
+                              border: `2px solid ${active ? p.color : "var(--border)"}`,
+                              background: active ? p.color : "transparent",
+                              cursor: "pointer", padding: 0, fontSize: "9px",
+                              color: active ? "#fff" : "var(--text-3)",
+                              fontWeight: 700, lineHeight: "16px",
+                              display: "flex", alignItems: "center", justifyContent: "center",
+                              transition: "all 0.15s",
+                              flexShrink: 0,
+                            }}
+                          >
+                            {p.label}
+                          </button>
+                        )
+                      })}
+                    </div>
 
-                {/* Delete row */}
-                <button
-                  type="button"
-                  onClick={() => removeRow(row.id)}
-                  disabled={rows.length === 1}
-                  style={{
-                    background: "transparent", border: "none", cursor: rows.length > 1 ? "pointer" : "default",
-                    color: "var(--text-3)", fontSize: "16px", lineHeight: 1, padding: "0",
-                    opacity: rows.length === 1 ? 0 : 1, transition: "opacity 0.15s, color 0.15s",
-                    display: "flex", alignItems: "center", justifyContent: "center",
-                  }}
-                  onMouseEnter={(e) => { if (rows.length > 1) e.currentTarget.style.color = "#DC2626" }}
-                  onMouseLeave={(e) => { e.currentTarget.style.color = "var(--text-3)" }}
-                >
-                  ×
-                </button>
+                    {/* Delete row */}
+                    <button
+                      type="button"
+                      onClick={() => removeRow(row.id)}
+                      disabled={rows.length === 1}
+                      style={{
+                        background: "transparent", border: "none", cursor: rows.length > 1 ? "pointer" : "default",
+                        color: "var(--text-3)", fontSize: "16px", lineHeight: 1, padding: "0",
+                        opacity: rows.length === 1 ? 0 : 1, transition: "opacity 0.15s, color 0.15s",
+                        display: "flex", alignItems: "center", justifyContent: "center",
+                      }}
+                      onMouseEnter={(e) => { if (rows.length > 1) e.currentTarget.style.color = "#DC2626" }}
+                      onMouseLeave={(e) => { e.currentTarget.style.color = "var(--text-3)" }}
+                    >
+                      ×
+                    </button>
+                  </>
+                )}
               </div>
             ))}
           </div>
@@ -341,7 +439,7 @@ export default function CreateTaskModal({
                     type="button"
                     onClick={() => setStatus(s.value)}
                     style={{
-                      padding: "4px 10px",
+                      padding: isMobile ? "6px 12px" : "4px 10px",
                       borderRadius: "6px",
                       fontSize: "12px",
                       fontWeight: status === s.value ? 600 : 400,
@@ -365,7 +463,8 @@ export default function CreateTaskModal({
               type="button"
               onClick={onClose}
               style={{
-                padding: "8px 16px", borderRadius: "8px", fontSize: "14px",
+                padding: isMobile ? "10px 20px" : "8px 16px",
+                borderRadius: "8px", fontSize: "14px",
                 border: "1px solid var(--border)", background: "transparent",
                 color: "var(--text-2)", cursor: "pointer",
                 transition: "color 0.18s, border-color 0.18s",
@@ -379,7 +478,8 @@ export default function CreateTaskModal({
               type="submit"
               disabled={!anyValid}
               style={{
-                padding: "8px 18px", borderRadius: "8px", fontSize: "14px", fontWeight: 500,
+                padding: isMobile ? "10px 20px" : "8px 18px",
+                borderRadius: "8px", fontSize: "14px", fontWeight: 500,
                 border: "none",
                 background: anyValid ? "var(--accent)" : "var(--border)",
                 color: anyValid ? "#fff" : "var(--text-3)",

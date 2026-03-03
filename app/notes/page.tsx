@@ -6,6 +6,7 @@ import Link from "next/link"
 import useSWR from "swr"
 import type { Entity, Space, Tag, NoteWithEntities, TaskWithEntities } from "./types"
 import { fetcher } from "@/lib/fetcher"
+import { useSidebar } from "@/app/components/SidebarContext"
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -253,6 +254,8 @@ function NotesPageInner() {
   const panelTextRef = useRef(panelText)
   const panelModeRef = useRef(panelMode)
   const panelTextareaRef = useRef<HTMLTextAreaElement>(null)
+
+  const { isMobile } = useSidebar()
 
   // Keep refs in sync with state
   useEffect(() => { panelSpacesRef.current = panelSpaces }, [panelSpaces])
@@ -909,7 +912,8 @@ function NotesPageInner() {
       <div style={{
         flex: 1, display: "flex", flexDirection: "column", overflow: "hidden",
         transition: "padding-right 0.22s cubic-bezier(0.4, 0, 0.2, 1)",
-        paddingRight: panelOpen ? `${panelWidth}px` : "0",
+        paddingRight: (panelOpen && !isMobile) ? `${panelWidth}px` : "0",
+        visibility: (panelOpen && isMobile) ? "hidden" : "visible",
       }}>
         {/* Page header */}
         <div style={{ padding: "28px 32px 0", flexShrink: 0 }}>
@@ -999,27 +1003,49 @@ function NotesPageInner() {
 
       {/* ── Detail / Create panel ── */}
       {panelOpen && (
-        <div ref={detailRef} className="panel-slide-in" style={{
-          position: "fixed", top: 0, right: 0, bottom: 0, width: panelWidth,
-          background: "var(--bg-surface)", borderLeft: "1px solid var(--border)",
-          display: "flex", flexDirection: "column", zIndex: 40,
-        }}>
-          {/* Drag-to-resize handle */}
-          <div
-            onMouseDown={handleResizeStart}
-            style={{
-              position: "absolute", left: 0, top: 0, bottom: 0, width: "6px",
-              cursor: "col-resize", zIndex: 1, transition: "background 0.15s",
-            }}
-            onMouseEnter={(e) => { e.currentTarget.style.background = "var(--accent-dim)" }}
-            onMouseLeave={(e) => { e.currentTarget.style.background = "transparent" }}
-          />
+        <div ref={detailRef} className={isMobile ? undefined : "panel-slide-in"} style={
+          isMobile
+            ? {
+                position: "fixed", top: 0, left: 0, right: 0, bottom: 0, width: "100%",
+                background: "var(--bg-surface)",
+                display: "flex", flexDirection: "column", zIndex: 70,
+                animation: "slideFromRight 200ms cubic-bezier(0.4, 0, 0.2, 1) both",
+              }
+            : {
+                position: "fixed", top: 0, right: 0, bottom: 0, width: panelWidth,
+                background: "var(--bg-surface)", borderLeft: "1px solid var(--border)",
+                display: "flex", flexDirection: "column", zIndex: 40,
+              }
+        }>
+          {/* Drag-to-resize handle (desktop only) */}
+          {!isMobile && (
+            <div
+              onMouseDown={handleResizeStart}
+              style={{
+                position: "absolute", left: 0, top: 0, bottom: 0, width: "6px",
+                cursor: "col-resize", zIndex: 1, transition: "background 0.15s",
+              }}
+              onMouseEnter={(e) => { e.currentTarget.style.background = "var(--accent-dim)" }}
+              onMouseLeave={(e) => { e.currentTarget.style.background = "transparent" }}
+            />
+          )}
 
           {/* ── A. Toolbar ── */}
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "13px 18px", borderBottom: "1px solid var(--border)", flexShrink: 0 }}>
-            <span style={{ fontSize: "12px", color: "var(--text-3)", fontFamily: "var(--font-geist-mono, monospace)" }}>
-              {panelMode === "edit" && selectedNote ? relativeTime(selectedNote.created_at) : "New note"}
-            </span>
+            {isMobile ? (
+              /* Mobile: ← Back button */
+              <button onClick={closePanel} style={{ display: "flex", alignItems: "center", gap: "4px", background: "transparent", border: "none", cursor: "pointer", color: "var(--accent)", fontSize: "14px", padding: "4px 0", fontWeight: 500 }}>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <polyline points="15 18 9 12 15 6" />
+                </svg>
+                Back
+              </button>
+            ) : (
+              /* Desktop: relative timestamp */
+              <span style={{ fontSize: "12px", color: "var(--text-3)", fontFamily: "var(--font-geist-mono, monospace)" }}>
+                {panelMode === "edit" && selectedNote ? relativeTime(selectedNote.created_at) : "New note"}
+              </span>
+            )}
             <div style={{ display: "flex", alignItems: "center", gap: "2px" }}>
               {/* Open full-page (edit only) */}
               {panelMode === "edit" && selectedNote && (
@@ -1053,15 +1079,17 @@ function NotesPageInner() {
                   )}
                 </button>
               )}
-              {/* Close */}
-              <button onClick={closePanel} title="Close"
-                style={iconBtnStyle}
-                onMouseEnter={(e) => { e.currentTarget.style.background = "var(--bg-hover)"; e.currentTarget.style.color = "var(--text-1)" }}
-                onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = "var(--text-2)" }}>
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-                  <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
-                </svg>
-              </button>
+              {/* Close button (desktop only — mobile uses Back button) */}
+              {!isMobile && (
+                <button onClick={closePanel} title="Close"
+                  style={iconBtnStyle}
+                  onMouseEnter={(e) => { e.currentTarget.style.background = "var(--bg-hover)"; e.currentTarget.style.color = "var(--text-1)" }}
+                  onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = "var(--text-2)" }}>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                    <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
+                  </svg>
+                </button>
+              )}
             </div>
           </div>
 
@@ -1097,7 +1125,7 @@ function NotesPageInner() {
                   width: "100%", resize: "none", border: "none", outline: "none",
                   fontSize: "15px", lineHeight: 1.75, color: "var(--text-1)",
                   background: "transparent", padding: 0, boxSizing: "border-box",
-                  minHeight: "180px", overflow: "hidden",
+                  minHeight: isMobile ? "240px" : "180px", overflow: "hidden",
                   fontFamily: "Georgia, Merriweather, serif",
                 }}
               />

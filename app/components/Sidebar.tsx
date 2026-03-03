@@ -9,6 +9,7 @@ import type { User } from "@supabase/supabase-js"
 import type { Space } from "@/app/notes/types"
 import { fetcher } from "@/lib/fetcher"
 import { useAiPanel } from "./AiPanelContext"
+import { useSidebar } from "./SidebarContext"
 
 // ── Icons ─────────────────────────────────────────────────────────────────────
 
@@ -177,6 +178,7 @@ function SidebarInner() {
   const [hoveredSpaceId, setHoveredSpaceId] = useState<string | null>(null)
   const [deletingSpaceId, setDeletingSpaceId] = useState<string | null>(null)
   const { isOpen: aiPanelOpen, toggle: toggleAiPanel } = useAiPanel()
+  const { isCollapsed, toggle, isMobileOpen, closeMobile, isMobile } = useSidebar()
 
   const activeSpaceId = searchParams.get("space")
 
@@ -245,339 +247,432 @@ function SidebarInner() {
 
   const avatarLetter = user?.email?.[0]?.toUpperCase() ?? "?"
 
-  return (
-    <aside style={{
-      position: "fixed",
-      top: 0,
-      left: 0,
-      bottom: 0,
-      width: "var(--sidebar-w)",
-      background: "var(--bg-sidebar)",
-      borderRight: "1px solid var(--border)",
-      display: "flex",
-      flexDirection: "column",
-      zIndex: 50,
-      overflow: "hidden",
-    }}>
-
-      {/* Brand row */}
-      <div style={{
-        padding: "20px 16px 16px",
-        flexShrink: 0,
-      }}>
-        <Link
-          href={user ? "/dashboard" : "/"}
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: "9px",
-            textDecoration: "none",
-            marginBottom: "14px",
-          }}
-        >
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" style={{ flexShrink: 0, color: "var(--accent)" }}>
-            <path d="M12 2L20.66 7V17L12 22L3.34 17V7L12 2Z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" />
-            <circle cx="12" cy="12" r="2.5" fill="currentColor" />
-          </svg>
-          <span style={{ fontSize: "15px", fontWeight: 600, color: "var(--text-1)", letterSpacing: "-0.015em" }}>
-            Brain
-          </span>
-        </Link>
-
-        {/* Quick-create buttons */}
-        <div style={{ display: "flex", flexDirection: "column", gap: "5px" }}>
-          <button
-            onClick={() => router.push("/notes?compose=1")}
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: "8px",
-              padding: "7px 12px",
-              borderRadius: "8px",
-              background: "var(--accent)",
-              color: "#fff",
-              border: "none",
-              cursor: "pointer",
-              fontSize: "13px",
-              fontWeight: 500,
-              width: "100%",
-              transition: "opacity 0.18s",
-            }}
-            onMouseEnter={(e) => { e.currentTarget.style.opacity = "0.88" }}
-            onMouseLeave={(e) => { e.currentTarget.style.opacity = "1" }}
-          >
-            <span style={{ fontSize: "15px", fontWeight: 300, lineHeight: 1, marginTop: "-1px" }}>+</span>
-            New Note
-            <kbd style={{
-              marginLeft: "auto",
-              fontSize: "10px",
-              opacity: 0.7,
-              fontWeight: 400,
-              fontFamily: "inherit",
-              background: "rgba(255,255,255,0.2)",
-              padding: "1px 4px",
-              borderRadius: "3px",
-            }}>N</kbd>
-          </button>
-
-          <button
-            onClick={() => router.push("/tasks?create=1")}
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: "8px",
-              padding: "7px 12px",
-              borderRadius: "8px",
-              background: "transparent",
-              color: "var(--text-2)",
-              border: "1px solid var(--border)",
-              cursor: "pointer",
-              fontSize: "13px",
-              width: "100%",
-              transition: "border-color 0.18s, color 0.18s, background 0.18s",
-            }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.borderColor = "var(--border-hover)"
-              e.currentTarget.style.color = "var(--text-1)"
-              e.currentTarget.style.background = "var(--bg-hover)"
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.borderColor = "var(--border)"
-              e.currentTarget.style.color = "var(--text-2)"
-              e.currentTarget.style.background = "transparent"
-            }}
-          >
-            <span style={{ fontSize: "15px", fontWeight: 300, lineHeight: 1, marginTop: "-1px" }}>+</span>
-            New Task
-            <kbd style={{
-              marginLeft: "auto",
-              fontSize: "10px",
-              opacity: 0.5,
-              fontWeight: 400,
-              fontFamily: "inherit",
-            }}>T</kbd>
-          </button>
-        </div>
-      </div>
-
-      {/* Nav */}
-      <nav style={{
-        flex: 1,
-        overflowY: "auto",
-        padding: "4px 8px",
+  // Desktop: animate width 240px ↔ 0. Mobile: slide in/out from left
+  const asideStyle: React.CSSProperties = isMobile
+    ? {
+        position: "fixed",
+        top: 0,
+        left: 0,
+        bottom: 0,
+        width: "280px",
+        background: "var(--bg-sidebar)",
+        borderRight: "1px solid var(--border)",
         display: "flex",
         flexDirection: "column",
-        gap: "1px",
-      }}>
+        zIndex: 60,
+        overflow: "hidden",
+        transform: isMobileOpen ? "translateX(0)" : "translateX(-100%)",
+        transition: "transform 200ms ease-in-out",
+      }
+    : {
+        position: "fixed",
+        top: 0,
+        left: 0,
+        bottom: 0,
+        width: isCollapsed ? "0px" : "var(--sidebar-w)",
+        background: "var(--bg-sidebar)",
+        borderRight: isCollapsed ? "none" : "1px solid var(--border)",
+        display: "flex",
+        flexDirection: "column",
+        zIndex: 50,
+        overflow: "hidden",
+        transition: "width 200ms ease-in-out, border-color 200ms ease-in-out",
+      }
 
-        {/* WORKSPACE section */}
-        <SectionHeader label="Workspace" />
-        <NavLink href="/dashboard" label="Home" icon={<HomeIcon />} isActive={pathname === "/dashboard"} />
-        <NavLink href="/notes" label="Notes" icon={<NotesIcon />} isActive={pathname === "/notes" || pathname.startsWith("/notes/")} />
-        <NavLink href="/tasks" label="Tasks" icon={<TasksIcon />} isActive={pathname === "/tasks"} />
+  return (
+    <>
+      {/* Mobile backdrop — tap to close */}
+      {isMobile && isMobileOpen && (
+        <div className="sidebar-backdrop" onClick={closeMobile} />
+      )}
 
-        {/* KNOWLEDGE section */}
-        <div style={{ marginTop: "8px" }}>
-          <SectionHeader label="Knowledge" />
-          <NavLink href="/graph" label="Graph" icon={<GraphIcon />} isActive={pathname === "/graph"} />
-        </div>
+      <aside style={asideStyle}>
 
-        {/* SPACES section */}
-        {spaces.length > 0 && (
-          <div style={{ marginTop: "8px" }}>
-            <button
-              onClick={() => setSpacesOpen((v) => !v)}
+        {/* Brand row */}
+        <div style={{
+          padding: "20px 16px 16px",
+          flexShrink: 0,
+          minWidth: 0,
+        }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "14px" }}>
+            <Link
+              href={user ? "/dashboard" : "/"}
               style={{
-                width: "100%",
                 display: "flex",
                 alignItems: "center",
-                justifyContent: "space-between",
-                padding: "8px 14px 3px",
-                background: "transparent",
-                border: "none",
-                cursor: "pointer",
-                color: "var(--text-3)",
-                transition: "color 0.16s",
+                gap: "9px",
+                textDecoration: "none",
+                minWidth: 0,
+                flex: 1,
               }}
-              onMouseEnter={(e) => { e.currentTarget.style.color = "var(--text-2)" }}
-              onMouseLeave={(e) => { e.currentTarget.style.color = "var(--text-3)" }}
             >
-              <span style={{ fontSize: "10px", fontWeight: 600, letterSpacing: "0.08em", textTransform: "uppercase" }}>
-                Spaces
-              </span>
-              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ transform: spacesOpen ? "rotate(0deg)" : "rotate(-90deg)", transition: "transform 0.16s ease-in-out" }}>
-                <polyline points="6 9 12 15 18 9" />
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" style={{ flexShrink: 0, color: "var(--accent)" }}>
+                <path d="M12 2L20.66 7V17L12 22L3.34 17V7L12 2Z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" />
+                <circle cx="12" cy="12" r="2.5" fill="currentColor" />
               </svg>
-            </button>
+              <span style={{ fontSize: "15px", fontWeight: 600, color: "var(--text-1)", letterSpacing: "-0.015em", whiteSpace: "nowrap" }}>
+                Brain
+              </span>
+            </Link>
 
-            {spacesOpen && (
-              <div style={{ display: "flex", flexDirection: "column", gap: "1px" }}>
-                {spaces.map((space) => {
-                  const isActiveSpace = pathname === "/notes" && activeSpaceId === space.id
-                  const isHovered = hoveredSpaceId === space.id
-                  return (
-                    <div
-                      key={space.id}
-                      style={{ position: "relative" }}
-                      onMouseEnter={() => setHoveredSpaceId(space.id)}
-                      onMouseLeave={() => setHoveredSpaceId(null)}
-                    >
-                      <Link
-                        href={`/notes?space=${space.id}`}
-                        style={{
-                          display: "flex",
-                          alignItems: "center",
-                          gap: "6px",
-                          padding: "8px 32px 8px 14px",
-                          borderRadius: "8px",
-                          fontSize: "14px",
-                          fontWeight: isActiveSpace ? 500 : 400,
-                          color: isActiveSpace ? "var(--text-1)" : "var(--text-2)",
-                          textDecoration: "none",
-                          background: isActiveSpace ? "var(--accent-dim)" : isHovered ? "var(--bg-hover)" : "transparent",
-                          transition: "color 0.16s, background 0.16s",
-                        }}
-                      >
-                        <span style={{ fontSize: "11px", color: isActiveSpace ? "var(--accent)" : "var(--text-3)", fontWeight: 600, flexShrink: 0, transition: "color 0.16s" }}>@</span>
-                        <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{space.name}</span>
-                      </Link>
-                      {/* Delete button — shown on hover */}
-                      {isHovered && (
-                        <button
-                          onClick={(e) => handleDeleteSpace(e, space.id)}
-                          title="Delete space"
-                          style={{
-                            position: "absolute",
-                            right: "8px",
-                            top: "50%",
-                            transform: "translateY(-50%)",
-                            width: "18px",
-                            height: "18px",
-                            display: "flex",
-                            alignItems: "center",
-                            justifyContent: "center",
-                            background: "transparent",
-                            border: "none",
-                            borderRadius: "4px",
-                            cursor: "pointer",
-                            color: "var(--text-3)",
-                            fontSize: "14px",
-                            lineHeight: 1,
-                            transition: "color 0.15s, background 0.15s",
-                          }}
-                          onMouseEnter={(e) => {
-                            e.currentTarget.style.color = "#FF453A"
-                            e.currentTarget.style.background = "rgba(255,69,58,0.1)"
-                          }}
-                          onMouseLeave={(e) => {
-                            e.currentTarget.style.color = "var(--text-3)"
-                            e.currentTarget.style.background = "transparent"
-                          }}
-                        >
-                          ×
-                        </button>
-                      )}
-                    </div>
-                  )
-                })}
-              </div>
+            {/* Desktop collapse toggle */}
+            {!isMobile && (
+              <button
+                onClick={toggle}
+                title={isCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+                style={{
+                  background: "transparent",
+                  border: "none",
+                  cursor: "pointer",
+                  color: "var(--text-3)",
+                  display: "flex",
+                  alignItems: "center",
+                  padding: "4px 5px",
+                  borderRadius: "6px",
+                  transition: "color 0.16s, background 0.16s",
+                  flexShrink: 0,
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.color = "var(--text-1)"
+                  e.currentTarget.style.background = "var(--bg-hover)"
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.color = "var(--text-3)"
+                  e.currentTarget.style.background = "transparent"
+                }}
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  {isCollapsed
+                    ? <polyline points="9 18 15 12 9 6" />
+                    : <polyline points="15 18 9 12 15 6" />
+                  }
+                </svg>
+              </button>
+            )}
+
+            {/* Mobile close button */}
+            {isMobile && (
+              <button
+                onClick={closeMobile}
+                title="Close menu"
+                style={{
+                  background: "transparent",
+                  border: "none",
+                  cursor: "pointer",
+                  color: "var(--text-3)",
+                  display: "flex",
+                  alignItems: "center",
+                  padding: "4px",
+                  borderRadius: "6px",
+                  transition: "color 0.16s",
+                  flexShrink: 0,
+                }}
+                onMouseEnter={(e) => { e.currentTarget.style.color = "var(--text-1)" }}
+                onMouseLeave={(e) => { e.currentTarget.style.color = "var(--text-3)" }}
+              >
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                  <line x1="18" y1="6" x2="6" y2="18" />
+                  <line x1="6" y1="6" x2="18" y2="18" />
+                </svg>
+              </button>
             )}
           </div>
-        )}
 
-        {/* Spacer */}
-        <div style={{ flex: 1 }} />
-
-        {/* AI Assistant toggle */}
-        <button
-          onClick={toggleAiPanel}
-          className="nav-link"
-          data-active={aiPanelOpen ? "true" : undefined}
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: "9px",
-            padding: "8px 14px",
-            borderRadius: "8px",
-            fontSize: "14px",
-            fontWeight: aiPanelOpen ? 500 : 400,
-            color: aiPanelOpen ? "var(--ai-accent)" : "var(--text-2)",
-            background: aiPanelOpen ? "var(--ai-accent-dim)" : "transparent",
-            border: "none",
-            cursor: "pointer",
-            width: "100%",
-            textAlign: "left",
-            transition: "color 0.16s ease-in-out, background 0.16s ease-in-out",
-          }}
-        >
-          <span style={{ color: aiPanelOpen ? "var(--ai-accent)" : "var(--text-3)", display: "flex", alignItems: "center", flexShrink: 0, transition: "color 0.16s" }}>
-            <SparkleIcon />
-          </span>
-          AI Assistant
-          {aiPanelOpen && (
-            <span style={{ marginLeft: "auto", width: "6px", height: "6px", borderRadius: "50%", background: "var(--ai-accent)", flexShrink: 0 }} />
-          )}
-        </button>
-
-        {/* Settings */}
-        <NavLink href="/settings" label="Settings" icon={<SettingsIcon />} isActive={pathname === "/settings"} />
-      </nav>
-
-      {/* Footer: avatar + email + theme + sign out */}
-      <div style={{
-        padding: "12px 14px",
-        borderTop: "1px solid var(--border)",
-        flexShrink: 0,
-      }}>
-        {user ? (
-          <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-            <div style={{
-              width: "26px",
-              height: "26px",
-              borderRadius: "50%",
-              background: "var(--accent-dim)",
-              border: "1px solid var(--border-accent)",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              fontSize: "11px",
-              fontWeight: 600,
-              color: "var(--accent)",
-              flexShrink: 0,
-            }}>
-              {avatarLetter}
-            </div>
-
-            <p style={{ flex: 1, fontSize: "11px", color: "var(--text-2)", margin: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-              {user.email}
-            </p>
-
+          {/* Quick-create buttons */}
+          <div style={{ display: "flex", flexDirection: "column", gap: "5px" }}>
             <button
-              onClick={toggleTheme}
-              title={theme === "dark" ? "Light mode" : "Dark mode"}
-              style={{ background: "transparent", border: "none", cursor: "pointer", color: "var(--text-3)", display: "flex", alignItems: "center", padding: "3px", borderRadius: "5px", flexShrink: 0, transition: "color 0.16s" }}
-              onMouseEnter={(e) => { e.currentTarget.style.color = "var(--text-1)" }}
-              onMouseLeave={(e) => { e.currentTarget.style.color = "var(--text-3)" }}
+              onClick={() => { router.push("/notes?compose=1"); if (isMobile) closeMobile() }}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: "8px",
+                padding: "7px 12px",
+                borderRadius: "8px",
+                background: "var(--accent)",
+                color: "#fff",
+                border: "none",
+                cursor: "pointer",
+                fontSize: "13px",
+                fontWeight: 500,
+                width: "100%",
+                transition: "opacity 0.18s",
+              }}
+              onMouseEnter={(e) => { e.currentTarget.style.opacity = "0.88" }}
+              onMouseLeave={(e) => { e.currentTarget.style.opacity = "1" }}
             >
-              {theme === "dark" ? <SunIcon /> : <MoonIcon />}
+              <span style={{ fontSize: "15px", fontWeight: 300, lineHeight: 1, marginTop: "-1px" }}>+</span>
+              New Note
+              <kbd style={{
+                marginLeft: "auto",
+                fontSize: "10px",
+                opacity: 0.7,
+                fontWeight: 400,
+                fontFamily: "inherit",
+                background: "rgba(255,255,255,0.2)",
+                padding: "1px 4px",
+                borderRadius: "3px",
+              }}>N</kbd>
             </button>
 
             <button
-              onClick={handleSignOut}
-              title="Sign out"
-              style={{ background: "transparent", border: "none", cursor: "pointer", color: "var(--text-3)", display: "flex", alignItems: "center", padding: "3px", borderRadius: "5px", flexShrink: 0, transition: "color 0.16s" }}
-              onMouseEnter={(e) => { e.currentTarget.style.color = "var(--text-1)" }}
-              onMouseLeave={(e) => { e.currentTarget.style.color = "var(--text-3)" }}
+              onClick={() => { router.push("/tasks?create=1"); if (isMobile) closeMobile() }}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: "8px",
+                padding: "7px 12px",
+                borderRadius: "8px",
+                background: "transparent",
+                color: "var(--text-2)",
+                border: "1px solid var(--border)",
+                cursor: "pointer",
+                fontSize: "13px",
+                width: "100%",
+                transition: "border-color 0.18s, color 0.18s, background 0.18s",
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.borderColor = "var(--border-hover)"
+                e.currentTarget.style.color = "var(--text-1)"
+                e.currentTarget.style.background = "var(--bg-hover)"
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.borderColor = "var(--border)"
+                e.currentTarget.style.color = "var(--text-2)"
+                e.currentTarget.style.background = "transparent"
+              }}
             >
-              <LogOutIcon />
+              <span style={{ fontSize: "15px", fontWeight: 300, lineHeight: 1, marginTop: "-1px" }}>+</span>
+              New Task
+              <kbd style={{
+                marginLeft: "auto",
+                fontSize: "10px",
+                opacity: 0.5,
+                fontWeight: 400,
+                fontFamily: "inherit",
+              }}>T</kbd>
             </button>
           </div>
-        ) : (
-          <Link href="/login" style={{ display: "block", fontSize: "14px", color: "var(--text-2)", textDecoration: "none", padding: "8px 12px", border: "1px solid var(--border)", borderRadius: "8px", textAlign: "center", transition: "color 0.16s, border-color 0.16s" }}>
-            Sign in
-          </Link>
-        )}
-      </div>
-    </aside>
+        </div>
+
+        {/* Nav */}
+        <nav style={{
+          flex: 1,
+          overflowY: "auto",
+          padding: "4px 8px",
+          display: "flex",
+          flexDirection: "column",
+          gap: "1px",
+        }}>
+
+          {/* WORKSPACE section */}
+          <SectionHeader label="Workspace" />
+          <NavLink href="/dashboard" label="Home" icon={<HomeIcon />} isActive={pathname === "/dashboard"} />
+          <NavLink href="/notes" label="Notes" icon={<NotesIcon />} isActive={pathname === "/notes" || pathname.startsWith("/notes/")} />
+          <NavLink href="/tasks" label="Tasks" icon={<TasksIcon />} isActive={pathname === "/tasks"} />
+
+          {/* KNOWLEDGE section */}
+          <div style={{ marginTop: "8px" }}>
+            <SectionHeader label="Knowledge" />
+            <NavLink href="/graph" label="Graph" icon={<GraphIcon />} isActive={pathname === "/graph"} />
+          </div>
+
+          {/* SPACES section */}
+          {spaces.length > 0 && (
+            <div style={{ marginTop: "8px" }}>
+              <button
+                onClick={() => setSpacesOpen((v) => !v)}
+                style={{
+                  width: "100%",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  padding: "8px 14px 3px",
+                  background: "transparent",
+                  border: "none",
+                  cursor: "pointer",
+                  color: "var(--text-3)",
+                  transition: "color 0.16s",
+                }}
+                onMouseEnter={(e) => { e.currentTarget.style.color = "var(--text-2)" }}
+                onMouseLeave={(e) => { e.currentTarget.style.color = "var(--text-3)" }}
+              >
+                <span style={{ fontSize: "10px", fontWeight: 600, letterSpacing: "0.08em", textTransform: "uppercase" }}>
+                  Spaces
+                </span>
+                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ transform: spacesOpen ? "rotate(0deg)" : "rotate(-90deg)", transition: "transform 0.16s ease-in-out" }}>
+                  <polyline points="6 9 12 15 18 9" />
+                </svg>
+              </button>
+
+              {spacesOpen && (
+                <div style={{ display: "flex", flexDirection: "column", gap: "1px" }}>
+                  {spaces.map((space) => {
+                    const isActiveSpace = pathname === "/notes" && activeSpaceId === space.id
+                    const isHovered = hoveredSpaceId === space.id
+                    return (
+                      <div
+                        key={space.id}
+                        style={{ position: "relative" }}
+                        onMouseEnter={() => setHoveredSpaceId(space.id)}
+                        onMouseLeave={() => setHoveredSpaceId(null)}
+                      >
+                        <Link
+                          href={`/notes?space=${space.id}`}
+                          style={{
+                            display: "flex",
+                            alignItems: "center",
+                            gap: "6px",
+                            padding: "8px 32px 8px 14px",
+                            borderRadius: "8px",
+                            fontSize: "14px",
+                            fontWeight: isActiveSpace ? 500 : 400,
+                            color: isActiveSpace ? "var(--text-1)" : "var(--text-2)",
+                            textDecoration: "none",
+                            background: isActiveSpace ? "var(--accent-dim)" : isHovered ? "var(--bg-hover)" : "transparent",
+                            transition: "color 0.16s, background 0.16s",
+                          }}
+                        >
+                          <span style={{ fontSize: "11px", color: isActiveSpace ? "var(--accent)" : "var(--text-3)", fontWeight: 600, flexShrink: 0, transition: "color 0.16s" }}>@</span>
+                          <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{space.name}</span>
+                        </Link>
+                        {/* Delete button — shown on hover */}
+                        {isHovered && (
+                          <button
+                            onClick={(e) => handleDeleteSpace(e, space.id)}
+                            title="Delete space"
+                            style={{
+                              position: "absolute",
+                              right: "8px",
+                              top: "50%",
+                              transform: "translateY(-50%)",
+                              width: "18px",
+                              height: "18px",
+                              display: "flex",
+                              alignItems: "center",
+                              justifyContent: "center",
+                              background: "transparent",
+                              border: "none",
+                              borderRadius: "4px",
+                              cursor: "pointer",
+                              color: "var(--text-3)",
+                              fontSize: "14px",
+                              lineHeight: 1,
+                              transition: "color 0.15s, background 0.15s",
+                            }}
+                            onMouseEnter={(e) => {
+                              e.currentTarget.style.color = "#FF453A"
+                              e.currentTarget.style.background = "rgba(255,69,58,0.1)"
+                            }}
+                            onMouseLeave={(e) => {
+                              e.currentTarget.style.color = "var(--text-3)"
+                              e.currentTarget.style.background = "transparent"
+                            }}
+                          >
+                            ×
+                          </button>
+                        )}
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Spacer */}
+          <div style={{ flex: 1 }} />
+
+          {/* AI Assistant toggle */}
+          <button
+            onClick={toggleAiPanel}
+            className="nav-link"
+            data-active={aiPanelOpen ? "true" : undefined}
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: "9px",
+              padding: "8px 14px",
+              borderRadius: "8px",
+              fontSize: "14px",
+              fontWeight: aiPanelOpen ? 500 : 400,
+              color: aiPanelOpen ? "var(--ai-accent)" : "var(--text-2)",
+              background: aiPanelOpen ? "var(--ai-accent-dim)" : "transparent",
+              border: "none",
+              cursor: "pointer",
+              width: "100%",
+              textAlign: "left",
+              transition: "color 0.16s ease-in-out, background 0.16s ease-in-out",
+            }}
+          >
+            <span style={{ color: aiPanelOpen ? "var(--ai-accent)" : "var(--text-3)", display: "flex", alignItems: "center", flexShrink: 0, transition: "color 0.16s" }}>
+              <SparkleIcon />
+            </span>
+            AI Assistant
+            {aiPanelOpen && (
+              <span style={{ marginLeft: "auto", width: "6px", height: "6px", borderRadius: "50%", background: "var(--ai-accent)", flexShrink: 0 }} />
+            )}
+          </button>
+
+          {/* Settings */}
+          <NavLink href="/settings" label="Settings" icon={<SettingsIcon />} isActive={pathname === "/settings"} />
+        </nav>
+
+        {/* Footer: avatar + email + theme + sign out */}
+        <div style={{
+          padding: "12px 14px",
+          borderTop: "1px solid var(--border)",
+          flexShrink: 0,
+        }}>
+          {user ? (
+            <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+              <div style={{
+                width: "26px",
+                height: "26px",
+                borderRadius: "50%",
+                background: "var(--accent-dim)",
+                border: "1px solid var(--border-accent)",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                fontSize: "11px",
+                fontWeight: 600,
+                color: "var(--accent)",
+                flexShrink: 0,
+              }}>
+                {avatarLetter}
+              </div>
+
+              <p style={{ flex: 1, fontSize: "11px", color: "var(--text-2)", margin: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                {user.email}
+              </p>
+
+              <button
+                onClick={toggleTheme}
+                title={theme === "dark" ? "Light mode" : "Dark mode"}
+                style={{ background: "transparent", border: "none", cursor: "pointer", color: "var(--text-3)", display: "flex", alignItems: "center", padding: "3px", borderRadius: "5px", flexShrink: 0, transition: "color 0.16s" }}
+                onMouseEnter={(e) => { e.currentTarget.style.color = "var(--text-1)" }}
+                onMouseLeave={(e) => { e.currentTarget.style.color = "var(--text-3)" }}
+              >
+                {theme === "dark" ? <SunIcon /> : <MoonIcon />}
+              </button>
+
+              <button
+                onClick={handleSignOut}
+                title="Sign out"
+                style={{ background: "transparent", border: "none", cursor: "pointer", color: "var(--text-3)", display: "flex", alignItems: "center", padding: "3px", borderRadius: "5px", flexShrink: 0, transition: "color 0.16s" }}
+                onMouseEnter={(e) => { e.currentTarget.style.color = "var(--text-1)" }}
+                onMouseLeave={(e) => { e.currentTarget.style.color = "var(--text-3)" }}
+              >
+                <LogOutIcon />
+              </button>
+            </div>
+          ) : (
+            <Link href="/login" style={{ display: "block", fontSize: "14px", color: "var(--text-2)", textDecoration: "none", padding: "8px 12px", border: "1px solid var(--border)", borderRadius: "8px", textAlign: "center", transition: "color 0.16s, border-color 0.16s" }}>
+              Sign in
+            </Link>
+          )}
+        </div>
+      </aside>
+    </>
   )
 }
