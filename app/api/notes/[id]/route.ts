@@ -114,8 +114,20 @@ export async function DELETE(
     if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
 
     const db = getSupabaseAdmin()
+
+    // 1. Capture which entities are linked so we can clean up orphans below
+    const { data: linkedEntities } = await db
+      .from("knowledge_links")
+      .select("entity_id")
+      .eq("knowledge_id", id)
+      .eq("user_id", user.id)
+
+    const entityIds = (linkedEntities ?? []).map((r) => r.entity_id)
+
+    // 2. Delete links (DB trigger auto-deletes orphaned entities when deployed)
     await db.from("knowledge_links").delete().eq("knowledge_id", id).eq("user_id", user.id)
-    // note_spaces rows removed via CASCADE on knowledge(id)
+
+    // 3. Delete the note — note_spaces rows removed via CASCADE on knowledge(id)
     const { error: deleteError } = await db
       .from("knowledge")
       .delete()
@@ -125,6 +137,22 @@ export async function DELETE(
     if (deleteError) {
       console.error("Note delete error:", deleteError)
       return NextResponse.json({ error: "Delete failed" }, { status: 500 })
+    }
+
+    // 4. Belt-and-suspenders: delete any entities that now have zero links
+    //    (covers environments where the DB trigger hasn't been deployed yet)
+    if (entityIds.length > 0) {
+      const { data: stillLinked } = await db
+        .from("knowledge_links")
+        .select("entity_id")
+        .in("entity_id", entityIds)
+
+      const stillLinkedSet = new Set((stillLinked ?? []).map((r) => r.entity_id))
+      const orphanIds = entityIds.filter((eid) => !stillLinkedSet.has(eid))
+
+      if (orphanIds.length > 0) {
+        await db.from("entities").delete().in("id", orphanIds)
+      }
     }
 
     return NextResponse.json({ success: true })
