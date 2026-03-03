@@ -28,6 +28,13 @@ const nextConfig: NextConfig = {
           { key: "Cache-Control", value: "private, max-age=30" },
         ],
       },
+      // Cache dashboard data: 30s fresh + 120s stale-while-revalidate
+      {
+        source: "/api/dashboard",
+        headers: [
+          { key: "Cache-Control", value: "private, max-age=30, stale-while-revalidate=120" },
+        ],
+      },
       {
         source: "/(.*)",
         headers: [

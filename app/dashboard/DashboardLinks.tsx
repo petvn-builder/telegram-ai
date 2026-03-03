@@ -1,21 +1,12 @@
 "use client"
 
 import Link from "next/link"
-import { useRouter } from "next/navigation"
 import useSWR from "swr"
 import { fetcher } from "@/lib/fetcher"
 import { useAiPanel } from "@/app/components/AiPanelContext"
-import type { NoteWithEntities, TaskWithEntities } from "@/app/notes/types"
+import type { DashTask, DashNote } from "@/app/api/dashboard/route"
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
-
-function isToday(iso: string) {
-  const d = new Date(iso)
-  d.setHours(0, 0, 0, 0)
-  const today = new Date()
-  today.setHours(0, 0, 0, 0)
-  return d.getTime() === today.getTime()
-}
 
 function isOverdue(iso: string) {
   const d = new Date(iso)
@@ -41,10 +32,10 @@ function shortPreview(content: string) {
 
 // ── Icons ─────────────────────────────────────────────────────────────────────
 
-function CheckIcon({ done }: { done: boolean }) {
+function CheckIcon() {
   return (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ color: done ? "var(--accent)" : "var(--text-3)" }}>
-      {done ? <><polyline points="20 6 9 17 4 12" /></> : <circle cx="12" cy="12" r="9" strokeWidth="1.5" />}
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={{ color: "var(--text-3)" }}>
+      <circle cx="12" cy="12" r="9" />
     </svg>
   )
 }
@@ -59,29 +50,9 @@ function SparkleIcon() {
 
 // ── Today's Tasks Widget ───────────────────────────────────────────────────────
 
-function TodayTasksWidget() {
-  const { data: tasks = [], mutate } = useSWR<TaskWithEntities[]>("/api/tasks", fetcher, {
-    revalidateOnFocus: false,
-    dedupingInterval: 30_000,
-  })
-
-  const focusTasks = tasks.filter((t) =>
-    t.status !== "done" && t.due_date && (isToday(t.due_date) || isOverdue(t.due_date))
-  ).slice(0, 6)
-
-  async function toggleTask(task: TaskWithEntities) {
-    const newStatus = task.status === "done" ? "inbox" : "done"
-    await fetch(`/api/tasks/${task.id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ status: newStatus }),
-    })
-    mutate()
-  }
-
+function TodayTasksWidget({ tasks, onToggle }: { tasks: DashTask[]; onToggle: (id: string, status: string) => void }) {
   return (
     <div style={{ background: "var(--bg-surface)", border: "1px solid var(--border)", borderRadius: "14px", overflow: "hidden" }}>
-      {/* Header */}
       <div style={{ padding: "16px 20px 12px", display: "flex", alignItems: "center", justifyContent: "space-between", borderBottom: "1px solid var(--border-subtle)" }}>
         <p style={{ fontSize: "12px", fontWeight: 600, color: "var(--text-2)", textTransform: "uppercase", letterSpacing: "0.07em", margin: 0 }}>
           Today&apos;s Focus
@@ -93,8 +64,7 @@ function TodayTasksWidget() {
         </Link>
       </div>
 
-      {/* Task list */}
-      {focusTasks.length === 0 ? (
+      {tasks.length === 0 ? (
         <div style={{ padding: "28px 20px", textAlign: "center" }}>
           <p style={{ fontSize: "13px", color: "var(--text-3)", margin: "0 0 4px" }}>No tasks due today</p>
           <Link href="/tasks?create=1" style={{ fontSize: "12px", color: "var(--accent)", textDecoration: "none" }}>
@@ -103,7 +73,7 @@ function TodayTasksWidget() {
         </div>
       ) : (
         <div>
-          {focusTasks.map((task) => {
+          {tasks.map((task) => {
             const overdue = task.due_date && isOverdue(task.due_date)
             return (
               <div
@@ -120,10 +90,10 @@ function TodayTasksWidget() {
                 onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = "transparent" }}
               >
                 <button
-                  onClick={() => toggleTask(task)}
+                  onClick={() => onToggle(task.id, task.status)}
                   style={{ background: "transparent", border: "none", cursor: "pointer", padding: 0, display: "flex", flexShrink: 0 }}
                 >
-                  <CheckIcon done={false} />
+                  <CheckIcon />
                 </button>
                 <span style={{ flex: 1, fontSize: "14px", color: "var(--text-1)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                   {task.title}
@@ -144,16 +114,9 @@ function TodayTasksWidget() {
 
 // ── Recent Notes Widget ────────────────────────────────────────────────────────
 
-function RecentNotesWidget() {
-  const { data: notesRes } = useSWR("/api/notes?limit=5", fetcher, {
-    revalidateOnFocus: false,
-    dedupingInterval: 30_000,
-  })
-  const notes: NoteWithEntities[] = notesRes?.notes ?? []
-
+function RecentNotesWidget({ notes }: { notes: DashNote[] }) {
   return (
     <div style={{ background: "var(--bg-surface)", border: "1px solid var(--border)", borderRadius: "14px", overflow: "hidden" }}>
-      {/* Header */}
       <div style={{ padding: "16px 20px 12px", display: "flex", alignItems: "center", justifyContent: "space-between", borderBottom: "1px solid var(--border-subtle)" }}>
         <p style={{ fontSize: "12px", fontWeight: 600, color: "var(--text-2)", textTransform: "uppercase", letterSpacing: "0.07em", margin: 0 }}>
           Recent Notes
@@ -257,10 +220,33 @@ function AiCard() {
 // ── Main export ───────────────────────────────────────────────────────────────
 
 export default function DashboardLinks() {
+  const { data, mutate } = useSWR<{ tasks: DashTask[]; notes: DashNote[] }>(
+    "/api/dashboard",
+    fetcher,
+    {
+      revalidateOnFocus: false,
+      dedupingInterval: 60_000,
+      keepPreviousData: true,
+    }
+  )
+
+  const tasks = data?.tasks ?? []
+  const notes = data?.notes ?? []
+
+  async function toggleTask(id: string, currentStatus: string) {
+    const newStatus = currentStatus === "done" ? "inbox" : "done"
+    await fetch(`/api/tasks/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ status: newStatus }),
+    })
+    mutate()
+  }
+
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
-      <TodayTasksWidget />
-      <RecentNotesWidget />
+      <TodayTasksWidget tasks={tasks} onToggle={toggleTask} />
+      <RecentNotesWidget notes={notes} />
       <AiCard />
     </div>
   )
