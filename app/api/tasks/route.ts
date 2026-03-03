@@ -17,6 +17,7 @@ export async function GET(req: NextRequest) {
     const noteId = searchParams.get("note_id")
     const entityId = searchParams.get("entity_id")
     const status = searchParams.get("status")
+    const month = searchParams.get("month") // e.g. "2026-03"
 
     // If filtering by entity, resolve task IDs first
     let entityTaskIds: string[] | null = null
@@ -38,6 +39,14 @@ export async function GET(req: NextRequest) {
     if (noteId) query = query.eq("linked_note_id", noteId)
     if (status) query = query.eq("status", status)
     if (entityTaskIds !== null) query = query.in("id", entityTaskIds)
+    if (month) {
+      const [y, m] = month.split("-").map(Number)
+      const start = `${y}-${String(m).padStart(2, "0")}-01`
+      const nextM = m === 12 ? 1 : m + 1
+      const nextY = m === 12 ? y + 1 : y
+      const end = `${nextY}-${String(nextM).padStart(2, "0")}-01`
+      query = query.gte("due_date", start).lt("due_date", end).not("due_date", "is", null)
+    }
 
     const { data: tasks, error } = await query
     if (error) throw error

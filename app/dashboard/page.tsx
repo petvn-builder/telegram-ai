@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation"
 import { getSupabaseServer } from "@/lib/supabase/server"
 import DashboardLinks from "./DashboardLinks"
+import CalendarSidebar from "./CalendarSidebar"
 
 function getGreeting() {
   const h = new Date().getHours()
@@ -40,67 +41,74 @@ export default async function DashboardPage() {
         padding: "48px 48px",
       }}
     >
-      <div style={{ maxWidth: "640px" }}>
-
-        {/* Header */}
-        <div style={{ marginBottom: "32px" }}>
-          <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: "16px" }}>
-            <h1 style={{
-              fontSize: "26px",
-              fontWeight: 600,
-              color: "var(--text-1)",
-              margin: 0,
-              letterSpacing: "-0.025em",
-            }}>
-              {getGreeting()}{firstName ? `, ${firstName}` : ""}
-            </h1>
-            <p style={{ fontSize: "13px", color: "var(--text-3)", margin: 0, flexShrink: 0 }}>
-              {today}
-            </p>
-          </div>
-          <p style={{ fontSize: "14px", color: "var(--text-3)", margin: "5px 0 0" }}>
-            Here&apos;s your focus for today.
-          </p>
-        </div>
-
-        {/* Telegram banner — only when not connected */}
-        {!identity && (
-          <div style={{
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-            gap: "16px",
-            padding: "14px 18px",
-            background: "var(--bg-surface)",
-            border: "1px solid var(--border)",
-            borderRadius: "10px",
-            marginBottom: "24px",
-          }}>
-            <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-              <div style={{ width: "6px", height: "6px", borderRadius: "50%", background: "var(--text-3)", flexShrink: 0 }} />
-              <p style={{ fontSize: "13px", color: "var(--text-2)", margin: 0 }}>
-                Connect Telegram to save notes from your phone
+      <div className="calendar-layout">
+        {/* Left: main content */}
+        <div style={{ flex: 1, minWidth: 0 }}>
+          {/* Header */}
+          <div style={{ marginBottom: "32px" }}>
+            <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: "16px" }}>
+              <h1 style={{
+                fontSize: "26px",
+                fontWeight: 600,
+                color: "var(--text-1)",
+                margin: 0,
+                letterSpacing: "-0.025em",
+              }}>
+                {getGreeting()}{firstName ? `, ${firstName}` : ""}
+              </h1>
+              <p style={{ fontSize: "13px", color: "var(--text-3)", margin: 0, flexShrink: 0 }}>
+                {today}
               </p>
             </div>
-            <a href="/settings" style={{
-              flexShrink: 0,
-              padding: "5px 12px",
-              background: "transparent",
-              border: "1px solid var(--border-hover)",
-              borderRadius: "7px",
-              fontSize: "12px",
-              fontWeight: 500,
-              color: "var(--text-1)",
-              textDecoration: "none",
-              whiteSpace: "nowrap",
-            }}>
-              Connect →
-            </a>
+            <p style={{ fontSize: "14px", color: "var(--text-3)", margin: "5px 0 0" }}>
+              Here&apos;s your focus for today.
+            </p>
           </div>
-        )}
 
-        {/* Main widgets */}
-        <DashboardLinks />
+          {/* Telegram banner — only when not connected */}
+          {!identity && (
+            <div style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              gap: "16px",
+              padding: "14px 18px",
+              background: "var(--bg-surface)",
+              border: "1px solid var(--border)",
+              borderRadius: "10px",
+              marginBottom: "24px",
+            }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                <div style={{ width: "6px", height: "6px", borderRadius: "50%", background: "var(--text-3)", flexShrink: 0 }} />
+                <p style={{ fontSize: "13px", color: "var(--text-2)", margin: 0 }}>
+                  Connect Telegram to save notes from your phone
+                </p>
+              </div>
+              <a href="/settings" style={{
+                flexShrink: 0,
+                padding: "5px 12px",
+                background: "transparent",
+                border: "1px solid var(--border-hover)",
+                borderRadius: "7px",
+                fontSize: "12px",
+                fontWeight: 500,
+                color: "var(--text-1)",
+                textDecoration: "none",
+                whiteSpace: "nowrap",
+              }}>
+                Connect →
+              </a>
+            </div>
+          )}
+
+          {/* Main widgets */}
+          <DashboardLinks />
+        </div>
+
+        {/* Right: calendar panel */}
+        <div className="calendar-sidebar-col">
+          <CalendarSidebar />
+        </div>
       </div>
     </div>
   )

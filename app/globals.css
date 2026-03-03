@@ -321,3 +321,21 @@ textarea::placeholder {
     animation: fadeInUp 180ms ease-in-out both;
   }
 }
+
+
+/* ── Dashboard 2-column layout ────────────────────────────── */
+.calendar-layout {
+  display: flex;
+  gap: 32px;
+  align-items: flex-start;
+}
+.calendar-sidebar-col {
+  width: 340px;
+  flex-shrink: 0;
+  position: sticky;
+  top: 32px;
+}
+@media (max-width: 1024px) {
+  .calendar-layout { flex-direction: column; }
+  .calendar-sidebar-col { width: 100%; position: static; }
+}
