@@ -344,7 +344,9 @@ function NotesPageInner() {
   useEffect(() => {
     if (!selectedNote) return
     const tagPrefix = (selectedNote.tags ?? []).map((t) => `#${t.name}`).join(" ")
-    setPanelText(tagPrefix ? `${tagPrefix} ${selectedNote.content}` : selectedNote.content)
+    // Set preview content immediately for instant display (list returns 300-char preview)
+    const previewText = tagPrefix ? `${tagPrefix} ${selectedNote.content}` : selectedNote.content
+    setPanelText(previewText)
     setPanelSpaces(selectedNote.spaces ?? [])
     setPanelSaved(false)
     setPanelDirty(false)
@@ -357,9 +359,19 @@ function NotesPageInner() {
       .then((r) => (r.ok ? r.json() : []))
       .then(setNoteTasks)
       .catch(() => {})
+    // Fetch full content — list preview is capped at 300 chars
+    fetch(`/api/notes/${selectedNote.id}`)
+      .then((r) => r.ok ? r.json() : null)
+      .then((full) => {
+        if (!full) return
+        const fullText = tagPrefix ? `${tagPrefix} ${full.content}` : full.content
+        // Only overwrite if user hasn't started editing
+        setPanelText((current) => current === previewText ? fullText : current)
+      })
+      .catch(() => {})
     // Auto-focus textarea after transition
     setTimeout(() => panelTextareaRef.current?.focus(), 220)
-  }, [selectedNote?.id])
+  }, [selectedNote?.id]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Auto-focus when opening create mode
   useEffect(() => {
