@@ -250,6 +250,9 @@ function NotesPageInner() {
   const justAddedId = useRef<string | null>(null)
   const confirmDeleteTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const extractTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const lastExtractedContentRef = useRef<string>("")
+  const selectedNoteRef = useRef<{ id: string } | null>(null)
   const panelSpacesRef = useRef<Space[]>([])
   const panelTextRef = useRef(panelText)
   const panelModeRef = useRef(panelMode)
@@ -261,6 +264,7 @@ function NotesPageInner() {
   useEffect(() => { panelSpacesRef.current = panelSpaces }, [panelSpaces])
   useEffect(() => { panelTextRef.current = panelText }, [panelText])
   useEffect(() => { panelModeRef.current = panelMode }, [panelMode])
+  useEffect(() => { selectedNoteRef.current = selectedNote }, [selectedNote])
 
   // ── SWR: notes (paginated) + spaces (shared cache)
   const notesKey = `/api/notes?${activeSpaceId ? `spaceId=${activeSpaceId}&` : ""}preview=1&limit=30&offset=${offset}`
@@ -380,12 +384,16 @@ function NotesPageInner() {
     }
   }, [panelMode])
 
-  // Cleanup save timer
+  // Cleanup timers
   useEffect(() => {
-    return () => { if (saveTimerRef.current) clearTimeout(saveTimerRef.current) }
+    return () => {
+      if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
+      if (extractTimerRef.current) clearTimeout(extractTimerRef.current)
+    }
   }, [])
 
-  // Auto-save create-mode draft on navigate away or browser close
+  // Auto-save create-mode draft on navigate away or browser close.
+  // Also fires extraction for edit-mode notes if content changed since last extraction.
   useEffect(() => {
     const handleBeforeUnload = () => {
       if (panelModeRef.current === "create" && panelTextRef.current.trim()) {
@@ -395,6 +403,23 @@ function NotesPageInner() {
           body: JSON.stringify({
             content: panelTextRef.current,
             spaces: panelSpacesRef.current.map((s) => s.name),
+          }),
+          keepalive: true,
+        })
+      }
+      if (
+        panelModeRef.current === "edit" &&
+        selectedNoteRef.current &&
+        panelTextRef.current.trim() &&
+        panelTextRef.current !== lastExtractedContentRef.current
+      ) {
+        fetch(`/api/notes/${selectedNoteRef.current.id}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            content: panelTextRef.current,
+            spaces: panelSpacesRef.current.map((s) => s.name),
+            extract: true,
           }),
           keepalive: true,
         })
@@ -415,17 +440,35 @@ function NotesPageInner() {
           keepalive: true,
         })
       }
+      if (
+        panelModeRef.current === "edit" &&
+        selectedNoteRef.current &&
+        panelTextRef.current.trim() &&
+        panelTextRef.current !== lastExtractedContentRef.current
+      ) {
+        fetch(`/api/notes/${selectedNoteRef.current.id}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            content: panelTextRef.current,
+            spaces: panelSpacesRef.current.map((s) => s.name),
+            extract: true,
+          }),
+          keepalive: true,
+        })
+      }
     }
   }, [])
 
-  async function doSave(text: string, spaces: Space[]) {
+  async function doSave(text: string, spaces: Space[], extract = false) {
     if (!selectedNote) return
+    if (extract) lastExtractedContentRef.current = text
     setPanelSaving(true)
     try {
       const res = await fetch(`/api/notes/${selectedNote.id}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ content: text, spaces: spaces.map((s) => s.name) }),
+        body: JSON.stringify({ content: text, spaces: spaces.map((s) => s.name), extract }),
       })
       if (res.ok) {
         const updated: NoteWithEntities = await res.json()
@@ -663,6 +706,18 @@ function NotesPageInner() {
     if (saveTimerRef.current) {
       clearTimeout(saveTimerRef.current)
       saveTimerRef.current = null
+    }
+    if (extractTimerRef.current) {
+      clearTimeout(extractTimerRef.current)
+      extractTimerRef.current = null
+    }
+    // Fire extraction for edit notes if content changed since last extraction
+    if (panelMode === "edit" && selectedNote && panelText.trim() && panelText !== lastExtractedContentRef.current) {
+      fetch(`/api/notes/${selectedNote.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ content: panelText, spaces: panelSpaces.map((s) => s.name), extract: true }),
+      }).catch(() => {})
     }
     setSelectedNote(null)
     setPanelMode(null)
@@ -1125,12 +1180,19 @@ function NotesPageInner() {
                   if (panelMode === "edit") {
                     setPanelDirty(true)
                     setPanelSaved(false)
-                    // Debounced auto-save — 1.2s after last keystroke
+                    // Auto-save timer (1.2s) — persists content only, no extraction
                     if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
                     saveTimerRef.current = setTimeout(() => {
-                      doSave(val, panelSpacesRef.current)
+                      doSave(val, panelSpacesRef.current, false)
                       setPanelDirty(false)
                     }, 1200)
+                    // Extraction timer (30s idle) — fires extraction after user stops typing
+                    if (extractTimerRef.current) clearTimeout(extractTimerRef.current)
+                    extractTimerRef.current = setTimeout(() => {
+                      if (val !== lastExtractedContentRef.current) {
+                        doSave(val, panelSpacesRef.current, true)
+                      }
+                    }, 30000)
                   }
                 }}
                 style={{

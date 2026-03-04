@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
+import { createHash } from "crypto"
 import { getSupabaseServer } from "@/lib/supabase/server"
 import { getSupabaseAdmin } from "@/lib/supabase/admin"
 import type { NoteWithEntities, Entity, Space, Tag } from "@/app/notes/types"
@@ -447,6 +448,7 @@ export async function POST(req: NextRequest) {
     // Run embedding + entity extraction in background after response is sent
     const backgroundWork = (async () => {
       try {
+        const hash = createHash("sha256").update(content).digest("hex")
         const { createEmbedding } = await import("@/lib/embeddings")
         const { extractEntities } = await import("@/lib/extractEntities")
         const [embedding, rawEntities] = await Promise.all([
@@ -454,7 +456,7 @@ export async function POST(req: NextRequest) {
           extractEntities(content),
         ])
         await Promise.all([
-          db.from("knowledge").update({ embedding }).eq("id", knowledge.id),
+          db.from("knowledge").update({ embedding, content_hash: hash }).eq("id", knowledge.id),
           upsertEntitiesAndLink(db, user.id, knowledge.id, Array.isArray(rawEntities) ? rawEntities : []),
         ])
       } catch (err) {

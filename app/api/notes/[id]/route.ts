@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
+import { createHash } from "crypto"
 import { getSupabaseServer } from "@/lib/supabase/server"
 import { getSupabaseAdmin } from "@/lib/supabase/admin"
 import type { NoteDetail } from "@/app/notes/types"
@@ -177,6 +178,8 @@ export async function PUT(
     if (!rawContent) return NextResponse.json({ error: "Empty content" }, { status: 400 })
 
     const spaceNames: string[] = Array.isArray(body.spaces) ? body.spaces.map(String) : []
+    // extract=false means auto-save: persist content but skip OpenAI extraction
+    const shouldExtract: boolean = body.extract !== false
 
     // Extract #tag names for junction table — store original content unchanged
     const { tagNames } = extractTagTokens(rawContent)
@@ -204,30 +207,46 @@ export async function PUT(
       syncNoteTags(db, user.id, id, tagNames),
     ])
 
-    // Re-extract entities in background after response is sent
-    const backgroundWork = (async () => {
-      try {
-        const { createEmbedding } = await import("@/lib/embeddings")
-        const { extractEntities } = await import("@/lib/extractEntities")
-        const [embedding, rawEntities] = await Promise.all([
-          createEmbedding(content),
-          extractEntities(content),
-        ])
-        await db.from("knowledge_links").delete().eq("knowledge_id", id)
-        await Promise.all([
-          db.from("knowledge").update({ embedding }).eq("id", id),
-          upsertEntitiesAndLink(db, user.id, id, Array.isArray(rawEntities) ? rawEntities : []),
-        ])
-      } catch (err) {
-        console.error("Background note update processing error:", err)
-      }
-    })()
+    // Re-extract entities in background — only when caller requests it
+    if (shouldExtract) {
+      const backgroundWork = (async () => {
+        try {
+          const hash = createHash("sha256").update(content).digest("hex")
 
-    try {
-      const { waitUntil } = await import("@vercel/functions")
-      waitUntil(backgroundWork)
-    } catch {
-      // @vercel/functions not available
+          // Skip extraction if content hasn't changed since last extraction
+          const { data: row } = await db
+            .from("knowledge")
+            .select("content_hash")
+            .eq("id", id)
+            .single()
+
+          if (row?.content_hash === hash) {
+            console.log(`[extract] Skipping — content unchanged for note ${id}`)
+            return
+          }
+
+          const { createEmbedding } = await import("@/lib/embeddings")
+          const { extractEntities } = await import("@/lib/extractEntities")
+          const [embedding, rawEntities] = await Promise.all([
+            createEmbedding(content),
+            extractEntities(content),
+          ])
+          await db.from("knowledge_links").delete().eq("knowledge_id", id)
+          await Promise.all([
+            db.from("knowledge").update({ embedding, content_hash: hash }).eq("id", id),
+            upsertEntitiesAndLink(db, user.id, id, Array.isArray(rawEntities) ? rawEntities : []),
+          ])
+        } catch (err) {
+          console.error("Background note update processing error:", err)
+        }
+      })()
+
+      try {
+        const { waitUntil } = await import("@vercel/functions")
+        waitUntil(backgroundWork)
+      } catch {
+        // @vercel/functions not available
+      }
     }
 
     return NextResponse.json({
