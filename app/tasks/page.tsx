@@ -23,9 +23,11 @@ const COLUMNS: Array<{ status: TaskStatus; label: string }> = [
 // Visual layout: 3 outer columns, some stacked
 const BOARD_LAYOUT: Array<Array<{ status: TaskStatus; label: string }>> = [
   [{ status: "next", label: "Next" }, { status: "inbox", label: "Inbox" }],
-  [{ status: "doing", label: "Doing" }],
-  [{ status: "done", label: "Done" }, { status: "waiting", label: "Waiting" }],
+  [{ status: "doing", label: "Doing" }, { status: "waiting", label: "Waiting" }],
+  [{ status: "done", label: "Done" }],
 ]
+
+const VISIBLE_LIMIT = 5
 
 const PRIORITY_DOT: Record<TaskPriority, string> = {
   high: "#DC2626",
@@ -296,13 +298,16 @@ function TaskColumn({
   onAddTask: () => void
   colIndex: number
 }) {
+  const [expanded, setExpanded] = useState(false)
   const wipWarning = status === "doing" && tasks.length > 3
   const canMoveBack = colIndex > 0
   const canMoveForward = colIndex < COLUMNS.length - 1
+  const visibleTasks = expanded ? tasks : tasks.slice(0, VISIBLE_LIMIT)
+  const hiddenCount = tasks.length - VISIBLE_LIMIT
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "0" }}>
-      {/* Column header — no + button, count + WIP only */}
+      {/* Column header */}
       <div style={{
         display: "flex",
         alignItems: "center",
@@ -349,22 +354,7 @@ function TaskColumn({
           transition: "border-color 0.18s, background 0.18s",
         }}
       >
-        {tasks.map((task) => (
-          <TaskCardItem
-            key={task.id}
-            task={task}
-            onDragStart={onDragStart}
-            onDelete={onDelete}
-            onCheck={onCheck}
-            onMoveBack={onMoveBack}
-            onMoveForward={onMoveForward}
-            onClick={onClickTask}
-            canMoveBack={canMoveBack}
-            canMoveForward={canMoveForward}
-          />
-        ))}
-
-        {/* Inline "Click to add task" footer */}
+        {/* Add task — at the top */}
         <button
           onClick={onAddTask}
           style={{
@@ -394,6 +384,49 @@ function TaskColumn({
           <span style={{ fontSize: "14px", lineHeight: 1 }}>+</span>
           Click to add task
         </button>
+
+        {visibleTasks.map((task) => (
+          <TaskCardItem
+            key={task.id}
+            task={task}
+            onDragStart={onDragStart}
+            onDelete={onDelete}
+            onCheck={onCheck}
+            onMoveBack={onMoveBack}
+            onMoveForward={onMoveForward}
+            onClick={onClickTask}
+            canMoveBack={canMoveBack}
+            canMoveForward={canMoveForward}
+          />
+        ))}
+
+        {/* Expand / collapse toggle */}
+        {tasks.length > VISIBLE_LIMIT && (
+          <button
+            onClick={() => setExpanded((v) => !v)}
+            style={{
+              width: "100%",
+              padding: "6px 10px",
+              fontSize: "12px",
+              color: "var(--text-3)",
+              background: "transparent",
+              border: "none",
+              borderRadius: "7px",
+              cursor: "pointer",
+              textAlign: "left",
+              transition: "color 0.15s",
+              display: "flex",
+              alignItems: "center",
+              gap: "5px",
+            }}
+            onMouseEnter={(e) => { e.currentTarget.style.color = "var(--text-2)" }}
+            onMouseLeave={(e) => { e.currentTarget.style.color = "var(--text-3)" }}
+          >
+            {expanded
+              ? "↑ Show less"
+              : `↓ Show ${hiddenCount} more`}
+          </button>
+        )}
       </div>
     </div>
   )

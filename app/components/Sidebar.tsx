@@ -467,8 +467,8 @@ function SidebarInner() {
           {/* WORKSPACE section */}
           <SectionHeader label="Workspace" />
           <NavLink href="/dashboard" label="Home" icon={<HomeIcon />} isActive={pathname === "/dashboard"} />
-          <NavLink href="/notes" label="Notes" icon={<NotesIcon />} isActive={pathname === "/notes" || pathname.startsWith("/notes/")} />
           <NavLink href="/tasks" label="Tasks" icon={<TasksIcon />} isActive={pathname === "/tasks"} />
+          <NavLink href="/notes" label="Notes" icon={<NotesIcon />} isActive={pathname === "/notes" || pathname.startsWith("/notes/")} />
 
           {/* KNOWLEDGE section */}
           <div style={{ marginTop: "8px" }}>

@@ -55,22 +55,32 @@ const STATUS_DOT: Record<string, string> = {
 function RelatedTaskRow({
   task,
   onStatusChange,
+  onDateChange,
+  onDelete,
 }: {
   task: TaskWithEntities
   onStatusChange: (s: TaskStatus) => void
+  onDateChange: (date: string | null) => void
+  onDelete: () => void
 }) {
-  const dueDate = task.due_date
+  const [editingDate, setEditingDate] = useState(false)
+
+  // Format due_date as YYYY-MM-DD for <input type="date">
+  const dueDateValue = task.due_date ? task.due_date.slice(0, 10) : ""
+  const dueDateDisplay = task.due_date
     ? new Date(task.due_date).toLocaleDateString("en-US", { month: "short", day: "numeric" })
     : null
 
   return (
-    <div style={{
-      display: "flex",
-      alignItems: "center",
-      gap: "10px",
-      padding: "8px 0",
-      borderBottom: "1px solid var(--border-subtle)",
-    }}>
+    <div
+      style={{
+        display: "flex",
+        alignItems: "center",
+        gap: "10px",
+        padding: "8px 0",
+        borderBottom: "1px solid var(--border-subtle)",
+      }}
+    >
       <span
         title={task.status}
         style={{
@@ -89,9 +99,61 @@ function RelatedTaskRow({
       }}>
         {task.title}
       </span>
-      {dueDate && (
-        <span style={{ fontSize: "12px", color: "var(--text-3)" }}>{dueDate}</span>
+
+      {/* Editable due date */}
+      {editingDate ? (
+        <input
+          type="date"
+          autoFocus
+          defaultValue={dueDateValue}
+          onBlur={(e) => {
+            setEditingDate(false)
+            const v = e.target.value
+            onDateChange(v || null)
+          }}
+          onKeyDown={(e) => {
+            if (e.key === "Escape") { setEditingDate(false) }
+            if (e.key === "Enter") { e.currentTarget.blur() }
+          }}
+          style={{
+            fontSize: "12px",
+            color: "var(--text-2)",
+            background: "var(--bg-elevated)",
+            border: "1px solid var(--border)",
+            borderRadius: "6px",
+            padding: "2px 6px",
+            cursor: "pointer",
+            outline: "none",
+          }}
+        />
+      ) : (
+        <button
+          onClick={() => setEditingDate(true)}
+          title="Edit due date"
+          style={{
+            fontSize: "12px",
+            color: dueDateDisplay ? "var(--text-3)" : "var(--text-3)",
+            background: "transparent",
+            border: "1px solid transparent",
+            borderRadius: "6px",
+            padding: "2px 6px",
+            cursor: "pointer",
+            opacity: dueDateDisplay ? 1 : 0.4,
+            transition: "opacity 0.15s, border-color 0.15s",
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.opacity = "1"
+            e.currentTarget.style.borderColor = "var(--border)"
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.opacity = dueDateDisplay ? "1" : "0.4"
+            e.currentTarget.style.borderColor = "transparent"
+          }}
+        >
+          {dueDateDisplay ?? "Set date"}
+        </button>
       )}
+
       <select
         value={task.status}
         onChange={(e) => onStatusChange(e.target.value as TaskStatus)}
@@ -109,6 +171,40 @@ function RelatedTaskRow({
           <option key={s} value={s}>{s.charAt(0).toUpperCase() + s.slice(1)}</option>
         ))}
       </select>
+
+      {/* Delete button */}
+      <button
+        onClick={onDelete}
+        title="Delete task"
+        style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          width: "20px",
+          height: "20px",
+          padding: 0,
+          background: "transparent",
+          border: "none",
+          cursor: "pointer",
+          color: "var(--text-3)",
+          borderRadius: "4px",
+          flexShrink: 0,
+          opacity: 0.5,
+          transition: "opacity 0.15s, color 0.15s",
+        }}
+        onMouseEnter={(e) => {
+          e.currentTarget.style.opacity = "1"
+          e.currentTarget.style.color = "#DC2626"
+        }}
+        onMouseLeave={(e) => {
+          e.currentTarget.style.opacity = "0.5"
+          e.currentTarget.style.color = "var(--text-3)"
+        }}
+      >
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+          <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
+        </svg>
+      </button>
     </div>
   )
 }
@@ -465,6 +561,20 @@ export default function NoteDetailPage() {
                           headers: { "Content-Type": "application/json" },
                           body: JSON.stringify({ status: newStatus }),
                         }).catch(() => {})
+                      }}
+                      onDateChange={(date) => {
+                        setRelatedTasks((prev) =>
+                          prev.map((t) => t.id === task.id ? { ...t, due_date: date } : t)
+                        )
+                        fetch(`/api/tasks/${task.id}`, {
+                          method: "PATCH",
+                          headers: { "Content-Type": "application/json" },
+                          body: JSON.stringify({ due_date: date }),
+                        }).catch(() => {})
+                      }}
+                      onDelete={() => {
+                        setRelatedTasks((prev) => prev.filter((t) => t.id !== task.id))
+                        fetch(`/api/tasks/${task.id}`, { method: "DELETE" }).catch(() => {})
                       }}
                     />
                   ))}

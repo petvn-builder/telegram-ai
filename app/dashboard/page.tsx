@@ -1,5 +1,6 @@
-import { redirect } from "next/navigation"
-import { getSupabaseServer } from "@/lib/supabase/server"
+"use client"
+
+import { useEffect, useState } from "react"
 import DashboardLinks from "./DashboardLinks"
 import CalendarSidebar from "./CalendarSidebar"
 
@@ -10,27 +11,25 @@ function getGreeting() {
   return "Good evening"
 }
 
-export default async function DashboardPage() {
-  const supabase = await getSupabaseServer()
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
-
-  if (!user) redirect("/login")
-
-  const { data: identity } = await supabase
-    .from("user_identities")
-    .select("telegram_username, created_at")
-    .eq("user_id", user.id)
-    .maybeSingle()
-
-  const today = new Date().toLocaleDateString("en-US", {
+function getToday() {
+  return new Date().toLocaleDateString("en-US", {
     weekday: "long",
     month: "long",
     day: "numeric",
   })
+}
 
-  const firstName = user.email?.split("@")[0] ?? ""
+export default function DashboardPage() {
+  const [me, setMe] = useState<{ email: string | null; hasIdentity: boolean } | null>(null)
+
+  useEffect(() => {
+    fetch("/api/me")
+      .then((r) => r.ok ? r.json() : null)
+      .then(setMe)
+      .catch(() => {})
+  }, [])
+
+  const firstName = me?.email?.split("@")[0] ?? ""
 
   return (
     <div
@@ -57,7 +56,7 @@ export default async function DashboardPage() {
                 {getGreeting()}{firstName ? `, ${firstName}` : ""}
               </h1>
               <p style={{ fontSize: "13px", color: "var(--text-3)", margin: 0, flexShrink: 0 }}>
-                {today}
+                {getToday()}
               </p>
             </div>
             <p style={{ fontSize: "14px", color: "var(--text-3)", margin: "5px 0 0" }}>
@@ -65,8 +64,8 @@ export default async function DashboardPage() {
             </p>
           </div>
 
-          {/* Telegram banner — only when not connected */}
-          {!identity && (
+          {/* Telegram banner — only when not connected, fades in after /api/me resolves */}
+          {me && !me.hasIdentity && (
             <div style={{
               display: "flex",
               alignItems: "center",
