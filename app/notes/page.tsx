@@ -347,12 +347,13 @@ function NotesPageInner() {
   // When selected note changes (edit mode)
   useEffect(() => {
     if (!selectedNote) return
+    const note = selectedNote
     // Prepend only tags not already present inline in the content (prevents doubling after PUT saves)
     function buildPanelText(content: string) {
       const inContent = new Set(
         (content.match(/(^|\s)#([a-zA-Z0-9_-]+)/g) ?? []).map((m) => m.trim().slice(1).toLowerCase())
       )
-      const prefix = (selectedNote.tags ?? [])
+      const prefix = (note.tags ?? [])
         .filter((t) => !inContent.has(t.name.toLowerCase()))
         .map((t) => `#${t.name}`)
         .join(" ")
