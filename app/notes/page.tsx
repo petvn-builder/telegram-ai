@@ -347,9 +347,19 @@ function NotesPageInner() {
   // When selected note changes (edit mode)
   useEffect(() => {
     if (!selectedNote) return
-    const tagPrefix = (selectedNote.tags ?? []).map((t) => `#${t.name}`).join(" ")
+    // Prepend only tags not already present inline in the content (prevents doubling after PUT saves)
+    function buildPanelText(content: string) {
+      const inContent = new Set(
+        (content.match(/(^|\s)#([a-zA-Z0-9_-]+)/g) ?? []).map((m) => m.trim().slice(1).toLowerCase())
+      )
+      const prefix = (selectedNote.tags ?? [])
+        .filter((t) => !inContent.has(t.name.toLowerCase()))
+        .map((t) => `#${t.name}`)
+        .join(" ")
+      return prefix ? `${prefix} ${content}` : content
+    }
     // Set preview content immediately for instant display (list returns 300-char preview)
-    const previewText = tagPrefix ? `${tagPrefix} ${selectedNote.content}` : selectedNote.content
+    const previewText = buildPanelText(selectedNote.content)
     setPanelText(previewText)
     setPanelSpaces(selectedNote.spaces ?? [])
     setPanelSaved(false)
@@ -368,7 +378,7 @@ function NotesPageInner() {
       .then((r) => r.ok ? r.json() : null)
       .then((full) => {
         if (!full) return
-        const fullText = tagPrefix ? `${tagPrefix} ${full.content}` : full.content
+        const fullText = buildPanelText(full.content)
         // Only overwrite if user hasn't started editing
         setPanelText((current) => current === previewText ? fullText : current)
       })
