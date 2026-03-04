@@ -178,9 +178,9 @@ export async function PUT(
 
     const spaceNames: string[] = Array.isArray(body.spaces) ? body.spaces.map(String) : []
 
-    // Extract #tag tokens and strip from stored content
-    const { tagNames, cleanContent: contentAfterTags } = extractTagTokens(rawContent)
-    const content = contentAfterTags
+    // Extract #tag names for junction table — store original content unchanged
+    const { tagNames } = extractTagTokens(rawContent)
+    const content = rawContent
 
     const db = getSupabaseAdmin()
 

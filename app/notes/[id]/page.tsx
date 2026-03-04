@@ -235,6 +235,7 @@ export default function NoteDetailPage() {
   const [isEditing, setIsEditing] = useState(false)
   const [editContent, setEditContent] = useState("")
   const [editSaving, setEditSaving] = useState(false)
+  const [editError, setEditError] = useState<string | null>(null)
 
   useEffect(() => {
     if (!id) return
@@ -260,6 +261,7 @@ export default function NoteDetailPage() {
   async function handleSaveEdit() {
     if (!note || editSaving) return
     setEditSaving(true)
+    setEditError(null)
     try {
       const res = await fetch(`/api/notes/${note.id}`, {
         method: "PUT",
@@ -267,9 +269,14 @@ export default function NoteDetailPage() {
         body: JSON.stringify({ content: editContent }),
       })
       if (res.ok) {
-        setNote({ ...note, content: editContent })
+        const data = await res.json()
+        setNote({ ...note, content: data.content })
         setIsEditing(false)
+      } else {
+        setEditError("Failed to save. Please try again.")
       }
+    } catch {
+      setEditError("Failed to save. Please try again.")
     } finally {
       setEditSaving(false)
     }
@@ -381,7 +388,7 @@ export default function NoteDetailPage() {
                       fontFamily: "inherit", whiteSpace: "pre-wrap",
                     }}
                   />
-                  <div style={{ display: "flex", gap: "10px", marginTop: "16px" }}>
+                  <div style={{ display: "flex", gap: "10px", marginTop: "16px", alignItems: "center" }}>
                     <button
                       onClick={handleSaveEdit}
                       disabled={editSaving}
@@ -390,13 +397,16 @@ export default function NoteDetailPage() {
                       {editSaving ? "Saving…" : "Save"}
                     </button>
                     <button
-                      onClick={() => setIsEditing(false)}
+                      onClick={() => { setIsEditing(false); setEditError(null) }}
                       style={{ padding: "8px 16px", borderRadius: "8px", fontSize: "14px", color: "var(--text-2)", background: "transparent", border: "none", cursor: "pointer", transition: "color 0.15s" }}
                       onMouseEnter={(e) => { e.currentTarget.style.color = "var(--text-1)" }}
                       onMouseLeave={(e) => { e.currentTarget.style.color = "var(--text-2)" }}
                     >
                       Cancel
                     </button>
+                    {editError && (
+                      <span style={{ fontSize: "13px", color: "#DC2626" }}>{editError}</span>
+                    )}
                   </div>
                 </div>
               ) : (
