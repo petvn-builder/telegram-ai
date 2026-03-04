@@ -64,15 +64,24 @@ function RelatedTaskRow({
   onDelete: () => void
 }) {
   const [editingDate, setEditingDate] = useState(false)
+  const [rowHovered, setRowHovered] = useState(false)
 
   // Format due_date as YYYY-MM-DD for <input type="date">
   const dueDateValue = task.due_date ? task.due_date.slice(0, 10) : ""
+  const [dateInputValue, setDateInputValue] = useState(dueDateValue)
   const dueDateDisplay = task.due_date
     ? new Date(task.due_date).toLocaleDateString("en-US", { month: "short", day: "numeric" })
     : null
 
+  // Sync controlled input when task.due_date changes from outside (e.g. onBackgroundResolved)
+  useEffect(() => {
+    if (!editingDate) setDateInputValue(task.due_date ? task.due_date.slice(0, 10) : "")
+  }, [task.due_date, editingDate])
+
   return (
     <div
+      onMouseEnter={() => setRowHovered(true)}
+      onMouseLeave={() => setRowHovered(false)}
       style={{
         display: "flex",
         alignItems: "center",
@@ -105,15 +114,27 @@ function RelatedTaskRow({
         <input
           type="date"
           autoFocus
-          defaultValue={dueDateValue}
-          onBlur={(e) => {
+          value={dateInputValue}
+          onChange={(e) => setDateInputValue(e.target.value)}
+          onBlur={() => {
             setEditingDate(false)
-            const v = e.target.value
-            onDateChange(v || null)
+            // Only save if value actually changed — prevents spurious re-renders
+            // when clicking away without selecting a date
+            if (dateInputValue !== dueDateValue) {
+              onDateChange(dateInputValue || null)
+            }
           }}
           onKeyDown={(e) => {
-            if (e.key === "Escape") { setEditingDate(false) }
-            if (e.key === "Enter") { e.currentTarget.blur() }
+            if (e.key === "Escape") {
+              e.preventDefault()
+              // Cancel: reset to original value, no save
+              setDateInputValue(dueDateValue)
+              setEditingDate(false)
+            }
+            if (e.key === "Enter") {
+              e.preventDefault()
+              e.currentTarget.blur() // onBlur will handle save
+            }
           }}
           style={{
             fontSize: "12px",
@@ -132,13 +153,13 @@ function RelatedTaskRow({
           title="Edit due date"
           style={{
             fontSize: "12px",
-            color: dueDateDisplay ? "var(--text-3)" : "var(--text-3)",
+            color: "var(--text-3)",
             background: "transparent",
             border: "1px solid transparent",
             borderRadius: "6px",
             padding: "2px 6px",
             cursor: "pointer",
-            opacity: dueDateDisplay ? 1 : 0.4,
+            opacity: dueDateDisplay ? 1 : 0.45,
             transition: "opacity 0.15s, border-color 0.15s",
           }}
           onMouseEnter={(e) => {
@@ -146,7 +167,7 @@ function RelatedTaskRow({
             e.currentTarget.style.borderColor = "var(--border)"
           }}
           onMouseLeave={(e) => {
-            e.currentTarget.style.opacity = dueDateDisplay ? "1" : "0.4"
+            e.currentTarget.style.opacity = dueDateDisplay ? "1" : "0.45"
             e.currentTarget.style.borderColor = "transparent"
           }}
         >
@@ -172,7 +193,7 @@ function RelatedTaskRow({
         ))}
       </select>
 
-      {/* Delete button */}
+      {/* Delete button — visible on row hover */}
       <button
         onClick={onDelete}
         title="Delete task"
@@ -189,17 +210,11 @@ function RelatedTaskRow({
           color: "var(--text-3)",
           borderRadius: "4px",
           flexShrink: 0,
-          opacity: 0.5,
+          opacity: rowHovered ? 1 : 0,
           transition: "opacity 0.15s, color 0.15s",
         }}
-        onMouseEnter={(e) => {
-          e.currentTarget.style.opacity = "1"
-          e.currentTarget.style.color = "#DC2626"
-        }}
-        onMouseLeave={(e) => {
-          e.currentTarget.style.opacity = "0.5"
-          e.currentTarget.style.color = "var(--text-3)"
-        }}
+        onMouseEnter={(e) => { e.currentTarget.style.color = "#DC2626" }}
+        onMouseLeave={(e) => { e.currentTarget.style.color = "var(--text-3)" }}
       >
         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
           <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
