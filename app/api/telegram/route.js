@@ -664,10 +664,89 @@ await sendTelegram(chatId, summaryMsg);
 let memory = "";
 let graphMemory = "";
 
-// 1️⃣ Create embedding
+// =========================
+// TIER 1: ENTITY CONTEXT (run first to build dedup set)
+// =========================
+
+const { data: possibleEntities } = await supabase
+  .from("entities")
+  .select("*")
+  .eq("user_id", userUuid);
+
+const normalizedQuestion = text.toLowerCase().trim();
+
+let injectedEntities = 0;
+const MAX_ENTITIES = 5;
+const matchedEntityIds = new Set();
+const entityLinkedNoteIds = new Set();    // notes already shown in entity context (top 5)
+const allMatchedEntityNoteIds = new Set(); // ALL notes linked to matched entities
+
+for (let entity of possibleEntities || []) {
+
+  if (!entity.name) continue;
+
+  const normalizedName = entity.name.toLowerCase().trim();
+
+  if (
+    normalizedQuestion.includes(normalizedName) &&
+    injectedEntities < MAX_ENTITIES
+  ) {
+
+    matchedEntityIds.add(entity.id);
+
+    // Use cached summary if available
+    let entityContext = `${entity.name} (${entity.type})`;
+
+    if (entity.summary) {
+      entityContext += `\nSummary: ${entity.summary}`;
+    }
+
+    graphMemory += entityContext + "\n";
+
+    // Fetch ALL linked knowledge IDs for this entity
+    const { data: links } = await supabase
+      .from("knowledge_links")
+      .select("knowledge_id")
+      .eq("entity_id", entity.id);
+
+    const knowledgeIds = (links || []).map(l => l.knowledge_id);
+
+    // Track all IDs so Tier 2 can gate by entity membership
+    for (const id of knowledgeIds) allMatchedEntityNoteIds.add(id);
+
+    if (knowledgeIds.length) {
+
+      // Show top 5 most recent in entity context
+      const { data: notes } = await supabase
+        .from("knowledge")
+        .select("id, content")
+        .in("id", knowledgeIds)
+        .order("created_at", { ascending: false })
+        .limit(5);
+
+      for (let note of (notes || [])) {
+        entityLinkedNoteIds.add(note.id);
+        graphMemory += `  - ${note.content}\n`;
+      }
+    }
+
+    graphMemory += "\n";
+
+    injectedEntities++;
+  }
+}
+
+console.log(`[MEMORY] Tier 1 (entity-linked): ${entityLinkedNoteIds.size} notes, ${matchedEntityIds.size} entities matched`);
+console.log("---- GRAPH MEMORY BUILT ----");
+console.log(graphMemory || "No graph context injected");
+console.log("----------------------------");
+
+// =========================
+// TIER 2: SEMANTIC SEARCH (filtered by entity context)
+// =========================
+
 const queryEmbedding = await createEmbedding(text);
 
-// 2️⃣ Vector search
 const { data: memories, error: memoryError } = await supabase.rpc(
   "match_knowledge",
   {
@@ -681,99 +760,49 @@ if (memoryError) {
   console.error("Memory search error:", memoryError);
 }
 
-// 3️⃣ Build memory string (clean + dedup + filtered)
-
 const uniqueContents = new Set();
 const MAX_MEMORY_CHARS = 2000;
+const SIMILARITY_THRESHOLD = 0.75;
 
 const normalizedCurrentMessage = text.trim().toLowerCase();
+let tier2Count = 0;
 
 for (let item of memories || []) {
 
   if (!item?.content) continue;
 
-  // Skip AI responses
-  if (item.role === "ai") continue;
+  // Skip AI responses and user chat messages — only notes belong in RELEVANT MEMORY
+  if (item.role === "ai" || item.role === "user") continue;
 
   const normalizedItem = item.content.trim().toLowerCase();
 
-  // 🚫 Skip echo of current message
+  // Skip echo of current message
   if (normalizedItem === normalizedCurrentMessage) continue;
 
-  // Deduplicate
+  // Skip notes already included in ENTITY CONTEXT
+  if (item.id && entityLinkedNoteIds.has(item.id)) continue;
+
+  // When entities were matched: only allow notes linked to those entities
+  // (catches overflow beyond the top-5 shown in Tier 1; blocks all unrelated notes)
+  if (matchedEntityIds.size > 0) {
+    if (!item.id || !allMatchedEntityNoteIds.has(item.id)) continue;
+  } else {
+    // No entity matched: apply similarity threshold for quality control
+    if (item.similarity !== undefined && item.similarity < SIMILARITY_THRESHOLD) continue;
+  }
+
+  // Deduplicate by content
   if (uniqueContents.has(normalizedItem)) continue;
   uniqueContents.add(normalizedItem);
 
   memory += `[${item.role}] ${item.content}\n`;
+  tier2Count++;
 
   if (memory.length > MAX_MEMORY_CHARS) break;
 }
 
-// =========================
-// GRAPH CONTEXT ENHANCEMENT
-// =========================
-
-// fetch entities once
-const { data: possibleEntities } = await supabase
-  .from("entities")
-  .select("*")
-  .eq("user_id", userUuid);
-
-const normalizedQuestion = text.toLowerCase().trim();
-
-let injectedEntities = 0;
-const MAX_ENTITIES = 5;
-
-for (let entity of possibleEntities || []) {
-
-  if (!entity.name) continue;
-
-  const normalizedName = entity.name.toLowerCase().trim();
-
-  if (
-    normalizedQuestion.includes(normalizedName) &&
-    injectedEntities < MAX_ENTITIES
-  ) {
-
-    // Use cached summary if available
-    let entityContext = `${entity.name} (${entity.type})`;
-    
-    if (entity.summary) {
-      entityContext += `\nSummary: ${entity.summary}`;
-    }
-
-    graphMemory += entityContext + "\n";
-
-    // Add related notes if summary is not fresh
-    const { data: links } = await supabase
-      .from("knowledge_links")
-      .select("knowledge_id")
-      .eq("entity_id", entity.id);
-
-    const knowledgeIds = (links || []).map(l => l.knowledge_id);
-    if (knowledgeIds.length) {
-
-      const { data: notes } = await supabase
-        .from("knowledge")
-        .select("content")
-        .in("id", knowledgeIds)
-        .limit(2); // Limit to 2 most recent
-
-      for (let note of (notes || [])) {
-        graphMemory += `  - ${note.content}\n`;
-      }
-    }
-
-    graphMemory += "\n";
-
-    injectedEntities++;
-  }
-}
-
-
-console.log("---- GRAPH MEMORY BUILT ----");
-console.log(graphMemory || "No graph context injected");
-console.log("----------------------------");
+console.log(`[MEMORY] Tier 2 (semantic, threshold=${SIMILARITY_THRESHOLD}): ${tier2Count} notes added`);
+console.log(`[MEMORY] Final: ${entityLinkedNoteIds.size + tier2Count} notes total sent to OpenAI`);
 
   console.log("----- MEMORY SENT TO OPENAI -----");
   console.log(memory);
