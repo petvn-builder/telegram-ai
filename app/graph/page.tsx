@@ -61,7 +61,7 @@ type PanelMode =
 
 // Single-hue base colors — intensity varies by selection state, not entity type
 const BASE_ENTITY: [number, number, number] = [99, 102, 241]  // indigo
-const BASE_NOTE:   [number, number, number] = [128, 128, 160] // neutral gray
+const BASE_NOTE:   [number, number, number] = [212, 119, 92]  // --accent terracotta
 
 // Alpha intensity levels
 const ALPHA_PRIMARY = 0.90  // selected entity
@@ -243,7 +243,7 @@ function InsightCard({
           <span style={{
             fontSize: "12px",
             fontWeight: 600,
-            color: "var(--ai-accent, var(--accent))",
+            color: "var(--accent)",
             lineHeight: 1.4,
           }}>
             {insight.title}
@@ -285,8 +285,8 @@ function InsightCard({
             padding: "4px 10px",
             fontSize: "11px",
             fontWeight: 500,
-            background: "var(--ai-accent-dim, rgba(91,138,122,0.12))",
-            color: "var(--ai-accent, var(--accent))",
+            background: "var(--accent-dim, rgba(212,119,92,0.12))",
+            color: "var(--accent)",
             border: "1px solid var(--ai-border, var(--border))",
             borderRadius: "6px",
             cursor: "pointer",
@@ -743,12 +743,12 @@ export default function GraphPage() {
               padding: "9px 16px",
               fontSize: "12px",
               fontWeight: 600,
-              background: "var(--ai-accent, #5B8A7A)",
+              background: "var(--accent, #D4775C)",
               color: "#fff",
               border: "none",
               borderRadius: "10px",
               cursor: "pointer",
-              boxShadow: "0 4px 16px rgba(91,138,122,0.35)",
+              boxShadow: "0 4px 16px rgba(212,119,92,0.35)",
               letterSpacing: "0.01em",
               transition: "filter 0.15s, transform 0.15s",
             }}
@@ -1003,7 +1003,7 @@ export default function GraphPage() {
                     fontWeight: 600,
                     letterSpacing: "0.07em",
                     textTransform: "uppercase",
-                    color: "var(--ai-accent, var(--accent))",
+                    color: "var(--accent)",
                   }}>
                     AI Insights
                   </span>
