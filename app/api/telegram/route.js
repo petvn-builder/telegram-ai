@@ -1,6 +1,7 @@
 import { createEmbedding } from "@/lib/embeddings";
 import { askOpenAI } from "@/lib/openai";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
+import { upsertEntitiesAndLink } from "@/lib/entities";
 
 import {
   getOrCreateUser,
@@ -521,131 +522,18 @@ if (!Array.isArray(entities)) {
   entities = [];
 }
 
-let processedCount = 0;
-let errorCount = 0;
-let processedEntities = [];
+// 4️⃣ Insert & Link entities (merged, case-normalised, no summary generation)
+const savedEntities = await upsertEntitiesAndLink(
+  supabase,
+  userUuid,
+  insertedKnowledge.id,
+  entities
+);
 
-// 4️⃣ Insert & Link entities (WITH structured fields)
-for (let entity of entities) {
-  const name = entity.name?.trim();
-  const type = entity.type?.trim();
+const processedEntities = savedEntities.map(e => ({ name: e.name, type: e.type }));
 
-  if (!name || !type) {
-    console.warn(`❌ Skipping invalid entity: name=${name}, type=${type}`);
-    errorCount++;
-    continue;
-  }
-
-  try {
-    console.log(`📝 Processing entity: ${name}`);
-    
-    const structuredData = {
-      attributes: entity.attributes || {},
-      events: entity.events || [],
-      relationships: entity.relationships || [],
-      responsibilities: entity.responsibilities || []
-    };
-
-    const { data: existingEntity, error: existError } = await supabase
-      .from("entities")
-      .select("*")
-      .eq("user_id", userUuid)
-      .eq("name", name)
-      .maybeSingle();
-
-    if (existError) {
-      console.error(`❌ Error querying entity ${name}:`, existError);
-      errorCount++;
-      continue;
-    }
-
-    let entityId;
-    let entityToSummarize = null;
-
-    if (existingEntity) {
-      console.log(`🔄 Updating existing entity: ${name}`);
-      entityId = existingEntity.id;
-      entityToSummarize = existingEntity;
-
-      const { error: updateError } = await supabase
-        .from("entities")
-        .update({
-          ...structuredData,
-          summary_updated_at: null
-        })
-        .eq("id", entityId);
-
-      if (updateError) {
-        console.error(`❌ Error updating entity ${name}:`, updateError);
-        errorCount++;
-        continue;
-      }
-    } else {
-      console.log(`✨ Creating new entity: ${name}`);
-      const { data: newEntity, error: insertError } = await supabase
-        .from("entities")
-        .insert({
-          user_id: userUuid,
-          name,
-          type,
-          ...structuredData,
-          summary: null,
-          summary_updated_at: null
-        })
-        .select()
-        .single();
-
-      if (insertError) {
-        console.error(`❌ Error creating entity ${name}:`, insertError);
-        errorCount++;
-        continue;
-      }
-
-      console.log(`✅ Created entity: ${name}`);
-      entityId = newEntity.id;
-      entityToSummarize = newEntity;
-    }
-
-    // Link knowledge to entity
-    console.log(`🔗 Linking knowledge to ${name}...`);
-    const { error: linkError } = await supabase
-      .from("knowledge_links")
-      .insert({
-        user_id: userUuid,
-        knowledge_id: insertedKnowledge.id,
-        entity_id: entityId,
-      });
-
-    if (linkError) {
-      console.error(`❌ Error linking ${name}:`, linkError);
-      errorCount++;
-      continue;
-    }
-
-    console.log(`✅ Linked ${name}`);
-    processedCount++;
-    processedEntities.push({ name, type });
-
-    // Generate summary
-    if (entityToSummarize) {
-      console.log(`\n🧠 Generating summary for ${name}...`);
-      try {
-        const summary = await generateAndSaveSummary(entityToSummarize, chatId);
-        console.log(`✅ Summary generated for ${name}`);
-      } catch (summaryErr) {
-        console.error(`⚠️  Summary generation error for ${name}:`, summaryErr.message);
-        // Don't fail on summary error
-      }
-    }
-
-  } catch (entityErr) {
-    console.error(`❌ Unexpected error processing ${name}:`, entityErr);
-    errorCount++;
-  }
-}
-
-// Send summary message with status
-let summaryMsg = `✅ Saved! Processed: ${processedCount} entities${errorCount > 0 ? `, Errors: ${errorCount}` : ''}`;
+// Send save confirmation
+let summaryMsg = `✅ Saved! ${processedEntities.length} entit${processedEntities.length === 1 ? "y" : "ies"} linked`;
 if (processedEntities.length > 0) {
   summaryMsg += `\n\n🏷️ Entities:\n`;
   summaryMsg += processedEntities.map(e => `• ${e.name} (${e.type})`).join('\n');

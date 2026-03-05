@@ -3,6 +3,7 @@ import { createHash } from "crypto"
 import { getSupabaseServer } from "@/lib/supabase/server"
 import { getSupabaseAdmin } from "@/lib/supabase/admin"
 import type { NoteWithEntities, Entity, Space, Tag } from "@/app/notes/types"
+import { upsertEntitiesAndLink } from "@/lib/entities"
 
 // ── Space token parsing ───────────────────────────────────────────────────────
 
@@ -349,65 +350,6 @@ export async function GET(req: NextRequest) {
   }
 }
 
-// ── shared entity upsert + link helper ────────────────────────────────────────
-
-async function upsertEntitiesAndLink(
-  db: ReturnType<typeof getSupabaseAdmin>,
-  userId: string,
-  knowledgeId: string,
-  rawEntities: any[]
-): Promise<{ id: string; name: string; type: string }[]> {
-  const saved: { id: string; name: string; type: string }[] = []
-
-  for (const entity of rawEntities) {
-    const name = entity.name?.trim()
-    const type = entity.type?.trim()
-    if (!name || !type) continue
-
-    try {
-      const { data: existing } = await db
-        .from("entities")
-        .select("id")
-        .eq("user_id", userId)
-        .eq("name", name)
-        .maybeSingle()
-
-      let entityId: string
-      const structuredData = {
-        attributes: entity.attributes || {},
-        events: entity.events || [],
-        relationships: entity.relationships || [],
-        responsibilities: entity.responsibilities || [],
-      }
-
-      if (existing) {
-        entityId = existing.id
-        await db.from("entities")
-          .update({ ...structuredData, summary_updated_at: null })
-          .eq("id", entityId)
-      } else {
-        const { data: newEntity } = await db.from("entities")
-          .insert({ user_id: userId, name, type, ...structuredData, summary: null, summary_updated_at: null })
-          .select("id")
-          .single()
-        if (!newEntity) continue
-        entityId = newEntity.id
-      }
-
-      await db.from("knowledge_links").insert({
-        user_id: userId,
-        knowledge_id: knowledgeId,
-        entity_id: entityId,
-      })
-
-      saved.push({ id: entityId, name, type })
-    } catch (err) {
-      console.error(`Entity upsert error (${name}):`, err)
-    }
-  }
-
-  return saved
-}
 
 export async function POST(req: NextRequest) {
   try {

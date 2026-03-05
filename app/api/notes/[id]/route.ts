@@ -4,47 +4,7 @@ import { getSupabaseServer } from "@/lib/supabase/server"
 import { getSupabaseAdmin } from "@/lib/supabase/admin"
 import type { NoteDetail } from "@/app/notes/types"
 import { syncNoteSpaces, extractTagTokens, syncNoteTags } from "@/app/api/notes/route"
-
-// Shared entity upsert + link helper
-async function upsertEntitiesAndLink(
-  db: ReturnType<typeof getSupabaseAdmin>,
-  userId: string,
-  knowledgeId: string,
-  rawEntities: any[]
-): Promise<{ id: string; name: string; type: string }[]> {
-  const saved: { id: string; name: string; type: string }[] = []
-  for (const entity of rawEntities) {
-    const name = entity.name?.trim()
-    const type = entity.type?.trim()
-    if (!name || !type) continue
-    try {
-      const { data: existing } = await db.from("entities")
-        .select("id").eq("user_id", userId).eq("name", name).maybeSingle()
-      let entityId: string
-      const structuredData = {
-        attributes: entity.attributes || {},
-        events: entity.events || [],
-        relationships: entity.relationships || [],
-        responsibilities: entity.responsibilities || [],
-      }
-      if (existing) {
-        entityId = existing.id
-        await db.from("entities").update({ ...structuredData, summary_updated_at: null }).eq("id", entityId)
-      } else {
-        const { data: newEntity } = await db.from("entities")
-          .insert({ user_id: userId, name, type, ...structuredData, summary: null, summary_updated_at: null })
-          .select("id").single()
-        if (!newEntity) continue
-        entityId = newEntity.id
-      }
-      await db.from("knowledge_links").insert({ user_id: userId, knowledge_id: knowledgeId, entity_id: entityId })
-      saved.push({ id: entityId, name, type })
-    } catch (err) {
-      console.error(`Entity upsert error (${name}):`, err)
-    }
-  }
-  return saved
-}
+import { upsertEntitiesAndLink } from "@/lib/entities"
 
 export async function GET(
   _req: NextRequest,
@@ -227,10 +187,14 @@ export async function PUT(
 
           const { createEmbedding } = await import("@/lib/embeddings")
           const { extractEntities } = await import("@/lib/extractEntities")
+
+          // Run AI calls BEFORE touching links — minimises the gap where note has no entity links
           const [embedding, rawEntities] = await Promise.all([
             createEmbedding(content),
             extractEntities(content),
           ])
+
+          // Delete old links then re-insert; gap is now ~1 DB round-trip, not the full OAI call duration
           await db.from("knowledge_links").delete().eq("knowledge_id", id)
           await Promise.all([
             db.from("knowledge").update({ embedding, content_hash: hash }).eq("id", id),
