@@ -5,6 +5,8 @@ import dynamic from "next/dynamic"
 import Link from "next/link"
 import * as d3 from "d3-force"
 import { getSupabaseBrowser } from "@/lib/supabase/browser"
+import type { Cluster } from "@/lib/graph/buildClusters"
+import type { Insight } from "@/app/api/graph/insights/route"
 
 const ForceGraph2D = dynamic(
   () => import("react-force-graph-2d"),
@@ -33,6 +35,7 @@ interface GraphLink {
 interface GraphData {
   nodes: GraphNode[]
   links: GraphLink[]
+  clusters: Cluster[]
 }
 
 interface NoteEntity {
@@ -85,6 +88,111 @@ function entityStyle(type: string) {
   return ENTITY_COLORS[type] ?? { bg: "rgba(128,128,160,0.10)", text: "var(--text-2)", border: "var(--border)" }
 }
 
+// ─── convex hull (Graham scan) ────────────────────────────────────────────────
+
+function cross(O: [number, number], A: [number, number], B: [number, number]) {
+  return (A[0] - O[0]) * (B[1] - O[1]) - (A[1] - O[1]) * (B[0] - O[0])
+}
+
+function convexHull(pts: [number, number][]): [number, number][] | null {
+  if (pts.length < 2) return null
+
+  // For exactly 2 points, return a padded rectangle around the segment
+  if (pts.length === 2) {
+    const [ax, ay] = pts[0]
+    const [bx, by] = pts[1]
+    const dx = bx - ax
+    const dy = by - ay
+    const len = Math.sqrt(dx * dx + dy * dy) || 1
+    const px = (-dy / len) * 22
+    const py = (dx / len) * 22
+    return [
+      [ax + px, ay + py],
+      [bx + px, by + py],
+      [bx - px, by - py],
+      [ax - px, ay - py],
+    ]
+  }
+
+  const sorted = [...pts].sort((a, b) => a[0] - b[0] || a[1] - b[1])
+  const lower: [number, number][] = []
+  for (const p of sorted) {
+    while (lower.length >= 2 && cross(lower[lower.length - 2], lower[lower.length - 1], p) <= 0)
+      lower.pop()
+    lower.push(p)
+  }
+  const upper: [number, number][] = []
+  for (const p of [...sorted].reverse()) {
+    while (upper.length >= 2 && cross(upper[upper.length - 2], upper[upper.length - 1], p) <= 0)
+      upper.pop()
+    upper.push(p)
+  }
+  lower.pop()
+  upper.pop()
+  return [...lower, ...upper]
+}
+
+// Expand hull points outward from centroid by `padding` px
+function expandHull(hull: [number, number][], padding: number): [number, number][] {
+  const cx = hull.reduce((s, p) => s + p[0], 0) / hull.length
+  const cy = hull.reduce((s, p) => s + p[1], 0) / hull.length
+  return hull.map(([x, y]) => {
+    const dx = x - cx
+    const dy = y - cy
+    const len = Math.sqrt(dx * dx + dy * dy) || 1
+    return [x + (dx / len) * padding, y + (dy / len) * padding]
+  })
+}
+
+// ─── insight icon map ─────────────────────────────────────────────────────────
+
+const INSIGHT_ICONS: Record<string, string> = {
+  hidden_connection: "🔗",
+  knowledge_gap:     "🕳",
+  trending_topic:    "📈",
+  orphan_alert:      "⚠",
+  timeline_conflict: "⏰",
+}
+
+// ─── localStorage helpers ─────────────────────────────────────────────────────
+
+const INSIGHTS_CACHE_TTL = 2 * 60 * 60 * 1000 // 2 hours
+
+function getCachedInsights(userId: string): Insight[] | null {
+  try {
+    const raw = localStorage.getItem(`graph_insights_${userId}`)
+    if (!raw) return null
+    const { insights, ts } = JSON.parse(raw)
+    if (Date.now() - ts > INSIGHTS_CACHE_TTL) return null
+    return insights
+  } catch {
+    return null
+  }
+}
+
+function setCachedInsights(userId: string, insights: Insight[]) {
+  try {
+    localStorage.setItem(`graph_insights_${userId}`, JSON.stringify({ insights, ts: Date.now() }))
+  } catch {}
+}
+
+function getDismissedInsightIds(): Set<string> {
+  try {
+    const raw = localStorage.getItem("graph_insights_dismissed")
+    return new Set(JSON.parse(raw ?? "[]"))
+  } catch {
+    return new Set()
+  }
+}
+
+function addDismissedInsightId(id: string) {
+  try {
+    const existing = getDismissedInsightIds()
+    existing.add(id)
+    localStorage.setItem("graph_insights_dismissed", JSON.stringify([...existing]))
+  } catch {}
+}
+
 // ─── helpers ─────────────────────────────────────────────────────────────────
 
 function formatDate(iso: string) {
@@ -95,6 +203,108 @@ function formatDate(iso: string) {
   })
 }
 
+// ─── InsightCard component ────────────────────────────────────────────────────
+
+function InsightCard({
+  insight,
+  onDismiss,
+}: {
+  insight: Insight
+  onDismiss: () => void
+}) {
+  const [hovered, setHovered] = useState(false)
+  const icon = INSIGHT_ICONS[insight.type] ?? "💡"
+
+  function handleAction() {
+    if (insight.suggested_action === "create_note") {
+      window.location.href = "/notes?compose=1"
+    } else if (insight.suggested_action === "link_entities") {
+      const text = encodeURIComponent(`Link: ${insight.title}`)
+      window.location.href = `/notes?compose=1&text=${text}`
+    }
+  }
+
+  return (
+    <div
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      style={{
+        background: hovered ? "var(--bg-elevated)" : "var(--bg-surface)",
+        border: "1px solid var(--ai-border, var(--border))",
+        borderRadius: "10px",
+        padding: "12px 14px",
+        transition: "background 0.18s ease-in-out",
+        display: "flex",
+        flexDirection: "column",
+        gap: "6px",
+      }}
+    >
+      {/* Header row */}
+      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: "8px" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: "7px", flex: 1, minWidth: 0 }}>
+          <span style={{ fontSize: "14px", flexShrink: 0 }}>{icon}</span>
+          <span style={{
+            fontSize: "12px",
+            fontWeight: 600,
+            color: "var(--ai-accent, var(--accent))",
+            lineHeight: 1.4,
+          }}>
+            {insight.title}
+          </span>
+        </div>
+        <button
+          onClick={onDismiss}
+          title="Dismiss"
+          style={{
+            background: "transparent",
+            border: "none",
+            cursor: "pointer",
+            fontSize: "14px",
+            color: "var(--text-3)",
+            padding: "0 2px",
+            lineHeight: 1,
+            flexShrink: 0,
+            transition: "color 0.15s",
+          }}
+          onMouseEnter={(e) => { e.currentTarget.style.color = "var(--text-1)" }}
+          onMouseLeave={(e) => { e.currentTarget.style.color = "var(--text-3)" }}
+        >
+          ✕
+        </button>
+      </div>
+
+      {/* Description */}
+      <p style={{ fontSize: "12px", color: "var(--text-2)", lineHeight: 1.6, margin: 0 }}>
+        {insight.description}
+      </p>
+
+      {/* Action button */}
+      {insight.suggested_action !== "none" && (
+        <button
+          onClick={handleAction}
+          style={{
+            alignSelf: "flex-start",
+            marginTop: "2px",
+            padding: "4px 10px",
+            fontSize: "11px",
+            fontWeight: 500,
+            background: "var(--ai-accent-dim, rgba(91,138,122,0.12))",
+            color: "var(--ai-accent, var(--accent))",
+            border: "1px solid var(--ai-border, var(--border))",
+            borderRadius: "6px",
+            cursor: "pointer",
+            transition: "filter 0.15s",
+          }}
+          onMouseEnter={(e) => { e.currentTarget.style.filter = "brightness(1.15)" }}
+          onMouseLeave={(e) => { e.currentTarget.style.filter = "none" }}
+        >
+          {insight.suggested_action === "create_note" ? "Create Note" : "Link These"}
+        </button>
+      )}
+    </div>
+  )
+}
+
 // ─── small components ────────────────────────────────────────────────────────
 
 function Stat({ label, value }: { label: string; value: number }) {
@@ -103,7 +313,7 @@ function Stat({ label, value }: { label: string; value: number }) {
       display: "flex",
       alignItems: "center",
       justifyContent: "space-between",
-      padding: "8px 0",
+      padding: "6px 0",
       borderBottom: "1px solid var(--border-subtle)",
     }}>
       <span style={{ fontSize: "12px", color: "var(--text-2)" }}>{label}</span>
@@ -149,14 +359,24 @@ export default function GraphPage() {
   const [theme, setTheme] = useState<"dark" | "light">("dark")
   const [entitySummary, setEntitySummary] = useState<string | null>(null)
   const [summaryLoading, setSummaryLoading] = useState(false)
+  const [insights, setInsights] = useState<Insight[]>([])
+  const [insightsLoading, setInsightsLoading] = useState(false)
+  const [dismissedIds, setDismissedIds] = useState<Set<string>>(new Set())
+  const [clusterLabels, setClusterLabels] = useState<Record<string, string>>({})
+  const [userId, setUserId] = useState<string | null>(null)
   const fgRef = useRef<any>(null)
 
   // Refs for canvas interaction (avoids re-renders during animation loop)
   const hoveredNodeIdRef = useRef<string | null>(null)
   const clickedEntityIdRef = useRef<string | null>(null)
   const adjacencyRef = useRef<Map<string, Set<string>>>(new Map())
-  // In-memory cache: entityId → summary string (persists for the session)
+  const clusterLabelsRef = useRef<Record<string, string>>({})
   const summaryCache = useRef<Record<string, string>>({})
+
+  // Keep ref in sync with state (used in canvas render callback)
+  useEffect(() => {
+    clusterLabelsRef.current = clusterLabels
+  }, [clusterLabels])
 
   // Sync theme from html[data-theme]
   useEffect(() => {
@@ -177,16 +397,76 @@ export default function GraphPage() {
     return () => window.removeEventListener("mousemove", onMove)
   }, [])
 
-  // Fetch graph
+  // Load dismissed IDs from localStorage
+  useEffect(() => {
+    setDismissedIds(getDismissedInsightIds())
+  }, [])
+
+  // Fetch graph + trigger insights
   useEffect(() => {
     getSupabaseBrowser().auth.getUser().then(({ data: { user } }) => {
       if (!user) return
+      setUserId(user.id)
       fetch("/api/graph")
         .then((r) => r.json())
         .then((d: GraphData) => setData(d))
         .catch((err) => console.error("Graph fetch failed:", err))
     })
   }, [])
+
+  // Load insights once we have graph data + userId
+  useEffect(() => {
+    if (!data || !userId) return
+    const cached = getCachedInsights(userId)
+    if (cached) {
+      setInsights(cached)
+      return
+    }
+    setInsightsLoading(true)
+    fetch("/api/graph/insights")
+      .then((r) => r.json())
+      .then(({ insights: fetched }) => {
+        const list: Insight[] = fetched ?? []
+        setInsights(list)
+        setCachedInsights(userId, list)
+      })
+      .catch(() => {})
+      .finally(() => setInsightsLoading(false))
+  }, [data, userId])
+
+  // Fetch AI cluster labels after graph data arrives
+  useEffect(() => {
+    if (!data?.clusters || data.clusters.length === 0) return
+
+    // Deterministic fallback: use first entity ID per cluster while AI loads
+    const fallback: Record<string, string> = {}
+    for (const cluster of data.clusters) {
+      const firstNode = data.nodes.find(
+        (n) => n.type === "entity" && cluster.entityIds.includes(n.id)
+      )
+      fallback[cluster.id] = firstNode?.label ?? "Group"
+    }
+    setClusterLabels(fallback)
+
+    // Fetch AI labels in background
+    fetch("/api/graph/cluster-labels", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        clusters: data.clusters.map((c) => ({ id: c.id, entity_ids: c.entityIds })),
+      }),
+    })
+      .then((r) => r.json())
+      .then(({ labels }) => {
+        if (!Array.isArray(labels)) return
+        setClusterLabels((prev) => {
+          const next = { ...prev }
+          for (const { id, label } of labels) next[id] = label
+          return next
+        })
+      })
+      .catch(() => {})
+  }, [data])
 
   // Build adjacency map when data changes
   useEffect(() => {
@@ -208,7 +488,7 @@ export default function GraphPage() {
     clickedEntityIdRef.current = panel.kind === "entity" ? panel.entityId : null
   }, [panel])
 
-  // Fetch entity summary lazily when entity panel opens (uses in-memory cache)
+  // Fetch entity summary lazily when entity panel opens
   useEffect(() => {
     if (panel.kind !== "entity") {
       setEntitySummary(null)
@@ -246,7 +526,7 @@ export default function GraphPage() {
     return { maxMentionCount: max, p70Threshold: p70, top10Threshold: top10 }
   }, [data])
 
-  // Normalized log-scale node size (min=14, max=42 for entities; 5 for notes)
+  // Normalized log-scale node size
   const computeNodeSize = useCallback((node: any): number => {
     if (node.type === "note") return 5
     const mc = node.mentionCount || 0
@@ -326,11 +606,78 @@ export default function GraphPage() {
     }
   }
 
+  function handleRefreshInsights() {
+    if (!userId) return
+    localStorage.removeItem(`graph_insights_${userId}`)
+    setInsightsLoading(true)
+    fetch("/api/graph/insights")
+      .then((r) => r.json())
+      .then(({ insights: fetched }) => {
+        const list: Insight[] = fetched ?? []
+        setInsights(list)
+        setCachedInsights(userId, list)
+      })
+      .catch(() => {})
+      .finally(() => setInsightsLoading(false))
+  }
+
+  function handleDismiss(id: string) {
+    addDismissedInsightId(id)
+    setDismissedIds((prev) => new Set([...prev, id]))
+  }
+
+  const visibleInsights = insights.filter((i) => !dismissedIds.has(i.id))
+
   // Theme-dependent canvas values
   const isLight = theme === "light"
   const canvasBg      = isLight ? "#f5f5fb" : "#0d0d14"
   const linkColorBase = isLight ? "rgba(0,0,0,0.08)" : "rgba(255,255,255,0.06)"
   const particleColor = isLight ? "rgba(99,102,241,0.6)" : "rgba(99,102,241,0.5)"
+
+  // Cluster hull renderer — called before nodes each frame
+  const renderClusters = useCallback((ctx: CanvasRenderingContext2D) => {
+    if (!data?.clusters) return
+    for (const cluster of data.clusters) {
+      const points: [number, number][] = cluster.entityIds
+        .map((id) => data.nodes.find((n) => n.id === id))
+        .filter((n): n is GraphNode => !!n && n.x != null && n.y != null)
+        .map((n) => [n.x!, n.y!])
+
+      if (points.length < 2) continue
+      const hull = convexHull(points)
+      if (!hull || hull.length < 3) continue
+      const expanded = expandHull(hull, 24)
+
+      const [cr, cg, cb] = cluster.color
+
+      // Filled hull
+      ctx.beginPath()
+      ctx.moveTo(expanded[0][0], expanded[0][1])
+      for (let i = 1; i < expanded.length; i++) {
+        ctx.lineTo(expanded[i][0], expanded[i][1])
+      }
+      ctx.closePath()
+      ctx.fillStyle = `rgba(${cr},${cg},${cb},0.07)`
+      ctx.fill()
+      ctx.strokeStyle = `rgba(${cr},${cg},${cb},0.18)`
+      ctx.lineWidth = 0.8
+      ctx.setLineDash([4, 4])
+      ctx.stroke()
+      ctx.setLineDash([])
+
+      // Cluster label at centroid
+      const cx = points.reduce((s, p) => s + p[0], 0) / points.length
+      const cy = points.reduce((s, p) => s + p[1], 0) / points.length
+      const label = clusterLabelsRef.current[cluster.id] ?? ""
+      if (label) {
+        ctx.font = "500 9px -apple-system, BlinkMacSystemFont, sans-serif"
+        ctx.textAlign = "center"
+        ctx.textBaseline = "middle"
+        ctx.fillStyle = `rgba(${cr},${cg},${cb},0.60)`
+        ctx.fillText(label.toUpperCase(), cx, cy)
+      }
+    }
+  }, [data])
 
   // Loading screen
   if (!data) {
@@ -427,6 +774,7 @@ export default function GraphPage() {
           linkDirectionalParticleColor={() => particleColor}
           cooldownTicks={100}
           d3VelocityDecay={0.3}
+          onRenderFramePre={renderClusters}
           nodeCanvasObjectMode={() => "replace"}
           nodeCanvasObject={(node: any, ctx, globalScale) => {
             const { x, y } = node
@@ -533,45 +881,81 @@ export default function GraphPage() {
         <div style={{ flex: 1, overflowY: "auto", padding: "20px 24px" }}>
 
           {panel.kind === "idle" && (
-            <div style={{ display: "flex", flexDirection: "column", gap: "8px", marginTop: "4px" }}>
+            <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+              {/* Compact stats */}
               <Stat label="Nodes" value={data.nodes.length} />
               <Stat label="Entities" value={data.nodes.filter((n) => n.type === "entity").length} />
               <Stat label="Notes" value={data.nodes.filter((n) => n.type === "note").length} />
               <Stat label="Connections" value={data.links.length} />
 
-              {/* Visual legend */}
-              <div style={{
-                marginTop: "12px",
-                padding: "14px",
-                background: "var(--bg-elevated)",
-                borderRadius: "10px",
-              }}>
-                <p style={{
-                  fontSize: "10px",
-                  fontWeight: 600,
-                  letterSpacing: "0.07em",
-                  textTransform: "uppercase",
-                  color: "var(--text-3)",
-                  margin: "0 0 10px",
+              {/* AI Insights section */}
+              <div style={{ marginTop: "20px" }}>
+                <div style={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  marginBottom: "12px",
                 }}>
-                  Node Size
-                </p>
-                {[
-                  { label: "Frequently mentioned", r: 14 },
-                  { label: "Moderate mentions",    r: 9  },
-                  { label: "Rare mentions",        r: 5  },
-                ].map(({ label, r }) => (
-                  <div key={label} style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "7px" }}>
-                    <div style={{
-                      width: r * 2,
-                      height: r * 2,
-                      borderRadius: "50%",
-                      background: "rgba(99,102,241,0.45)",
-                      flexShrink: 0,
-                    }} />
-                    <span style={{ fontSize: "12px", color: "var(--text-2)" }}>{label}</span>
+                  <span style={{
+                    fontSize: "10px",
+                    fontWeight: 600,
+                    letterSpacing: "0.07em",
+                    textTransform: "uppercase",
+                    color: "var(--ai-accent, var(--accent))",
+                  }}>
+                    AI Insights
+                  </span>
+                  <button
+                    onClick={handleRefreshInsights}
+                    disabled={insightsLoading}
+                    style={{
+                      background: "transparent",
+                      border: "none",
+                      cursor: insightsLoading ? "default" : "pointer",
+                      fontSize: "11px",
+                      color: insightsLoading ? "var(--text-3)" : "var(--text-2)",
+                      padding: 0,
+                      transition: "color 0.15s",
+                    }}
+                    onMouseEnter={(e) => {
+                      if (!insightsLoading) e.currentTarget.style.color = "var(--text-1)"
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.color = insightsLoading ? "var(--text-3)" : "var(--text-2)"
+                    }}
+                  >
+                    {insightsLoading ? "Analyzing…" : "↺ Refresh"}
+                  </button>
+                </div>
+
+                {/* Loading skeleton */}
+                {insightsLoading && visibleInsights.length === 0 && (
+                  <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+                    {[1, 2, 3].map((i) => (
+                      <div key={i} className="skeleton" style={{
+                        height: "80px",
+                        borderRadius: "10px",
+                      }} />
+                    ))}
                   </div>
-                ))}
+                )}
+
+                {/* Insight cards */}
+                {!insightsLoading && visibleInsights.length === 0 && (
+                  <p style={{ fontSize: "12px", color: "var(--text-3)", textAlign: "center", marginTop: "12px" }}>
+                    No insights yet. Add more notes to generate insights.
+                  </p>
+                )}
+
+                <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+                  {visibleInsights.map((insight) => (
+                    <InsightCard
+                      key={insight.id}
+                      insight={insight}
+                      onDismiss={() => handleDismiss(insight.id)}
+                    />
+                  ))}
+                </div>
               </div>
             </div>
           )}
