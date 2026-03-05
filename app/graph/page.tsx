@@ -364,7 +364,9 @@ export default function GraphPage() {
   const [dismissedIds, setDismissedIds] = useState<Set<string>>(new Set())
   const [clusterLabels, setClusterLabels] = useState<Record<string, string>>({})
   const [userId, setUserId] = useState<string | null>(null)
+  const [panelOpen, setPanelOpen] = useState(true)
   const fgRef = useRef<any>(null)
+  const hasCenteredRef = useRef(false)
 
   // Refs for canvas interaction (avoids re-renders during animation loop)
   const hoveredNodeIdRef = useRef<string | null>(null)
@@ -533,10 +535,11 @@ export default function GraphPage() {
     return 14 + (Math.log(mc + 1) / Math.log(maxMentionCount + 1)) * 28
   }, [maxMentionCount])
 
-  // Configure physics + auto-zoom
+  // Configure physics
   useEffect(() => {
     if (!data || !fgRef.current) return
     const fg = fgRef.current
+    hasCenteredRef.current = false
     fg.d3Force("charge")?.strength(-600)
     fg.d3Force("link")?.distance((link: any) => {
       const s = typeof link.source === "object" ? computeNodeSize(link.source) : 14
@@ -547,8 +550,22 @@ export default function GraphPage() {
       "collision",
       d3.forceCollide((node: any) => computeNodeSize(node) / 2 + 6)
     )
-    setTimeout(() => fg.zoomToFit(400, 80), 300)
   }, [data, computeNodeSize])
+
+  // Auto-center on biggest entity once simulation settles
+  function handleEngineStop() {
+    if (hasCenteredRef.current || !fgRef.current || !data) return
+    hasCenteredRef.current = true
+    const biggest = data.nodes
+      .filter((n) => n.type === "entity")
+      .sort((a, b) => (b.mentionCount ?? 0) - (a.mentionCount ?? 0))[0]
+    if (biggest?.x != null) {
+      fgRef.current.centerAt(biggest.x, biggest.y, 600)
+      fgRef.current.zoom(2.2, 600)
+    } else {
+      fgRef.current.zoomToFit(400, 80)
+    }
+  }
 
   // Hover
   async function handleNodeHover(node: any) {
@@ -709,13 +726,50 @@ export default function GraphPage() {
     <div style={{
       height: "100vh",
       display: "grid",
-      gridTemplateColumns: "1fr 400px",
+      gridTemplateColumns: panelOpen ? "1fr 400px" : "1fr",
       background: "var(--bg-base)",
       position: "relative",
+      transition: "grid-template-columns 0.22s ease-in-out",
     }}>
 
       {/* ── GRAPH CANVAS ── */}
       <div style={{ overflow: "hidden", position: "relative" }}>
+        {/* Panel toggle tab */}
+        <button
+          onClick={() => setPanelOpen((o) => !o)}
+          title={panelOpen ? "Collapse panel" : "Expand panel"}
+          style={{
+            position: "absolute",
+            right: "12px",
+            top: "50%",
+            transform: "translateY(-50%)",
+            zIndex: 10,
+            width: "24px",
+            height: "48px",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            background: isLight ? "rgba(245,245,251,0.88)" : "rgba(28,28,32,0.88)",
+            border: "1px solid var(--border)",
+            borderRadius: "8px",
+            cursor: "pointer",
+            fontSize: "14px",
+            color: "var(--text-3)",
+            backdropFilter: "blur(8px)",
+            transition: "color 0.15s, border-color 0.15s",
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.color = "var(--text-1)"
+            e.currentTarget.style.borderColor = "var(--border-hover)"
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.color = "var(--text-3)"
+            e.currentTarget.style.borderColor = "var(--border)"
+          }}
+        >
+          {panelOpen ? "›" : "‹"}
+        </button>
+
         {/* View All Notes pill */}
         <div style={{ position: "absolute", top: "16px", left: "16px", zIndex: 10 }}>
           <Link
@@ -774,6 +828,7 @@ export default function GraphPage() {
           linkDirectionalParticleColor={() => particleColor}
           cooldownTicks={100}
           d3VelocityDecay={0.3}
+          onEngineStop={handleEngineStop}
           onRenderFramePre={renderClusters}
           nodeCanvasObjectMode={() => "replace"}
           nodeCanvasObject={(node: any, ctx, globalScale) => {
@@ -853,16 +908,36 @@ export default function GraphPage() {
       <div style={{
         background: "var(--bg-surface)",
         borderLeft: "1px solid var(--border)",
-        display: "flex",
+        display: panelOpen ? "flex" : "none",
         flexDirection: "column",
         overflow: "hidden",
       }}>
         {/* Panel header */}
         <div style={{
-          padding: "20px 24px 16px",
+          padding: "16px 24px",
           borderBottom: "1px solid var(--border)",
           flexShrink: 0,
         }}>
+          {(panel.kind === "note" || panel.kind === "entity") && (
+            <button
+              onClick={() => setPanel({ kind: "idle" })}
+              style={{
+                fontSize: "12px",
+                color: "var(--text-3)",
+                background: "transparent",
+                border: "none",
+                cursor: "pointer",
+                padding: 0,
+                marginBottom: "10px",
+                display: "block",
+                transition: "color 0.12s",
+              }}
+              onMouseEnter={(e) => { e.currentTarget.style.color = "var(--text-2)" }}
+              onMouseLeave={(e) => { e.currentTarget.style.color = "var(--text-3)" }}
+            >
+              ← Back
+            </button>
+          )}
           <h2 style={{ fontSize: "13px", fontWeight: 600, color: "var(--text-1)", margin: 0 }}>
             {panel.kind === "entity"
               ? panel.entityLabel
@@ -1096,31 +1171,6 @@ export default function GraphPage() {
           )}
         </div>
 
-        {/* Panel footer */}
-        {(panel.kind === "note" || panel.kind === "entity") && (
-          <div style={{
-            padding: "12px 24px",
-            borderTop: "1px solid var(--border)",
-            flexShrink: 0,
-          }}>
-            <button
-              onClick={() => setPanel({ kind: "idle" })}
-              style={{
-                fontSize: "12px",
-                color: "var(--text-3)",
-                background: "transparent",
-                border: "none",
-                cursor: "pointer",
-                padding: 0,
-                transition: "color 0.12s",
-              }}
-              onMouseEnter={(e) => { e.currentTarget.style.color = "var(--text-2)" }}
-              onMouseLeave={(e) => { e.currentTarget.style.color = "var(--text-3)" }}
-            >
-              ← Back
-            </button>
-          </div>
-        )}
       </div>
 
       {/* ── HOVER POPUP ── */}
