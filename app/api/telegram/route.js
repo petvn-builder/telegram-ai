@@ -678,6 +678,7 @@ const normalizedQuestion = text.toLowerCase().trim();
 let injectedEntities = 0;
 const MAX_ENTITIES = 5;
 const matchedEntityIds = new Set();
+const matchedEntityNames = new Set();     // lowercase entity names for content-based filtering
 const entityLinkedNoteIds = new Set();    // notes already shown in entity context (top 5)
 const allMatchedEntityNoteIds = new Set(); // ALL notes linked to matched entities
 
@@ -693,15 +694,10 @@ for (let entity of possibleEntities || []) {
   ) {
 
     matchedEntityIds.add(entity.id);
+    matchedEntityNames.add(normalizedName);
 
-    // Use cached summary if available
-    let entityContext = `${entity.name} (${entity.type})`;
-
-    if (entity.summary) {
-      entityContext += `\nSummary: ${entity.summary}`;
-    }
-
-    graphMemory += entityContext + "\n";
+    // Show entity header — no summary here (summary is AI-generated and may be stale)
+    graphMemory += `${entity.name} (${entity.type})\n`;
 
     // Fetch ALL linked knowledge IDs for this entity
     const { data: links } = await supabase
@@ -716,7 +712,7 @@ for (let entity of possibleEntities || []) {
 
     if (knowledgeIds.length) {
 
-      // Show top 5 most recent in entity context
+      // Show top 5 most recent raw notes — source of truth
       const { data: notes } = await supabase
         .from("knowledge")
         .select("id, content")
@@ -724,10 +720,19 @@ for (let entity of possibleEntities || []) {
         .order("created_at", { ascending: false })
         .limit(5);
 
-      for (let note of (notes || [])) {
-        entityLinkedNoteIds.add(note.id);
-        graphMemory += `  - ${note.content}\n`;
+      const fetchedNotes = notes || [];
+      if (fetchedNotes.length > 0) {
+        for (let note of fetchedNotes) {
+          entityLinkedNoteIds.add(note.id);
+          graphMemory += `  - ${note.content}\n`;
+        }
+      } else if (entity.summary) {
+        // No raw notes fetched — fall back to cached summary
+        graphMemory += `Summary: ${entity.summary}\n`;
       }
+    } else if (entity.summary) {
+      // No links at all — fall back to cached summary
+      graphMemory += `Summary: ${entity.summary}\n`;
     }
 
     graphMemory += "\n";
@@ -760,6 +765,11 @@ if (memoryError) {
   console.error("Memory search error:", memoryError);
 }
 
+// Diagnostic: log what fields the RPC actually returns (helps verify id/similarity availability)
+if (memories?.length > 0) {
+  console.log(`[MEMORY] RPC sample fields: ${Object.keys(memories[0]).join(', ')}`);
+}
+
 const uniqueContents = new Set();
 const MAX_MEMORY_CHARS = 2000;
 const SIMILARITY_THRESHOLD = 0.75;
@@ -782,12 +792,26 @@ for (let item of memories || []) {
   // Skip notes already included in ENTITY CONTEXT
   if (item.id && entityLinkedNoteIds.has(item.id)) continue;
 
-  // When entities were matched: only allow notes linked to those entities
-  // (catches overflow beyond the top-5 shown in Tier 1; blocks all unrelated notes)
+  // Entity-relevance gate: block notes unrelated to matched entities
   if (matchedEntityIds.size > 0) {
-    if (!item.id || !allMatchedEntityNoteIds.has(item.id)) continue;
+    // Primary: note is formally entity-linked (works if RPC returns id)
+    const isEntityLinked = item.id && allMatchedEntityNoteIds.has(item.id);
+
+    if (!isEntityLinked) {
+      // Secondary: note content explicitly mentions a matched entity name
+      // Catches relevant but unlinked notes (e.g. "Crocs UAT result" mentions "Crocs")
+      const mentionsEntity = matchedEntityNames.size > 0 &&
+        [...matchedEntityNames].some(name =>
+          name.length >= 3 && item.content.toLowerCase().includes(name)
+        );
+
+      if (!mentionsEntity) continue; // No entity mention → unrelated, block it
+
+      // Name-matched but not formally linked — require decent similarity if available
+      if (item.similarity !== undefined && item.similarity < 0.70) continue;
+    }
   } else {
-    // No entity matched: apply similarity threshold for quality control
+    // No entity matched: base similarity threshold
     if (item.similarity !== undefined && item.similarity < SIMILARITY_THRESHOLD) continue;
   }
 
