@@ -57,19 +57,16 @@ type PanelMode =
   | { kind: "note"; note: NoteDetail }
   | { kind: "entity"; entityId: string; entityLabel: string; notes: GraphNode[] }
 
-// ─── canvas color map (CSS vars can't be read in canvas context) ──────────────
+// ─── canvas colors (3-intensity system) ──────────────────────────────────────
 
-const ENTITY_FILL: Record<string, [number, number, number]> = {
-  person:   [59, 130, 246],
-  project:  [139, 92, 246],
-  company:  [245, 158, 11],
-  tool:     [16, 185, 129],
-  topic:    [99, 102, 241],
-  goal:     [236, 72, 153],
-  event:    [249, 115, 22],
-  resource: [20, 184, 166],
-}
-const DEFAULT_FILL: [number, number, number] = [128, 128, 160]
+// Single-hue base colors — intensity varies by selection state, not entity type
+const BASE_ENTITY: [number, number, number] = [99, 102, 241]  // indigo
+const BASE_NOTE:   [number, number, number] = [128, 128, 160] // neutral gray
+
+// Alpha intensity levels
+const ALPHA_PRIMARY = 0.90  // selected entity
+const ALPHA_MEDIUM  = 0.45  // connected entities + idle state
+const ALPHA_LIGHT   = 0.12  // distant/unconnected entities
 
 // ─── CSS entity colors (for DOM panels) ──────────────────────────────────────
 
@@ -364,7 +361,7 @@ export default function GraphPage() {
   const [dismissedIds, setDismissedIds] = useState<Set<string>>(new Set())
   const [clusterLabels, setClusterLabels] = useState<Record<string, string>>({})
   const [userId, setUserId] = useState<string | null>(null)
-  const [panelOpen, setPanelOpen] = useState(true)
+  const [panelOpen, setPanelOpen] = useState(false)
   const fgRef = useRef<any>(null)
   const hasCenteredRef = useRef(false)
 
@@ -726,49 +723,47 @@ export default function GraphPage() {
     <div style={{
       height: "100vh",
       display: "grid",
-      gridTemplateColumns: panelOpen ? "1fr 400px" : "1fr",
+      gridTemplateColumns: panelOpen ? "1fr 400px" : "1fr 0px",
       background: "var(--bg-base)",
       position: "relative",
-      transition: "grid-template-columns 0.22s ease-in-out",
+      transition: "grid-template-columns 0.28s ease-in-out",
     }}>
 
       {/* ── GRAPH CANVAS ── */}
       <div style={{ overflow: "hidden", position: "relative" }}>
-        {/* Panel toggle tab */}
-        <button
-          onClick={() => setPanelOpen((o) => !o)}
-          title={panelOpen ? "Collapse panel" : "Expand panel"}
-          style={{
-            position: "absolute",
-            right: "12px",
-            top: "50%",
-            transform: "translateY(-50%)",
-            zIndex: 10,
-            width: "24px",
-            height: "48px",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            background: isLight ? "rgba(245,245,251,0.88)" : "rgba(28,28,32,0.88)",
-            border: "1px solid var(--border)",
-            borderRadius: "8px",
-            cursor: "pointer",
-            fontSize: "14px",
-            color: "var(--text-3)",
-            backdropFilter: "blur(8px)",
-            transition: "color 0.15s, border-color 0.15s",
-          }}
-          onMouseEnter={(e) => {
-            e.currentTarget.style.color = "var(--text-1)"
-            e.currentTarget.style.borderColor = "var(--border-hover)"
-          }}
-          onMouseLeave={(e) => {
-            e.currentTarget.style.color = "var(--text-3)"
-            e.currentTarget.style.borderColor = "var(--border)"
-          }}
-        >
-          {panelOpen ? "›" : "‹"}
-        </button>
+        {/* Floating "See Graph Insights" button — visible only when panel is closed */}
+        {!panelOpen && (
+          <button
+            onClick={() => setPanelOpen(true)}
+            style={{
+              position: "absolute",
+              bottom: "24px",
+              right: "24px",
+              zIndex: 10,
+              padding: "9px 16px",
+              fontSize: "12px",
+              fontWeight: 600,
+              background: "var(--ai-accent, #5B8A7A)",
+              color: "#fff",
+              border: "none",
+              borderRadius: "10px",
+              cursor: "pointer",
+              boxShadow: "0 4px 16px rgba(91,138,122,0.35)",
+              letterSpacing: "0.01em",
+              transition: "filter 0.15s, transform 0.15s",
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.filter = "brightness(1.1)"
+              e.currentTarget.style.transform = "translateY(-1px)"
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.filter = "none"
+              e.currentTarget.style.transform = "none"
+            }}
+          >
+            See Graph Insights
+          </button>
+        )}
 
         {/* View All Notes pill */}
         <div style={{ position: "absolute", top: "16px", left: "16px", zIndex: 10 }}>
@@ -838,39 +833,42 @@ export default function GraphPage() {
             const size = computeNodeSize(node)
             const r = size / 2
 
-            // Determine active/faded state
+            // Determine selection state
             const hovId = hoveredNodeIdRef.current
             const clkId = clickedEntityIdRef.current
             const activeId = hovId ?? clkId
             const isActive = node.id === activeId
             const isConnected = !!activeId && !!adjacencyRef.current.get(activeId)?.has(node.id)
-            const isFaded = !!activeId && !isActive && !isConnected
-            const dimAlpha = hovId ? 0.15 : 0.08
 
-            // Per-entity opacity based on mention frequency
-            const normalized = isEntity && maxMentionCount > 1
-              ? Math.log(mc + 1) / Math.log(maxMentionCount + 1)
-              : 0.5
-            const baseAlpha = isEntity ? 0.55 + normalized * 0.35 : 0.50
-            const alpha = isFaded ? dimAlpha : baseAlpha
+            // 3-intensity alpha: primary / medium / light
+            let alpha: number
+            if (!isEntity) {
+              alpha = activeId ? 0.10 : 0.20
+            } else if (!activeId) {
+              alpha = ALPHA_MEDIUM          // idle — all entities uniform
+            } else if (isActive) {
+              alpha = ALPHA_PRIMARY         // selected
+            } else if (isConnected) {
+              alpha = ALPHA_MEDIUM          // 1-hop neighbor
+            } else {
+              alpha = ALPHA_LIGHT           // distant
+            }
 
-            // Slightly scale up hovered node
+            // Scale up hovered node slightly
             const drawR = (isActive && !!hovId) ? r * 1.08 : r
 
-            // Glow ring for top-10% entities
+            // Glow ring for top-10% hub entities
             const isTop10 = isEntity && top10Threshold > 0 && mc >= top10Threshold
-            if (isTop10 && !isFaded) {
+            if (isTop10 && alpha > ALPHA_LIGHT) {
               ctx.beginPath()
               ctx.arc(x, y, drawR + 4, 0, 2 * Math.PI)
-              ctx.strokeStyle = `rgba(99,102,241,${0.35 * alpha})`
+              ctx.strokeStyle = `rgba(99,102,241,${0.30 * alpha})`
               ctx.lineWidth = 1.2
               ctx.stroke()
             }
 
-            // Main circle
-            const [cr, cg, cb] = isEntity
-              ? (ENTITY_FILL[node.entityType as string] ?? DEFAULT_FILL)
-              : DEFAULT_FILL
+            // Main circle — single hue, intensity-based
+            const [cr, cg, cb] = isEntity ? BASE_ENTITY : BASE_NOTE
             ctx.beginPath()
             ctx.arc(x, y, drawR, 0, 2 * Math.PI)
             ctx.fillStyle = `rgba(${cr},${cg},${cb},${alpha})`
@@ -889,7 +887,7 @@ export default function GraphPage() {
                 ctx.shadowBlur = 2
                 ctx.shadowOffsetY = 1
               }
-              const labelAlpha = isFaded ? dimAlpha : Math.min(1, alpha + 0.15)
+              const labelAlpha = Math.min(1, alpha + 0.15)
               ctx.fillStyle = isLight
                 ? `rgba(26,26,46,${labelAlpha})`
                 : `rgba(200,200,215,${labelAlpha})`
@@ -907,10 +905,11 @@ export default function GraphPage() {
       {/* ── RIGHT PANEL ── */}
       <div style={{
         background: "var(--bg-surface)",
-        borderLeft: "1px solid var(--border)",
-        display: panelOpen ? "flex" : "none",
+        borderLeft: panelOpen ? "1px solid var(--border)" : "none",
+        display: "flex",
         flexDirection: "column",
         overflow: "hidden",
+        minWidth: 0,
       }}>
         {/* Panel header */}
         <div style={{
@@ -918,26 +917,54 @@ export default function GraphPage() {
           borderBottom: "1px solid var(--border)",
           flexShrink: 0,
         }}>
-          {(panel.kind === "note" || panel.kind === "entity") && (
+          {/* Top row: back button (detail view) or close button (always) */}
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "8px" }}>
+            <div>
+              {(panel.kind === "note" || panel.kind === "entity") && (
+                <button
+                  onClick={() => setPanel({ kind: "idle" })}
+                  style={{
+                    fontSize: "12px",
+                    color: "var(--text-3)",
+                    background: "transparent",
+                    border: "none",
+                    cursor: "pointer",
+                    padding: 0,
+                    transition: "color 0.12s",
+                  }}
+                  onMouseEnter={(e) => { e.currentTarget.style.color = "var(--text-2)" }}
+                  onMouseLeave={(e) => { e.currentTarget.style.color = "var(--text-3)" }}
+                >
+                  ← Back
+                </button>
+              )}
+            </div>
             <button
-              onClick={() => setPanel({ kind: "idle" })}
+              onClick={() => setPanelOpen(false)}
+              title="Close panel"
               style={{
-                fontSize: "12px",
-                color: "var(--text-3)",
                 background: "transparent",
                 border: "none",
                 cursor: "pointer",
-                padding: 0,
-                marginBottom: "10px",
-                display: "block",
-                transition: "color 0.12s",
+                fontSize: "16px",
+                lineHeight: 1,
+                color: "var(--text-3)",
+                padding: "2px 4px",
+                borderRadius: "4px",
+                transition: "color 0.12s, background 0.12s",
               }}
-              onMouseEnter={(e) => { e.currentTarget.style.color = "var(--text-2)" }}
-              onMouseLeave={(e) => { e.currentTarget.style.color = "var(--text-3)" }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.color = "var(--text-1)"
+                e.currentTarget.style.background = "var(--bg-elevated)"
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.color = "var(--text-3)"
+                e.currentTarget.style.background = "transparent"
+              }}
             >
-              ← Back
+              ×
             </button>
-          )}
+          </div>
           <h2 style={{ fontSize: "13px", fontWeight: 600, color: "var(--text-1)", margin: 0 }}>
             {panel.kind === "entity"
               ? panel.entityLabel
