@@ -846,13 +846,11 @@ function NotesPageInner() {
         lastLabel = label
         result.push(
           <div key={`date-${label}`} style={{
-            padding: isFirstGroup ? "16px 24px 8px" : "24px 24px 8px",
-            display: "flex", alignItems: "center", gap: "10px",
+            padding: isFirstGroup ? "16px 24px 10px" : "40px 24px 10px",
           }}>
-            <span style={{ fontSize: "11px", fontWeight: 600, color: "var(--text-2)", letterSpacing: "0.03em" }}>
+            <span style={{ fontSize: "13px", fontWeight: 700, color: "var(--text-2)", letterSpacing: "0.01em", display: "inline-block", background: "var(--bg-hover)", borderRadius: "6px", padding: "3px 8px" }}>
               {label}
             </span>
-            <div style={{ flex: 1, height: "1px", background: "var(--border-subtle)" }} />
           </div>
         )
         isFirstGroup = false
