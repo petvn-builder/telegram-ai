@@ -1,10 +1,12 @@
 import { getSupabaseAdmin } from "@/lib/supabase/admin"
+import { createEmbedding } from "@/lib/embeddings"
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 export interface RawEntity {
   name: string
   type: string
+  aliases: string[]
   attributes: {
     role: string | null
     organization: string | null
@@ -18,6 +20,7 @@ export interface SavedEntity {
   id: string
   name: string
   type: string
+  aliases: string[]
 }
 
 // ── Merge helpers (pure functions) ────────────────────────────────────────────
@@ -127,6 +130,8 @@ export async function upsertEntitiesAndLink(
     if (!name || !type) continue
 
     try {
+      const incomingAliases = (entity.aliases ?? []).map((a: string) => a.trim().toLowerCase()).filter(Boolean)
+
       const incoming = {
         attributes: (entity.attributes ?? {}) as Record<string, unknown>,
         events: (entity.events ?? []) as Record<string, unknown>[],
@@ -136,12 +141,13 @@ export async function upsertEntitiesAndLink(
 
       const { data: existing } = await db
         .from("entities")
-        .select("id, name, type, attributes, events, relationships, responsibilities")
+        .select("id, name, type, aliases, attributes, events, relationships, responsibilities")
         .eq("user_id", userId)
         .eq("name", name)
         .maybeSingle()
 
       let entityId: string
+      let mergedAliases: string[]
 
       if (existing) {
         entityId = existing.id
@@ -150,6 +156,7 @@ export async function upsertEntitiesAndLink(
         const storedEvents = (existing.events ?? []) as Record<string, unknown>[]
         const storedRelationships = (existing.relationships ?? []) as Record<string, unknown>[]
         const storedResponsibilities = (existing.responsibilities ?? []) as string[]
+        const storedAliases = (existing.aliases ?? []) as string[]
 
         const mergedAttributes = mergeAttributes(storedAttributes, incoming.attributes)
         const mergedEvents = mergeObjectArrays(
@@ -166,6 +173,7 @@ export async function upsertEntitiesAndLink(
           storedResponsibilities,
           incoming.responsibilities
         )
+        mergedAliases = mergeStringArrays(storedAliases, incomingAliases)
 
         const mergedData = {
           attributes: mergedAttributes,
@@ -188,16 +196,20 @@ export async function upsertEntitiesAndLink(
           .from("entities")
           .update({
             ...mergedData,
+            aliases: mergedAliases,
             ...(dataChanged ? { summary_updated_at: null } : {}),
           })
           .eq("id", entityId)
       } else {
+        mergedAliases = incomingAliases
+
         const { data: newEntity } = await db
           .from("entities")
           .insert({
             user_id: userId,
             name,
             type,
+            aliases: mergedAliases,
             attributes: incoming.attributes,
             events: incoming.events,
             relationships: incoming.relationships,
@@ -212,13 +224,22 @@ export async function upsertEntitiesAndLink(
         entityId = newEntity.id
       }
 
+      // Generate and store entity embedding (name + type + aliases)
+      try {
+        const embeddingText = [name, type, ...mergedAliases].join(", ")
+        const embedding = await createEmbedding(embeddingText)
+        await db.from("entities").update({ embedding }).eq("id", entityId)
+      } catch (embErr) {
+        console.error(`[upsertEntitiesAndLink] Embedding error (${name}):`, embErr)
+      }
+
       // Conflict-safe: no error if same entity extracted twice from one note
       await db.from("knowledge_links").upsert(
         { user_id: userId, knowledge_id: knowledgeId, entity_id: entityId },
         { onConflict: "knowledge_id,entity_id", ignoreDuplicates: true }
       )
 
-      saved.push({ id: entityId, name, type })
+      saved.push({ id: entityId, name, type, aliases: mergedAliases })
     } catch (err) {
       console.error(`[upsertEntitiesAndLink] Entity error (${name}):`, err)
     }

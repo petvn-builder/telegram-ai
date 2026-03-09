@@ -1,6 +1,7 @@
 import { getSupabaseAdmin } from "@/lib/supabase/admin"
 import { createEmbedding } from "@/lib/embeddings"
 import { askOpenAI } from "@/lib/openai"
+import { resolveEntities } from "@/lib/entity-resolver"
 
 const SIMILARITY_THRESHOLD = 0.75
 const MAX_MEMORY_CHARS = 2000
@@ -20,62 +21,57 @@ export async function semanticSearch(userId: string, question: string): Promise<
 
   // ── Tier 1: Entity context ──────────────────────────────────────────────────
 
-  const { data: possibleEntities } = await db
-    .from("entities")
-    .select("*")
-    .eq("user_id", userId)
-
-  const normalizedQuestion = question.toLowerCase().trim()
-  let injectedEntities = 0
   const matchedEntityIds = new Set<string>()
   const matchedEntityNames = new Set<string>()
   const entityLinkedNoteIds = new Set<string>()
   const allMatchedEntityNoteIds = new Set<string>()
 
-  for (const entity of possibleEntities ?? []) {
-    if (!entity.name) continue
+  const resolvedEntities = await resolveEntities(userId, question, { maxEntities: MAX_ENTITIES })
 
-    const normalizedName = entity.name.toLowerCase().trim()
+  for (const entity of resolvedEntities) {
+    matchedEntityIds.add(entity.id)
+    matchedEntityNames.add(entity.name.toLowerCase().trim())
 
-    if (normalizedQuestion.includes(normalizedName) && injectedEntities < MAX_ENTITIES) {
-      matchedEntityIds.add(entity.id)
-      matchedEntityNames.add(normalizedName)
+    // Fetch full entity record for summary
+    const { data: fullEntity } = await db
+      .from("entities")
+      .select("summary")
+      .eq("id", entity.id)
+      .maybeSingle()
 
-      graphMemory += `${entity.name} (${entity.type})\n`
+    graphMemory += `${entity.name} (${entity.type})\n`
 
-      const { data: links } = await db
-        .from("knowledge_links")
-        .select("knowledge_id")
-        .eq("entity_id", entity.id)
+    const { data: links } = await db
+      .from("knowledge_links")
+      .select("knowledge_id")
+      .eq("entity_id", entity.id)
 
-      const knowledgeIds = (links ?? []).map((l: { knowledge_id: string }) => l.knowledge_id)
+    const knowledgeIds = (links ?? []).map((l: { knowledge_id: string }) => l.knowledge_id)
 
-      for (const id of knowledgeIds) allMatchedEntityNoteIds.add(id)
+    for (const id of knowledgeIds) allMatchedEntityNoteIds.add(id)
 
-      if (knowledgeIds.length > 0) {
-        const { data: notes } = await db
-          .from("knowledge")
-          .select("id, content")
-          .in("id", knowledgeIds)
-          .order("created_at", { ascending: false })
-          .limit(5)
+    if (knowledgeIds.length > 0) {
+      const { data: notes } = await db
+        .from("knowledge")
+        .select("id, content")
+        .in("id", knowledgeIds)
+        .order("created_at", { ascending: false })
+        .limit(5)
 
-        const fetchedNotes = notes ?? []
-        if (fetchedNotes.length > 0) {
-          for (const note of fetchedNotes) {
-            entityLinkedNoteIds.add(note.id)
-            graphMemory += `  - ${note.content}\n`
-          }
-        } else if (entity.summary) {
-          graphMemory += `Summary: ${entity.summary}\n`
+      const fetchedNotes = notes ?? []
+      if (fetchedNotes.length > 0) {
+        for (const note of fetchedNotes) {
+          entityLinkedNoteIds.add(note.id)
+          graphMemory += `  - ${note.content}\n`
         }
-      } else if (entity.summary) {
-        graphMemory += `Summary: ${entity.summary}\n`
+      } else if (fullEntity?.summary) {
+        graphMemory += `Summary: ${fullEntity.summary}\n`
       }
-
-      graphMemory += "\n"
-      injectedEntities++
+    } else if (fullEntity?.summary) {
+      graphMemory += `Summary: ${fullEntity.summary}\n`
     }
+
+    graphMemory += "\n"
   }
 
   // ── Tier 2: Semantic search ─────────────────────────────────────────────────
