@@ -88,8 +88,14 @@ export async function semanticSearch(userId: string, question: string): Promise<
     match_count: 8,
   })
 
+  console.log(`[WEB AI] Tier 1 (entity-linked): ${entityLinkedNoteIds.size} notes, ${matchedEntityIds.size} entities matched`)
+  console.log("---- GRAPH MEMORY BUILT ----")
+  console.log(graphMemory || "No graph context injected")
+  console.log("----------------------------")
+
   const uniqueContents = new Set<string>()
   const normalizedCurrentMessage = question.trim().toLowerCase()
+  let tier2Count = 0
 
   for (const item of memories ?? []) {
     if (!item?.content) continue
@@ -118,8 +124,17 @@ export async function semanticSearch(userId: string, question: string): Promise<
     uniqueContents.add(normalizedItem)
 
     memory += `[${item.role}] ${item.content}\n`
+    tier2Count++
     if (memory.length > MAX_MEMORY_CHARS) break
   }
+
+  console.log(`[WEB AI] Tier 2 (semantic, threshold=${SIMILARITY_THRESHOLD}): ${tier2Count} notes added`)
+  console.log(`[WEB AI] Final: ${entityLinkedNoteIds.size + tier2Count} notes total sent to OpenAI`)
+  console.log("----- MEMORY SENT TO OPENAI -----")
+  console.log(memory || "(empty)")
+  console.log("----- USER MESSAGE -----")
+  console.log(question)
+  console.log("----------------------------------")
 
   // ── Build combined memory and call AI ──────────────────────────────────────
 
@@ -130,6 +145,10 @@ export async function semanticSearch(userId: string, question: string): Promise<
   if (memory.trim()) {
     combinedMemory += "=== RELEVANT MEMORY ===\n" + memory.trim()
   }
+
+  console.log("----- FINAL MEMORY SENT TO OPENAI -----")
+  console.log(combinedMemory || "(no memory)")
+  console.log("----------------------------------------")
 
   const aiResponse = await askOpenAI(combinedMemory, question)
   return aiResponse ?? "I couldn't find an answer based on your notes."
