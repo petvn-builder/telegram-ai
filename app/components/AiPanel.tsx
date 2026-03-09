@@ -1,13 +1,13 @@
 "use client"
 
 import { useEffect, useRef, useState } from "react"
-import useSWR from "swr"
 import Link from "next/link"
-import { fetcher } from "@/lib/fetcher"
 import { useAiPanel } from "./AiPanelContext"
 import type { NoteWithEntities, TaskWithEntities } from "@/app/notes/types"
 
 // ── Types ─────────────────────────────────────────────────────────────────────
+
+type AiCommand = { name: string; description: string }
 
 type AiResultContent =
   | { type: "notes"; notes: NoteWithEntities[] }
@@ -15,6 +15,8 @@ type AiResultContent =
   | { type: "text"; text: string }
   | { type: "error"; text: string }
   | { type: "loading" }
+  | { type: "entity_summary"; entity: string; summary: string; relatedNotes: { id: string; content: string }[] }
+  | { type: "commands"; commands: AiCommand[] }
 
 type AiUserMessage = { role: "user"; text: string; id: string }
 type AiAssistantMessage = { role: "assistant"; content: AiResultContent; id: string }
@@ -52,9 +54,9 @@ function SendIcon() {
 // ── Quick command suggestions ─────────────────────────────────────────────────
 
 const QUICK_COMMANDS = [
-  "Create task: ",
-  "Find notes about: ",
-  "Summarize recent notes",
+  "/task ",
+  "/note ",
+  "/entity ",
 ]
 
 // ── Message rendering ─────────────────────────────────────────────────────────
@@ -165,7 +167,81 @@ function MessageBubble({ msg }: { msg: AiMessage }) {
           padding: "9px 12px",
         }}>
           <p style={{ fontSize: "13px", color: "var(--text-1)", margin: "0 0 3px" }}>{content.task.title}</p>
-          <p style={{ fontSize: "11px", color: "var(--text-3)", margin: 0, textTransform: "capitalize" }}>{content.task.status} · {content.task.priority} priority</p>
+          <p style={{ fontSize: "11px", color: "var(--text-3)", margin: 0, textTransform: "capitalize" }}>{content.task.status} · {content.task.priority} priority{content.task.due_date ? ` · due ${new Date(content.task.due_date).toLocaleDateString("en", { month: "short", day: "numeric" })}` : ""}</p>
+        </div>
+      </div>
+    )
+  }
+
+  if (content.type === "entity_summary") {
+    return (
+      <div style={{ marginBottom: "12px" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "8px" }}>
+          <span style={{ color: "var(--ai-accent)", display: "flex" }}><SparkleIcon /></span>
+          <span style={{ fontSize: "12px", color: "var(--text-2)" }}>{content.entity}</span>
+        </div>
+        <div style={{
+          background: "var(--bg-surface)",
+          border: "1px solid var(--border)",
+          borderRadius: "8px",
+          padding: "10px 12px",
+          marginBottom: content.relatedNotes.length > 0 ? "6px" : "0",
+        }}>
+          <p style={{ fontSize: "12px", color: "var(--text-1)", margin: 0, lineHeight: 1.6, whiteSpace: "pre-wrap" }}>
+            {content.summary}
+          </p>
+        </div>
+        {content.relatedNotes.length > 0 && (
+          <div style={{ display: "flex", flexDirection: "column", gap: "5px" }}>
+            {content.relatedNotes.slice(0, 3).map((note) => (
+              <Link
+                key={note.id}
+                href={`/notes?open=${note.id}`}
+                style={{
+                  display: "block",
+                  background: "var(--bg-surface)",
+                  border: "1px solid var(--border)",
+                  borderRadius: "8px",
+                  padding: "8px 12px",
+                  textDecoration: "none",
+                  transition: "border-color 0.16s",
+                }}
+                onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.borderColor = "var(--border-hover)" }}
+                onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.borderColor = "var(--border)" }}
+              >
+                <p style={{ fontSize: "12px", color: "var(--text-1)", margin: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                  {note.content.replace(/\n/g, " ").slice(0, 70)}
+                </p>
+              </Link>
+            ))}
+          </div>
+        )}
+      </div>
+    )
+  }
+
+  if (content.type === "commands") {
+    return (
+      <div style={{ marginBottom: "10px" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "8px" }}>
+          <span style={{ color: "var(--ai-accent)", display: "flex" }}><SparkleIcon /></span>
+          <span style={{ fontSize: "12px", color: "var(--text-2)" }}>Available commands</span>
+        </div>
+        <div style={{ display: "flex", flexDirection: "column", gap: "5px" }}>
+          {content.commands.map((cmd) => (
+            <div
+              key={cmd.name}
+              style={{
+                background: "var(--bg-surface)",
+                border: "1px solid var(--border)",
+                borderRadius: "8px",
+                padding: "8px 12px",
+              }}
+            >
+              <span style={{ fontSize: "12px", fontWeight: 600, color: "var(--ai-accent)", fontFamily: "monospace" }}>{cmd.name}</span>
+              <span style={{ fontSize: "12px", color: "var(--text-2)", marginLeft: "8px" }}>{cmd.description}</span>
+            </div>
+          ))}
         </div>
       </div>
     )
@@ -183,9 +259,6 @@ export default function AiPanel() {
   const [isProcessing, setIsProcessing] = useState(false)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
-
-  const { data: notesRes } = useSWR("/api/notes?limit=50", fetcher, { revalidateOnFocus: false, dedupingInterval: 60_000 })
-  const notes: NoteWithEntities[] = notesRes?.notes ?? []
 
   // Handle pending command injected from outside (e.g., CommandBar or note detail)
   useEffect(() => {
@@ -228,91 +301,48 @@ export default function AiPanel() {
 
     addMessage({ role: "user", text })
     setIsProcessing(true)
-
-    // Show loading
     addMessage({ role: "assistant", content: { type: "loading" } })
 
-    await new Promise((r) => setTimeout(r, 400)) // small delay for feel
+    try {
+      const res = await fetch("/api/ai/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ message: text }),
+      })
+      const data = await res.json()
 
-    const q = text.toLowerCase()
-
-    // Pattern: create task
-    if (/^(create|add)\s+task[:\s]/i.test(text)) {
-      const title = text.replace(/^(create|add)\s+task[:\s]+/i, "").trim()
-      if (!title) {
-        updateLastAssistantMessage({ type: "error", text: "Please provide a task title." })
-        setIsProcessing(false)
-        return
+      switch (data.action) {
+        case "task_created":
+          updateLastAssistantMessage({ type: "task_created", task: data.task })
+          break
+        case "note_created":
+          updateLastAssistantMessage({
+            type: "text",
+            text: `Note saved: "${data.note.content.slice(0, 60)}${data.note.content.length > 60 ? "…" : ""}"`,
+          })
+          break
+        case "entity_summary":
+          updateLastAssistantMessage({
+            type: "entity_summary",
+            entity: data.entity,
+            summary: data.summary,
+            relatedNotes: data.relatedNotes ?? [],
+          })
+          break
+        case "answer":
+          updateLastAssistantMessage({ type: "text", text: data.text })
+          break
+        case "commands":
+          updateLastAssistantMessage({ type: "commands", commands: data.commands })
+          break
+        case "error":
+        default:
+          updateLastAssistantMessage({ type: "error", text: data.text ?? "Something went wrong." })
       }
-      try {
-        const res = await fetch("/api/tasks", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ title, status: "inbox", priority: "medium", created_from: "manual" }),
-        })
-        const task = await res.json()
-        updateLastAssistantMessage({ type: "task_created", task })
-      } catch {
-        updateLastAssistantMessage({ type: "error", text: "Failed to create task. Please try again." })
-      }
-      setIsProcessing(false)
-      return
+    } catch {
+      updateLastAssistantMessage({ type: "error", text: "Failed to reach the AI. Please try again." })
     }
 
-    // Pattern: create note
-    if (/^(create|new|add)\s+note[:\s]/i.test(text)) {
-      const content = text.replace(/^(create|new|add)\s+note[:\s]+/i, "").trim()
-      if (!content) {
-        updateLastAssistantMessage({ type: "error", text: "Please provide note content." })
-        setIsProcessing(false)
-        return
-      }
-      try {
-        await fetch("/api/notes", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ content }),
-        })
-        updateLastAssistantMessage({ type: "text", text: `Note created: "${content.slice(0, 60)}${content.length > 60 ? "…" : ""}"` })
-      } catch {
-        updateLastAssistantMessage({ type: "error", text: "Failed to create note." })
-      }
-      setIsProcessing(false)
-      return
-    }
-
-    // Pattern: find / search notes
-    if (/^(find|search|look for|show)\s+/i.test(text)) {
-      const keyword = text.replace(/^(find|search|look for|show)\s+(notes?\s+(about|for|with|containing)?\s*)?/i, "").trim()
-      const matched = notes
-        .filter((n) => n.content.toLowerCase().includes(keyword.toLowerCase()))
-        .slice(0, 5)
-      if (matched.length === 0) {
-        updateLastAssistantMessage({ type: "text", text: `No notes found containing "${keyword}".` })
-      } else {
-        updateLastAssistantMessage({ type: "notes", notes: matched })
-      }
-      setIsProcessing(false)
-      return
-    }
-
-    // Pattern: summarize recent
-    if (/^summarize/i.test(text)) {
-      const recent = notes.slice(0, 5)
-      if (recent.length === 0) {
-        updateLastAssistantMessage({ type: "text", text: "No notes to summarize yet." })
-      } else {
-        updateLastAssistantMessage({ type: "notes", notes: recent })
-      }
-      setIsProcessing(false)
-      return
-    }
-
-    // Default fallback
-    updateLastAssistantMessage({
-      type: "text",
-      text: "I can help you create tasks, create notes, and search your knowledge base. Try:\n• \"create task: Call Alex tomorrow\"\n• \"find notes about project\"\n• \"summarize recent notes\"",
-    })
     setIsProcessing(false)
   }
 
@@ -392,7 +422,7 @@ export default function AiPanel() {
               AI Assistant
             </p>
             <p style={{ fontSize: "12px", color: "var(--text-3)", margin: 0, textAlign: "center", lineHeight: 1.6 }}>
-              Create tasks, search notes,<br />and more with natural language.
+              Ask questions, create tasks and notes,<br />or explore your knowledge graph.
             </p>
           </div>
         )}
