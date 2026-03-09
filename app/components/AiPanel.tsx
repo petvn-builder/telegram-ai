@@ -59,6 +59,53 @@ const QUICK_COMMANDS = [
   "/entity ",
 ]
 
+// ── Markdown renderer ─────────────────────────────────────────────────────────
+
+function inlineMarkdown(text: string): React.ReactNode {
+  const parts = text.split(/(\*\*[^*]+\*\*|__[^_]+__)/)
+  return parts.map((part, i) => {
+    if (/^\*\*(.+)\*\*$/.test(part) || /^__(.+)__$/.test(part)) {
+      return <strong key={i} style={{ fontWeight: 600 }}>{part.slice(2, -2)}</strong>
+    }
+    return part
+  })
+}
+
+function renderMarkdown(text: string): React.ReactNode {
+  const blocks = text.split(/\n\n+/)
+  return blocks.map((block, i) => {
+    const headingMatch = block.match(/^#{1,3}\s+(.+)/)
+    if (headingMatch) {
+      return (
+        <p key={i} style={{ fontWeight: 600, fontSize: "13px", color: "var(--text-1)", margin: i === 0 ? "0 0 2px" : "8px 0 2px" }}>
+          {inlineMarkdown(headingMatch[1])}
+        </p>
+      )
+    }
+    const lines = block.split("\n")
+    const isList = lines.length > 0 && lines.filter(l => l.trim()).every(l => /^\s*[-•*]\s/.test(l))
+    if (isList) {
+      return (
+        <ul key={i} style={{ margin: i === 0 ? "0" : "6px 0 0", padding: 0, listStyle: "none" }}>
+          {lines.filter(l => l.trim()).map((l, j) => (
+            <li key={j} style={{ fontSize: "13px", color: "var(--text-1)", lineHeight: 1.6, marginBottom: "2px", display: "flex", gap: "6px" }}>
+              <span style={{ color: "var(--ai-accent)", flexShrink: 0, marginTop: "1px" }}>·</span>
+              <span>{inlineMarkdown(l.replace(/^\s*[-•*]\s+/, ""))}</span>
+            </li>
+          ))}
+        </ul>
+      )
+    }
+    return (
+      <p key={i} style={{ fontSize: "13px", color: "var(--text-1)", lineHeight: 1.6, margin: i === 0 ? "0" : "6px 0 0" }}>
+        {lines.map((line, j) => (
+          <span key={j}>{inlineMarkdown(line)}{j < lines.length - 1 ? <br /> : null}</span>
+        ))}
+      </p>
+    )
+  })
+}
+
 // ── Message rendering ─────────────────────────────────────────────────────────
 
 function MessageBubble({ msg }: { msg: AiMessage }) {
@@ -103,14 +150,13 @@ function MessageBubble({ msg }: { msg: AiMessage }) {
           <span style={{ color: "var(--ai-accent)", display: "flex", alignItems: "center", flexShrink: 0, marginTop: "2px" }}>
             <SparkleIcon />
           </span>
-          <p style={{
+          <div style={{
             fontSize: "13px",
             color: content.type === "error" ? "#DC2626" : "var(--text-1)",
             lineHeight: 1.6,
-            margin: 0,
           }}>
-            {content.text}
-          </p>
+            {content.type === "error" ? content.text : renderMarkdown(content.text)}
+          </div>
         </div>
       </div>
     )
@@ -187,9 +233,9 @@ function MessageBubble({ msg }: { msg: AiMessage }) {
           padding: "10px 12px",
           marginBottom: content.relatedNotes.length > 0 ? "6px" : "0",
         }}>
-          <p style={{ fontSize: "12px", color: "var(--text-1)", margin: 0, lineHeight: 1.6, whiteSpace: "pre-wrap" }}>
-            {content.summary}
-          </p>
+          <div style={{ fontSize: "12px", color: "var(--text-1)", lineHeight: 1.6 }}>
+            {renderMarkdown(content.summary)}
+          </div>
         </div>
         {content.relatedNotes.length > 0 && (
           <div style={{ display: "flex", flexDirection: "column", gap: "5px" }}>
