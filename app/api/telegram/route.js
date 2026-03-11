@@ -2,6 +2,7 @@ import { createEmbedding } from "@/lib/embeddings";
 import { askOpenAI } from "@/lib/openai";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import { upsertEntitiesAndLink } from "@/lib/entities";
+import { resolveEntities } from "@/lib/entity-resolver";
 
 import {
   getOrCreateUser,
@@ -553,80 +554,57 @@ let memory = "";
 let graphMemory = "";
 
 // =========================
-// TIER 1: ENTITY CONTEXT (run first to build dedup set)
+// TIER 1: ENTITY CONTEXT (alias + embedding resolution)
 // =========================
 
-const { data: possibleEntities } = await supabase
-  .from("entities")
-  .select("*")
-  .eq("user_id", userUuid);
-
-const normalizedQuestion = text.toLowerCase().trim();
-
-let injectedEntities = 0;
 const MAX_ENTITIES = 5;
 const matchedEntityIds = new Set();
-const matchedEntityNames = new Set();     // lowercase entity names for content-based filtering
-const entityLinkedNoteIds = new Set();    // notes already shown in entity context (top 5)
-const allMatchedEntityNoteIds = new Set(); // ALL notes linked to matched entities
+const matchedEntityNames = new Set();
+const entityLinkedNoteIds = new Set();
+const allMatchedEntityNoteIds = new Set();
 
-for (let entity of possibleEntities || []) {
+const resolvedEntities = await resolveEntities(userUuid, text, { maxEntities: MAX_ENTITIES });
 
-  if (!entity.name) continue;
+for (const entity of resolvedEntities) {
+  matchedEntityIds.add(entity.id);
+  matchedEntityNames.add(entity.name.toLowerCase().trim());
 
-  const normalizedName = entity.name.toLowerCase().trim();
+  graphMemory += `${entity.name} (${entity.type})\n`;
 
-  if (
-    normalizedQuestion.includes(normalizedName) &&
-    injectedEntities < MAX_ENTITIES
-  ) {
+  // Fetch linked knowledge IDs for this entity
+  const { data: links } = await supabase
+    .from("knowledge_links")
+    .select("knowledge_id")
+    .eq("entity_id", entity.id);
 
-    matchedEntityIds.add(entity.id);
-    matchedEntityNames.add(normalizedName);
+  const knowledgeIds = (links || []).map(l => l.knowledge_id);
 
-    // Show entity header — no summary here (summary is AI-generated and may be stale)
-    graphMemory += `${entity.name} (${entity.type})\n`;
+  for (const id of knowledgeIds) allMatchedEntityNoteIds.add(id);
 
-    // Fetch ALL linked knowledge IDs for this entity
-    const { data: links } = await supabase
-      .from("knowledge_links")
-      .select("knowledge_id")
-      .eq("entity_id", entity.id);
+  if (knowledgeIds.length) {
+    const { data: notes } = await supabase
+      .from("knowledge")
+      .select("id, content")
+      .in("id", knowledgeIds)
+      .order("created_at", { ascending: false })
+      .limit(5);
 
-    const knowledgeIds = (links || []).map(l => l.knowledge_id);
-
-    // Track all IDs so Tier 2 can gate by entity membership
-    for (const id of knowledgeIds) allMatchedEntityNoteIds.add(id);
-
-    if (knowledgeIds.length) {
-
-      // Show top 5 most recent raw notes — source of truth
-      const { data: notes } = await supabase
-        .from("knowledge")
-        .select("id, content")
-        .in("id", knowledgeIds)
-        .order("created_at", { ascending: false })
-        .limit(5);
-
-      const fetchedNotes = notes || [];
-      if (fetchedNotes.length > 0) {
-        for (let note of fetchedNotes) {
-          entityLinkedNoteIds.add(note.id);
-          graphMemory += `  - ${note.content}\n`;
-        }
-      } else if (entity.summary) {
-        // No raw notes fetched — fall back to cached summary
-        graphMemory += `Summary: ${entity.summary}\n`;
+    const fetchedNotes = notes || [];
+    if (fetchedNotes.length > 0) {
+      for (const note of fetchedNotes) {
+        entityLinkedNoteIds.add(note.id);
+        graphMemory += `  - ${note.content}\n`;
       }
-    } else if (entity.summary) {
-      // No links at all — fall back to cached summary
-      graphMemory += `Summary: ${entity.summary}\n`;
+    } else {
+      const { data: full } = await supabase.from("entities").select("summary").eq("id", entity.id).maybeSingle();
+      if (full?.summary) graphMemory += `Summary: ${full.summary}\n`;
     }
-
-    graphMemory += "\n";
-
-    injectedEntities++;
+  } else {
+    const { data: full } = await supabase.from("entities").select("summary").eq("id", entity.id).maybeSingle();
+    if (full?.summary) graphMemory += `Summary: ${full.summary}\n`;
   }
+
+  graphMemory += "\n";
 }
 
 console.log(`[MEMORY] Tier 1 (entity-linked): ${entityLinkedNoteIds.size} notes, ${matchedEntityIds.size} entities matched`);
