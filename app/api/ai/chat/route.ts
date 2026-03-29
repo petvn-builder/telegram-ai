@@ -6,7 +6,7 @@ import { parseTaskText, createTask } from "@/lib/tasks"
 import { getOrGenerateSummary } from "@/lib/entity-summary"
 import { semanticSearch } from "@/lib/ai-search"
 import { upsertEntitiesAndLink } from "@/lib/entities"
-import { resetIfNewDay, isLimitReached, incrementUsage } from "@/lib/user"
+import { getOrCreateUser, resetIfNewDay, isLimitReached, incrementUsage } from "@/lib/user"
 import {
   extractSpaceTokens,
   syncNoteSpaces,
@@ -42,30 +42,24 @@ export async function POST(req: NextRequest) {
     const db = getSupabaseAdmin()
 
     // ── Daily rate limit (shared with Telegram) ─────────────────────────────────
+    // Linked Telegram account → share the same counter; otherwise create a
+    // web-only row keyed by the auth user ID so every user is rate-limited.
     const { data: identity } = await db
       .from("user_identities")
       .select("telegram_user_id")
       .eq("user_id", user.id)
       .single()
 
-    if (identity?.telegram_user_id) {
-      const { data: tgUser } = await db
-        .from("users")
-        .select("*")
-        .eq("telegram_id", identity.telegram_user_id)
-        .single()
-
-      if (tgUser) {
-        const freshUser = await resetIfNewDay(tgUser)
-        if (await isLimitReached(freshUser)) {
-          return NextResponse.json({
-            action: "error",
-            text: "You've reached your daily limit (20 messages). Try again tomorrow.",
-          })
-        }
-        await incrementUsage(freshUser.id)
-      }
+    const rateLimitId = identity?.telegram_user_id ?? `web:${user.id}`
+    const rateLimitUser = await getOrCreateUser(rateLimitId, user.email ?? "")
+    const freshUser = await resetIfNewDay(rateLimitUser)
+    if (await isLimitReached(freshUser)) {
+      return NextResponse.json({
+        action: "error",
+        text: "You've reached your daily limit (20 messages). Try again tomorrow.",
+      })
     }
+    await incrementUsage(freshUser.id)
 
     // ── /save or /note <text> ────────────────────────────────────────────────────
     if (/^\/(note|save)\s+/i.test(message)) {
