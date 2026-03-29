@@ -261,8 +261,8 @@ a:focus-visible {
   transform: translateY(12px) scale(0.97);
 }
 .chat-fab:hover {
-  transform: scale(1.08);
-  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.2), 0 3px 8px rgba(0, 0, 0, 0.12) !important;
+  transform: scale(1.05);
+  box-shadow: 0 6px 28px rgba(99, 102, 241, 0.45), 0 3px 10px rgba(124, 58, 237, 0.25) !important;
 }
 .chat-fab:active {
   transform: scale(0.95);

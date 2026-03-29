@@ -413,21 +413,21 @@ export default function ChatBody() {
       {/* Header */}
       <div style={{
         padding: "14px 16px 12px",
-        borderBottom: "1px solid var(--border)",
+        background: "linear-gradient(135deg, #7C3AED, #6366F1, #818CF8)",
         display: "flex",
         alignItems: "center",
         gap: "10px",
         flexShrink: 0,
       }}>
-        <span style={{ color: "var(--ai-accent)", display: "flex" }}>
+        <span style={{ color: "#fff", display: "flex" }}>
           <SparkleIcon size={16} />
         </span>
-        <span style={{ fontSize: "14px", fontWeight: 600, color: "var(--text-1)", flex: 1 }}>AI Assistant</span>
+        <span style={{ fontSize: "14px", fontWeight: 600, color: "#fff", flex: 1 }}>AI Companion</span>
         <button
           onClick={close}
-          style={{ background: "transparent", border: "none", cursor: "pointer", color: "var(--text-3)", display: "flex", alignItems: "center", padding: "4px", borderRadius: "6px", transition: "color 0.16s" }}
-          onMouseEnter={(e) => { e.currentTarget.style.color = "var(--text-1)" }}
-          onMouseLeave={(e) => { e.currentTarget.style.color = "var(--text-3)" }}
+          style={{ background: "transparent", border: "none", cursor: "pointer", color: "rgba(255,255,255,0.7)", display: "flex", alignItems: "center", padding: "4px", borderRadius: "6px", transition: "color 0.16s" }}
+          onMouseEnter={(e) => { e.currentTarget.style.color = "#fff" }}
+          onMouseLeave={(e) => { e.currentTarget.style.color = "rgba(255,255,255,0.7)" }}
         >
           <CloseIcon />
         </button>
