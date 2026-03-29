@@ -249,6 +249,24 @@ a:focus-visible {
   border-radius: 6px;
 }
 
+/* ── AI thinking indicator ──────────────────────────────── */
+.thinking-sparkle {
+  animation: thinking-spin 2s linear infinite;
+}
+.thinking-text {
+  animation: thinking-fade 2s ease-in-out;
+}
+@keyframes thinking-spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+@keyframes thinking-fade {
+  0% { opacity: 0; transform: translateY(4px); }
+  15% { opacity: 1; transform: translateY(0); }
+  85% { opacity: 1; }
+  100% { opacity: 0.7; }
+}
+
 /* ── Floating chat modal ────────────────────────────────── */
 .chat-modal-open {
   opacity: 1;

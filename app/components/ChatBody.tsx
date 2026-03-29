@@ -51,6 +51,45 @@ function SendIcon() {
   )
 }
 
+// ── Thinking indicator ────────────────────────────────────────────────────────
+
+const THINKING_PHRASES = [
+  "Thinking",
+  "Brainstorming",
+  "Manifesting",
+  "Connecting the dots",
+  "Searching memory",
+  "Reasoning",
+  "Contemplating",
+  "Synthesizing",
+]
+
+function ThinkingIndicator() {
+  const [index, setIndex] = useState(0)
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setIndex((i) => (i + 1) % THINKING_PHRASES.length)
+    }, 2000)
+    return () => clearInterval(interval)
+  }, [])
+
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "10px", padding: "0 4px" }}>
+      <span className="thinking-sparkle" style={{ color: "var(--ai-accent)", display: "flex" }}>
+        <SparkleIcon />
+      </span>
+      <span
+        key={index}
+        className="thinking-text"
+        style={{ fontSize: "13px", color: "var(--text-2)", fontStyle: "italic" }}
+      >
+        {THINKING_PHRASES[index]}...
+      </span>
+    </div>
+  )
+}
+
 // ── Quick command suggestions ─────────────────────────────────────────────────
 
 const QUICK_COMMANDS = [
@@ -132,12 +171,7 @@ function MessageBubble({ msg }: { msg: AiMessage }) {
   const { content } = msg
 
   if (content.type === "loading") {
-    return (
-      <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "10px", padding: "0 4px" }}>
-        <span style={{ color: "var(--ai-accent)", display: "flex" }}><SparkleIcon /></span>
-        <span className="skeleton" style={{ height: "14px", width: "120px", borderRadius: "6px", display: "block" }} />
-      </div>
-    )
+    return <ThinkingIndicator />
   }
 
   if (content.type === "text" || content.type === "error") {
