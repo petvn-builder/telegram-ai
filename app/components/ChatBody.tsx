@@ -25,7 +25,7 @@ type AiMessageInput = { role: "user"; text: string } | { role: "assistant"; cont
 
 // ── Icons ─────────────────────────────────────────────────────────────────────
 
-function SparkleIcon({ size = 14 }: { size?: number }) {
+export function SparkleIcon({ size = 14 }: { size?: number }) {
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
       <path d="M12 2l2.4 7.4H22l-6.2 4.5 2.4 7.4L12 17l-6.2 4.3 2.4-7.4L2 9.4h7.6z" />
@@ -296,9 +296,9 @@ function MessageBubble({ msg }: { msg: AiMessage }) {
   return null
 }
 
-// ── AiPanel ───────────────────────────────────────────────────────────────────
+// ── ChatBody ───────────────────────────────────────────────────────────────────
 
-export default function AiPanel() {
+export default function ChatBody() {
   const { close, pendingCommand, clearPendingCommand } = useAiPanel()
   const [messages, setMessages] = useState<AiMessage[]>([])
   const [input, setInput] = useState("")
@@ -364,7 +364,7 @@ export default function AiPanel() {
         case "note_created":
           updateLastAssistantMessage({
             type: "text",
-            text: `Note saved: "${data.note.content.slice(0, 60)}${data.note.content.length > 60 ? "…" : ""}"`,
+            text: `Note saved: "${data.note.content.slice(0, 60)}${data.note.content.length > 60 ? "..." : ""}"`,
           })
           break
         case "entity_summary":
@@ -409,24 +409,10 @@ export default function AiPanel() {
   const isEmpty = messages.length === 0
 
   return (
-    <aside
-      className="ai-panel-enter"
-      style={{
-        position: "fixed",
-        top: 0,
-        right: 0,
-        bottom: 0,
-        width: "var(--ai-panel-w)",
-        background: "var(--bg-surface)",
-        borderLeft: "1px solid var(--border)",
-        display: "flex",
-        flexDirection: "column",
-        zIndex: 40,
-      }}
-    >
+    <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
       {/* Header */}
       <div style={{
-        padding: "16px 16px 14px",
+        padding: "14px 16px 12px",
         borderBottom: "1px solid var(--border)",
         display: "flex",
         alignItems: "center",
@@ -540,7 +526,7 @@ export default function AiPanel() {
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder="Ask anything…"
+            placeholder="Ask anything..."
             rows={1}
             style={{
               flex: 1,
@@ -580,6 +566,6 @@ export default function AiPanel() {
           ↵ send · shift+↵ newline
         </p>
       </div>
-    </aside>
+    </div>
   )
 }

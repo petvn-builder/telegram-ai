@@ -4,10 +4,10 @@ import { usePathname } from "next/navigation"
 import Link from "next/link"
 import dynamic from "next/dynamic"
 import Sidebar from "./Sidebar"
-import { useAiPanel } from "./AiPanelContext"
 import { useSidebar } from "./SidebarContext"
 
-const AiPanel = dynamic(() => import("./AiPanel"), { ssr: false })
+const FloatingButton = dynamic(() => import("./FloatingButton"), { ssr: false })
+const ChatModal = dynamic(() => import("./ChatModal"), { ssr: false })
 const CommandBar = dynamic(() => import("./CommandBar"), { ssr: false })
 
 const AUTH_PATHS = ["/login", "/signup"]
@@ -15,7 +15,6 @@ const AUTH_PATHS = ["/login", "/signup"]
 export default function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
   const isAuthPage = AUTH_PATHS.some((p) => pathname === p || pathname.startsWith(p + "/"))
-  const { isOpen: aiPanelOpen } = useAiPanel()
   const { isCollapsed, toggle, openMobile, isMobile } = useSidebar()
 
   if (isAuthPage) {
@@ -24,7 +23,6 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
   return (
     <div
-      className={aiPanelOpen ? "ai-panel-open" : undefined}
       style={{
         display: "flex",
         minHeight: "100vh",
@@ -116,18 +114,19 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           flex: 1,
           marginLeft: isMobile ? "0" : (isCollapsed ? "0" : "var(--sidebar-w)"),
           marginTop: isMobile ? "48px" : "0",
-          marginRight: aiPanelOpen ? "var(--ai-panel-w)" : "0",
+          marginRight: "0",
           minWidth: 0,
           display: "flex",
           flexDirection: "column",
-          transition: "margin-left 200ms ease-in-out, margin-right 220ms ease-in-out",
+          transition: "margin-left 200ms ease-in-out",
         }}
       >
         {children}
       </main>
 
-      {/* AI Panel — client-only, only mounts when open */}
-      {aiPanelOpen && <AiPanel />}
+      {/* Floating AI chat bubble + modal */}
+      <FloatingButton />
+      <ChatModal />
 
       {/* Command Bar — client-only, hidden until ⌘K */}
       <CommandBar />
