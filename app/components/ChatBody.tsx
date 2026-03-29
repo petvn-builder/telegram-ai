@@ -111,39 +111,56 @@ function inlineMarkdown(text: string): React.ReactNode {
   })
 }
 
+function renderBlock(lines: string[], i: number, isFirst: boolean): React.ReactNode {
+  const nonEmpty = lines.filter(l => l.trim())
+  if (nonEmpty.length === 0) return null
+  const isList = nonEmpty.every(l => /^\s*[-•*]\s/.test(l))
+  if (isList) {
+    return (
+      <ul key={i} style={{ margin: isFirst ? "0" : "6px 0 0", padding: 0, listStyle: "none" }}>
+        {nonEmpty.map((l, j) => (
+          <li key={j} style={{ fontSize: "13px", color: "var(--text-1)", lineHeight: 1.6, marginBottom: "2px", display: "flex", gap: "6px" }}>
+            <span style={{ color: "var(--ai-accent)", flexShrink: 0, marginTop: "1px" }}>·</span>
+            <span>{inlineMarkdown(l.replace(/^\s*[-•*]\s+/, ""))}</span>
+          </li>
+        ))}
+      </ul>
+    )
+  }
+  return (
+    <p key={i} style={{ fontSize: "13px", color: "var(--text-1)", lineHeight: 1.6, margin: isFirst ? "0" : "6px 0 0" }}>
+      {lines.map((line, j) => (
+        <span key={j}>{inlineMarkdown(line)}{j < lines.length - 1 ? <br /> : null}</span>
+      ))}
+    </p>
+  )
+}
+
 function renderMarkdown(text: string): React.ReactNode {
   const blocks = text.split(/\n\n+/)
-  return blocks.map((block, i) => {
+  const elements: React.ReactNode[] = []
+  let key = 0
+  for (const block of blocks) {
     const headingMatch = block.match(/^#{1,3}\s+(.+)/)
     if (headingMatch) {
-      return (
-        <p key={i} style={{ fontWeight: 600, fontSize: "13px", color: "var(--text-1)", margin: i === 0 ? "0 0 2px" : "8px 0 2px" }}>
+      elements.push(
+        <p key={key} style={{ fontWeight: 600, fontSize: "13px", color: "var(--text-1)", margin: key === 0 ? "0 0 2px" : "8px 0 2px" }}>
           {inlineMarkdown(headingMatch[1])}
         </p>
       )
+      key++
+      // Render remaining lines after the heading
+      const restLines = block.split("\n").slice(1)
+      if (restLines.some(l => l.trim())) {
+        elements.push(renderBlock(restLines, key, false))
+        key++
+      }
+    } else {
+      elements.push(renderBlock(block.split("\n"), key, key === 0))
+      key++
     }
-    const lines = block.split("\n")
-    const isList = lines.length > 0 && lines.filter(l => l.trim()).every(l => /^\s*[-•*]\s/.test(l))
-    if (isList) {
-      return (
-        <ul key={i} style={{ margin: i === 0 ? "0" : "6px 0 0", padding: 0, listStyle: "none" }}>
-          {lines.filter(l => l.trim()).map((l, j) => (
-            <li key={j} style={{ fontSize: "13px", color: "var(--text-1)", lineHeight: 1.6, marginBottom: "2px", display: "flex", gap: "6px" }}>
-              <span style={{ color: "var(--ai-accent)", flexShrink: 0, marginTop: "1px" }}>·</span>
-              <span>{inlineMarkdown(l.replace(/^\s*[-•*]\s+/, ""))}</span>
-            </li>
-          ))}
-        </ul>
-      )
-    }
-    return (
-      <p key={i} style={{ fontSize: "13px", color: "var(--text-1)", lineHeight: 1.6, margin: i === 0 ? "0" : "6px 0 0" }}>
-        {lines.map((line, j) => (
-          <span key={j}>{inlineMarkdown(line)}{j < lines.length - 1 ? <br /> : null}</span>
-        ))}
-      </p>
-    )
-  })
+  }
+  return elements
 }
 
 // ── Message rendering ─────────────────────────────────────────────────────────
