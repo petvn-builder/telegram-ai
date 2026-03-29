@@ -529,7 +529,8 @@ export default function GraphPage() {
   const computeNodeSize = useCallback((node: any): number => {
     if (node.type === "note") return 5
     const mc = node.mentionCount || 0
-    return 14 + (Math.log(mc + 1) / Math.log(maxMentionCount + 1)) * 28
+    const ratio = Math.log(mc + 1) / Math.log(maxMentionCount + 1)
+    return 12 + ratio * ratio * 60
   }, [maxMentionCount])
 
   // Configure physics
