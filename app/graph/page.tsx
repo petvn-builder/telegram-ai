@@ -587,6 +587,7 @@ export default function GraphPage() {
 
   // Click
   async function handleNodeClick(node: any) {
+    setPanelOpen(true)
     if (node.type === "note") {
       setPanel({ kind: "note-loading" })
       try {
