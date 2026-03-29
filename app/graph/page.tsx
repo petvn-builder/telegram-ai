@@ -737,7 +737,7 @@ export default function GraphPage() {
             onClick={() => setPanelOpen(true)}
             style={{
               position: "absolute",
-              bottom: "24px",
+              bottom: "84px",
               right: "24px",
               zIndex: 10,
               padding: "9px 16px",
