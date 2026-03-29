@@ -14,8 +14,10 @@ import {
 } from "@/app/api/notes/route"
 
 const COMMANDS = [
-  { name: "/note", description: "Save a note to your knowledge base" },
+  { name: "/save", description: "Save a note to your knowledge base" },
+  { name: "/note", description: "Save a note (alias for /save)" },
   { name: "/task", description: "Create a task (supports natural language dates)" },
+  { name: "/todo", description: "View your active tasks" },
   { name: "/entity", description: "Explore an entity from your knowledge graph" },
 ]
 
@@ -38,11 +40,11 @@ export async function POST(req: NextRequest) {
 
     const db = getSupabaseAdmin()
 
-    // ── /note <text> ────────────────────────────────────────────────────────────
-    if (/^\/note\s+/i.test(message)) {
-      const rawContent = message.replace(/^\/note\s+/i, "").trim()
+    // ── /save or /note <text> ────────────────────────────────────────────────────
+    if (/^\/(note|save)\s+/i.test(message)) {
+      const rawContent = message.replace(/^\/(note|save)\s+/i, "").trim()
       if (!rawContent) {
-        return NextResponse.json({ action: "error", text: "Please provide note content after /note" })
+        return NextResponse.json({ action: "error", text: "Please provide note content after /save or /note" })
       }
 
       const { tagNames } = extractTagTokens(rawContent)
@@ -158,6 +160,54 @@ export async function POST(req: NextRequest) {
         summary: summary ?? `No summary available for ${entity.name} yet.`,
         relatedNotes,
       })
+    }
+
+    // ── /todo → list active tasks ────────────────────────────────────────────────
+    if (/^\/todo$/i.test(message)) {
+      const { data: tasks } = await db
+        .from("tasks")
+        .select("id, title, status, due_date, priority")
+        .eq("user_id", user.id)
+        .in("status", ["doing", "next", "waiting", "inbox"])
+        .order("created_at", { ascending: false })
+        .limit(10)
+
+      if (!tasks || tasks.length === 0) {
+        return NextResponse.json({ action: "answer", text: "No active tasks. Create one with `/task <title>`" })
+      }
+
+      const PRIORITY_ORDER: Record<string, number> = { high: 0, medium: 1, low: 2 }
+      tasks.sort((a, b) => (PRIORITY_ORDER[a.priority] ?? 3) - (PRIORITY_ORDER[b.priority] ?? 3))
+
+      const sections = [
+        { status: "doing", label: "Doing" },
+        { status: "next", label: "Next" },
+        { status: "waiting", label: "Waiting" },
+        { status: "inbox", label: "Inbox" },
+      ]
+
+      const today = new Date(); today.setHours(0, 0, 0, 0)
+      const tomorrow = new Date(today); tomorrow.setDate(today.getDate() + 1)
+
+      let text = "## Tasks\n"
+      for (const { status, label } of sections) {
+        const group = tasks.filter(t => t.status === status)
+        if (group.length === 0) continue
+        text += `\n**${label}**\n`
+        for (const t of group) {
+          let line = `- ${t.title}`
+          if (t.due_date) {
+            const d = new Date(t.due_date); d.setHours(0, 0, 0, 0)
+            if (d.getTime() === today.getTime()) line += " *(today)*"
+            else if (d.getTime() === tomorrow.getTime()) line += " *(tomorrow)*"
+            else if (d < today) line += " *(overdue)*"
+            else line += ` *(${d.toLocaleDateString("en-US", { month: "short", day: "numeric" })})*`
+          }
+          text += line + "\n"
+        }
+      }
+
+      return NextResponse.json({ action: "answer", text: text.trim() })
     }
 
     // ── Natural language → semantic search + AI answer ──────────────────────────

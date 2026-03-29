@@ -54,8 +54,9 @@ function SendIcon() {
 // ── Quick command suggestions ─────────────────────────────────────────────────
 
 const QUICK_COMMANDS = [
+  "/save ",
   "/task ",
-  "/note ",
+  "/todo",
   "/entity ",
 ]
 
