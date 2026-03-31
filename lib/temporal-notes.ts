@@ -1,6 +1,21 @@
 import { askOpenAI } from "@/lib/openai"
 import type { SupabaseClient } from "@supabase/supabase-js"
 
+/**
+ * Returns true if the query contains meaningful semantic content
+ * beyond the time expression itself.
+ * "notes today"            → false (pure temporal, skip embedding)
+ * "marketing ideas today"  → true  (has topic, use semantic re-ranking)
+ */
+export function detectSemanticContent(text: string): boolean {
+  const PURE_TEMPORAL = [
+    /^(show |list |get |what did i (save|write|note)|notes?(\s+from)?)\s*(today|yesterday|last\s+\d+\s+days?|last\s+week|this\s+week|this\s+month|last\s+month)\.?$/i,
+    /^(today'?s?|yesterday'?s?)\s+notes?\.?$/i,
+    /^notes?\s+(today|yesterday|this\s+week|last\s+week|this\s+month|last\s+month)\.?$/i,
+  ]
+  return !PURE_TEMPORAL.some((rx) => rx.test(text.trim()))
+}
+
 export interface TemporalNote {
   id: string
   content: string
