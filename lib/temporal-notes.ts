@@ -82,7 +82,7 @@ export async function summarizeNotes(
   if (notes.length <= 50 && totalChars <= CHAR_LIMIT) {
     const body = notes.map((n) => n.content).join("\n---\n")
     const prompt = `Summarize the following notes saved ${rangeLabel}. Group by theme where possible. Be concise.\n\nNotes:\n${body}`
-    return await askOpenAI("", prompt)
+    return (await askOpenAI("", prompt)) ?? ""
   }
 
   // Hierarchical: chunk → summarize each → meta-summarize
@@ -95,11 +95,11 @@ export async function summarizeNotes(
     chunks.map(async (chunk) => {
       const body = chunk.map((n) => n.content).join("\n---\n")
       const prompt = `Briefly summarize this batch of personal notes:\n\n${body}`
-      return await askOpenAI("", prompt)
+      return (await askOpenAI("", prompt)) ?? ""
     })
   )
 
   const combined = chunkSummaries.join("\n\n")
   const metaPrompt = `Combine these note summaries into one coherent summary. Group by theme. The notes were saved ${rangeLabel}.\n\n${combined}`
-  return await askOpenAI("", metaPrompt)
+  return (await askOpenAI("", metaPrompt)) ?? ""
 }
