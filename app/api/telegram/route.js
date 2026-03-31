@@ -12,6 +12,25 @@ import {
 } from "@/lib/user";
 
 // ==========================================
+// TEMPORAL QUERY HELPERS
+// ==========================================
+
+/**
+ * Returns true if the query contains meaningful semantic content
+ * beyond the time expression itself.
+ * "notes today"            → false (pure temporal, skip embedding)
+ * "marketing ideas today"  → true  (has topic, use semantic re-ranking)
+ */
+function detectSemanticContent(text) {
+  const PURE_TEMPORAL = [
+    /^(show |list |get |what did i (save|write|note)|notes?(\s+from)?)\s*(today|yesterday|last\s+\d+\s+days?|last\s+week|this\s+week|this\s+month|last\s+month)\.?$/i,
+    /^(today'?s?|yesterday'?s?)\s+notes?\.?$/i,
+    /^notes?\s+(today|yesterday|this\s+week|last\s+week|this\s+month|last\s+month)\.?$/i,
+  ];
+  return !PURE_TEMPORAL.some((rx) => rx.test(text.trim()));
+}
+
+// ==========================================
 // GENERATE & SAVE ENTITY SUMMARY
 // ==========================================
 
@@ -478,6 +497,43 @@ if (text === "/todo") {
 
   // Increment BEFORE AI work
   await incrementUsage(user.id);
+
+  // ==========================================
+  // TEMPORAL QUERY HANDLER
+  // ==========================================
+
+  {
+    const { parseTimeRange } = await import("@/lib/time-parser");
+    const timeRange = parseTimeRange(text);
+
+    if (timeRange) {
+      const { fetchNotesByTimeRange, fetchNotesByTimeRangeAndSemantics, summarizeNotes } =
+        await import("@/lib/temporal-notes");
+
+      const supabase = getSupabaseAdmin();
+      let notes;
+
+      if (detectSemanticContent(text)) {
+        const queryEmbedding = await createEmbedding(text);
+        notes = await fetchNotesByTimeRangeAndSemantics(
+          supabase, userUuid, timeRange.start, timeRange.end, queryEmbedding
+        );
+      } else {
+        notes = await fetchNotesByTimeRange(
+          supabase, userUuid, timeRange.start, timeRange.end
+        );
+      }
+
+      if (!notes || notes.length === 0) {
+        await sendTelegram(chatId, `No notes found for ${timeRange.label}.`);
+        return new Response("ok");
+      }
+
+      const summary = await summarizeNotes(notes, timeRange.label);
+      await sendTelegram(chatId, summary);
+      return new Response("ok");
+    }
+  }
 
   // =========================
   // SAVE COMMAND
