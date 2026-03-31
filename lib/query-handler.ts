@@ -169,7 +169,7 @@ async function handleTask(
     ...(options.telegramMessageId && { telegram_message_id: options.telegramMessageId }),
   })
 
-  return { kind: "task_created", task: task as Record<string, unknown> }
+  return { kind: "task_created", task: task as unknown as Record<string, unknown> }
 }
 
 async function handleTodo(userId: string): Promise<AiResponse> {
