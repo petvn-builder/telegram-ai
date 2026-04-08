@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react"
 import { createPortal } from "react-dom"
 import type { TaskPriority, TaskStatus, TaskWithEntities } from "@/lib/tasks"
 import { useSidebar } from "@/app/components/SidebarContext"
+import { usePostHog } from "posthog-js/react"
 
 interface TaskRow {
   id: string
@@ -51,6 +52,7 @@ export default function CreateTaskModal({
   const [status, setStatus] = useState<TaskStatus>(initialStatus)
   const [mounted, setMounted] = useState(false)
   const { isMobile } = useSidebar()
+  const ph = usePostHog()
 
   const firstInputRef = useRef<HTMLInputElement>(null)
   const rowRefs = useRef<Map<string, HTMLInputElement>>(new Map())
@@ -119,6 +121,14 @@ export default function CreateTaskModal({
       updated_at: now,
       entities: [],
     }))
+
+    ph?.capture("task_created", {
+      task_count: valid.length,
+      status: linkedNoteId ? "inbox" : status,
+      has_due_date: valid.some((r) => r.dueDate),
+      priorities: valid.map((r) => r.priority),
+      created_from: linkedNoteId ? "note" : "manual",
+    })
 
     // Close immediately — optimistic UI
     onCreated(optimistic)

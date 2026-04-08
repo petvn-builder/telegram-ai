@@ -3,6 +3,7 @@
 import { useState } from "react"
 import Link from "next/link"
 import { getSupabaseBrowser } from "@/lib/supabase/browser"
+import { usePostHog } from "posthog-js/react"
 
 export default function SignupPage() {
   const [email, setEmail] = useState("")
@@ -10,6 +11,7 @@ export default function SignupPage() {
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState(false)
   const [loading, setLoading] = useState(false)
+  const ph = usePostHog()
 
   async function handleSignup(e: React.FormEvent) {
     e.preventDefault()
@@ -31,11 +33,13 @@ export default function SignupPage() {
       return
     }
 
+    ph?.capture("user_signed_up", { method: "email" })
     setSuccess(true)
     setLoading(false)
   }
 
   async function handleGoogleSignup() {
+    ph?.capture("user_signed_up", { method: "google" })
     const supabase = getSupabaseBrowser()
     await supabase.auth.signInWithOAuth({
       provider: "google",

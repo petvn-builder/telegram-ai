@@ -1,6 +1,7 @@
 "use client"
 
 import { useState } from "react"
+import { usePostHog } from "posthog-js/react"
 
 interface ExistingIdentity {
   telegram_user_id: string
@@ -26,8 +27,10 @@ export default function TelegramConnectPanel({ existingIdentity }: Props) {
   const [loading, setLoading] = useState(false)
   const [disconnecting, setDisconnecting] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const ph = usePostHog()
 
   async function generateLink() {
+    ph?.capture("telegram_connect_initiated")
     setLoading(true)
     setError(null)
     setDeepLink(null)
@@ -37,6 +40,7 @@ export default function TelegramConnectPanel({ existingIdentity }: Props) {
       const data = await res.json()
       if (!res.ok) throw new Error(data.error ?? "Failed to generate link")
       setDeepLink(data.deepLink)
+      ph?.capture("telegram_link_generated")
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Unknown error")
     } finally {

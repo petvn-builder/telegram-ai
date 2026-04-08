@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react"
 import type { NoteWithEntities, Space, Tag } from "./types"
+import { usePostHog } from "posthog-js/react"
 
 const SPACE_STYLE = {
   bg: "var(--accent-dim)",
@@ -102,6 +103,7 @@ export default function NoteComposer({
   const spaceInputRef = useRef<HTMLInputElement>(null)
   const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const savedNoteIdRef = useRef<string | null>(noteId ?? null)
+  const ph = usePostHog()
 
   // Auto-focus on mount
   useEffect(() => {
@@ -240,6 +242,19 @@ export default function NoteComposer({
 
       if (!savedNoteIdRef.current) {
         savedNoteIdRef.current = note.id
+        ph?.capture("note_created", {
+          note_id: note.id,
+          content_length: value.trim().length,
+          space_count: assignedSpaces.length,
+          spaces: assignedSpaces,
+          entity_count: fullNote.entities?.length ?? 0,
+          has_tags: value.includes("#"),
+        })
+      } else {
+        ph?.capture("note_updated", {
+          note_id: note.id,
+          content_length: value.trim().length,
+        })
       }
 
       if (isAutoSave) {

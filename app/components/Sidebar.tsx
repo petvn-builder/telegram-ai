@@ -10,6 +10,7 @@ import type { Space } from "@/app/notes/types"
 import { fetcher } from "@/lib/fetcher"
 import { useAiPanel } from "./AiPanelContext"
 import { useSidebar } from "./SidebarContext"
+import { usePostHog } from "posthog-js/react"
 
 // ── Icons ─────────────────────────────────────────────────────────────────────
 
@@ -125,11 +126,13 @@ function SectionHeader({ label }: { label: string }) {
 }
 
 function NavLink({ href, label, icon, isActive }: { href: string; label: string; icon: React.ReactNode; isActive: boolean }) {
+  const ph = usePostHog()
   return (
     <Link
       href={href}
       className="nav-link"
       data-active={isActive ? "true" : undefined}
+      onClick={() => ph?.capture("nav_item_clicked", { label, href })}
       style={{
         display: "flex",
         alignItems: "center",
@@ -179,6 +182,7 @@ function SidebarInner() {
   const [deletingSpaceId, setDeletingSpaceId] = useState<string | null>(null)
   const { isOpen: aiPanelOpen, toggle: toggleAiPanel } = useAiPanel()
   const { isCollapsed, toggle, isMobileOpen, closeMobile, isMobile } = useSidebar()
+  const ph = usePostHog()
 
   const activeSpaceId = searchParams.get("space")
 
@@ -239,6 +243,7 @@ function SidebarInner() {
   }
 
   async function handleSignOut() {
+    ph?.capture("user_logged_out")
     const supabase = getSupabaseBrowser()
     await supabase.auth.signOut()
     router.push("/login")

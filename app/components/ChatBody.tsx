@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react"
 import Link from "next/link"
 import { useAiPanel } from "./AiPanelContext"
 import type { NoteWithEntities, TaskWithEntities } from "@/app/notes/types"
+import { usePostHog } from "posthog-js/react"
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -357,6 +358,7 @@ export default function ChatBody() {
   const [isProcessing, setIsProcessing] = useState(false)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
+  const ph = usePostHog()
 
   // Handle pending command injected from outside (e.g., CommandBar or note detail)
   useEffect(() => {
@@ -397,6 +399,17 @@ export default function ChatBody() {
     const text = rawInput.trim()
     if (!text) return
 
+    const isFirstMessage = messages.length === 0
+    if (isFirstMessage) {
+      ph?.capture("ai_chat_opened")
+    }
+
+    ph?.capture("ai_message_sent", {
+      message_length: text.length,
+      is_command: text.startsWith("/"),
+      command: text.startsWith("/") ? text.split(" ")[0] : null,
+    })
+
     addMessage({ role: "user", text })
     setIsProcessing(true)
     addMessage({ role: "assistant", content: { type: "loading" } })
@@ -412,12 +425,14 @@ export default function ChatBody() {
       switch (data.action) {
         case "task_created":
           updateLastAssistantMessage({ type: "task_created", task: data.task })
+          ph?.capture("ai_response_received", { action: "task_created" })
           break
         case "note_created":
           updateLastAssistantMessage({
             type: "text",
             text: `Note saved: "${data.note.content.slice(0, 60)}${data.note.content.length > 60 ? "..." : ""}"`,
           })
+          ph?.capture("ai_response_received", { action: "note_created" })
           break
         case "entity_summary":
           updateLastAssistantMessage({
@@ -426,19 +441,24 @@ export default function ChatBody() {
             summary: data.summary,
             relatedNotes: data.relatedNotes ?? [],
           })
+          ph?.capture("ai_response_received", { action: "entity_summary", entity: data.entity })
           break
         case "answer":
           updateLastAssistantMessage({ type: "text", text: data.text })
+          ph?.capture("ai_response_received", { action: "answer" })
           break
         case "commands":
           updateLastAssistantMessage({ type: "commands", commands: data.commands })
+          ph?.capture("ai_response_received", { action: "commands" })
           break
         case "error":
         default:
           updateLastAssistantMessage({ type: "error", text: data.text ?? "Something went wrong." })
+          ph?.capture("ai_response_received", { action: "error" })
       }
     } catch {
       updateLastAssistantMessage({ type: "error", text: "Failed to reach the AI. Please try again." })
+      ph?.capture("ai_response_received", { action: "error" })
     }
 
     setIsProcessing(false)

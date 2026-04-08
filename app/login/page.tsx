@@ -4,6 +4,7 @@ import { useState, Suspense } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import Link from "next/link"
 import { getSupabaseBrowser } from "@/lib/supabase/browser"
+import { usePostHog } from "posthog-js/react"
 
 function LoginForm() {
   const [email, setEmail] = useState("")
@@ -13,6 +14,7 @@ function LoginForm() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const next = searchParams.get("next") ?? "/dashboard"
+  const ph = usePostHog()
 
   async function handleEmailLogin(e: React.FormEvent) {
     e.preventDefault()
@@ -28,11 +30,13 @@ function LoginForm() {
       return
     }
 
+    ph?.capture("user_logged_in", { method: "email" })
     router.push(next)
     router.refresh()
   }
 
   async function handleGoogleLogin() {
+    ph?.capture("user_logged_in", { method: "google" })
     const supabase = getSupabaseBrowser()
     await supabase.auth.signInWithOAuth({
       provider: "google",
