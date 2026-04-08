@@ -42,11 +42,11 @@ const nextConfig: NextConfig = {
             key: "Content-Security-Policy",
             value: `
               default-src 'self';
-              script-src 'self' ${isDev ? "'unsafe-eval'" : ""} 'unsafe-inline';
+              script-src 'self' ${isDev ? "'unsafe-eval'" : ""} 'unsafe-inline' https://us-assets.i.posthog.com;
               style-src 'self' 'unsafe-inline';
-              img-src 'self' data: blob: https://lh3.googleusercontent.com;
+              img-src 'self' data: blob: https://lh3.googleusercontent.com https://us.i.posthog.com;
               font-src 'self' data:;
-              connect-src 'self' http://localhost:3000 ws://localhost:3000 ${supabaseOrigin} ${supabaseHostname ? `wss://${supabaseHostname}` : ""};
+              connect-src 'self' http://localhost:3000 ws://localhost:3000 ${supabaseOrigin} ${supabaseHostname ? `wss://${supabaseHostname}` : ""} https://us.i.posthog.com https://us-assets.i.posthog.com;
               frame-src 'self';
             `.replace(/\n/g, ""),
           },
