@@ -35,8 +35,10 @@ export async function POST(req) {
     storeGroupMessage(
       chatId,
       String(message.from.id),
-      message.from.username || message.from.first_name || "User",
-      text
+      message.from.username || "",
+      text,
+      message.from.first_name || "",
+      message.from.last_name || ""
     ).catch(console.error);
 
     // In groups, only respond to slash commands — all other messages are stored silently
@@ -109,7 +111,7 @@ Everything you save is private, organized, and instantly searchable.`);
   if (/^\/pet(@\w+)?(\s|$)/i.test(text)) {
     const recent = await getRecentMessages(chatId);
     conversationContext = recent
-      .map((m) => `${m.username || "User"}: ${m.text}`)
+      .map((m) => `${m.displayName}: ${m.text}`)
       .join("\n");
     console.log(`[TG /pet] fetched ${recent.length} recent messages for chat ${chatId}`);
     console.log("[TG /pet] conversation context:\n" + (conversationContext || "(empty)"));

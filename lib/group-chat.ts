@@ -10,7 +10,9 @@ export async function storeGroupMessage(
   chatId: string,
   telegramUserId: string,
   username: string,
-  text: string
+  text: string,
+  firstName?: string,
+  lastName?: string
 ): Promise<void> {
   const db = getSupabaseAdmin()
 
@@ -18,6 +20,8 @@ export async function storeGroupMessage(
     chat_id: chatId,
     telegram_user_id: telegramUserId,
     username,
+    first_name: firstName ?? null,
+    last_name: lastName ?? null,
     text,
   })
 
@@ -39,15 +43,16 @@ export async function getRecentMessages(
   chatId: string,
   limit = 30,
   windowMinutes = 15
-): Promise<Array<{ username: string; text: string }>> {
+): Promise<Array<{ displayName: string; text: string }>> {
   const db = getSupabaseAdmin()
 
   const windowStart = new Date(Date.now() - windowMinutes * 60 * 1000).toISOString()
+  const fields = "username, first_name, last_name, text, created_at"
 
   // Fetch last `limit` rows regardless of time
   const { data: byCount } = await db
     .from("group_messages")
-    .select("username, text, created_at")
+    .select(fields)
     .eq("chat_id", chatId)
     .order("created_at", { ascending: false })
     .limit(limit)
@@ -57,7 +62,7 @@ export async function getRecentMessages(
   // Also fetch rows within the time window (may overlap)
   const { data: byTime } = await db
     .from("group_messages")
-    .select("username, text, created_at")
+    .select(fields)
     .eq("chat_id", chatId)
     .gte("created_at", windowStart)
     .order("created_at", { ascending: false })
@@ -68,7 +73,7 @@ export async function getRecentMessages(
   // Union: keep whichever set is larger, dedup by (created_at + text)
   const source = timeRows.length >= countRows.length ? timeRows : countRows
   const seen = new Set<string>()
-  const merged: Array<{ username: string; text: string; created_at: string }> = []
+  const merged: Array<{ username: string; first_name: string | null; last_name: string | null; text: string; created_at: string }> = []
 
   for (const row of source) {
     const key = `${row.created_at}::${row.text}`
@@ -81,5 +86,8 @@ export async function getRecentMessages(
   // Sort oldest → newest for natural reading order
   merged.sort((a, b) => a.created_at.localeCompare(b.created_at))
 
-  return merged.map(({ username, text }) => ({ username, text }))
+  return merged.map(({ first_name, last_name, username, text }) => {
+    const displayName = [first_name, last_name].filter(Boolean).join(" ") || username || "User"
+    return { displayName, text }
+  })
 }
