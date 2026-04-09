@@ -22,12 +22,12 @@ export async function storeGroupMessage(
   })
 
   // Fire-and-forget cleanup — keeps the table small
-  db.from("group_messages")
-    .delete()
-    .eq("chat_id", chatId)
-    .lt("created_at", new Date(Date.now() - PURGE_WINDOW_MS).toISOString())
-    .then(() => {})
-    .catch((err: unknown) => console.error("[group-chat] cleanup error", err))
+  Promise.resolve(
+    db.from("group_messages")
+      .delete()
+      .eq("chat_id", chatId)
+      .lt("created_at", new Date(Date.now() - PURGE_WINDOW_MS).toISOString())
+  ).catch((err: unknown) => console.error("[group-chat] cleanup error", err))
 }
 
 /**
