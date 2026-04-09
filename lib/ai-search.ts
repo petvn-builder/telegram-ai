@@ -141,13 +141,40 @@ export async function buildKnowledgeContext(userId: string, question: string): P
  * Tier 2: vector similarity search, filtered by entity relevance gate.
  * Returns the AI's answer.
  */
-export async function semanticSearch(userId: string, question: string): Promise<string> {
+export async function semanticSearch(
+  userId: string,
+  question: string,
+  conversationHistory = ""
+): Promise<string> {
   const combinedMemory = await buildKnowledgeContext(userId, question)
 
   console.log("----- FINAL MEMORY SENT TO OPENAI -----")
   console.log(combinedMemory || "(no memory)")
   console.log("----------------------------------------")
 
-  const aiResponse = await askOpenAI(combinedMemory, question)
+  const aiResponse = await askOpenAI(combinedMemory, question, conversationHistory)
   return aiResponse ?? "I couldn't find an answer based on your notes."
+}
+
+/**
+ * Fetch the last N user/ai conversation turns for a user from the knowledge table,
+ * formatted as a readable history string (oldest → newest).
+ */
+export async function getRecentConversation(userId: string, limit = 10): Promise<string> {
+  const db = getSupabaseAdmin()
+
+  const { data } = await db
+    .from("knowledge")
+    .select("role, content, created_at")
+    .eq("user_id", userId)
+    .in("role", ["user", "ai"])
+    .order("created_at", { ascending: false })
+    .limit(limit)
+
+  if (!data || data.length === 0) return ""
+
+  return [...data]
+    .reverse() // oldest → newest
+    .map((r) => `${r.role === "user" ? "User" : "Assistant"}: ${r.content}`)
+    .join("\n")
 }

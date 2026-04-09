@@ -23,7 +23,8 @@ import type { AiResponse } from "@/lib/types"
 
 export interface QueryOptions {
   telegramMessageId?: string
-  conversationContext?: string
+  conversationContext?: string  // group /pet context
+  recentConversation?: string   // 1:1 conversation history
 }
 
 export const COMMANDS = [
@@ -93,7 +94,7 @@ export async function handleQuery(
   }
 
   // ── Semantic search fallthrough ───────────────────────────────────────────────
-  const answer = await semanticSearch(userId, message)
+  const answer = await semanticSearch(userId, message, options.recentConversation ?? "")
   return { kind: "answer", text: answer }
 }
 

@@ -106,7 +106,7 @@ Everything you save is private, organized, and instantly searchable.`);
   }
   await incrementUsage(user.id);
 
-  // ── Build conversation context for /pet ──────────────────────────────────────
+  // ── Build conversation context for /pet (group) ──────────────────────────────
   let conversationContext = "";
   if (/^\/pet(@\w+)?(\s|$)/i.test(text)) {
     const recent = await getRecentMessages(chatId);
@@ -117,10 +117,18 @@ Everything you save is private, organized, and instantly searchable.`);
     console.log("[TG /pet] conversation context:\n" + (conversationContext || "(empty)"));
   }
 
+  // ── Fetch recent 1:1 conversation history ────────────────────────────────────
+  let recentConversation = "";
+  if (!isGroup) {
+    const { getRecentConversation } = await import("@/lib/ai-search");
+    recentConversation = await getRecentConversation(userUuid);
+  }
+
   // ── Dispatch ─────────────────────────────────────────────────────────────────
   const response = await handleQuery(userUuid, text, {
     telegramMessageId: String(message.message_id),
     conversationContext,
+    recentConversation,
   });
 
   await sendTelegram(chatId, formatForTelegram(response));
@@ -137,6 +145,24 @@ Everything you save is private, organized, and instantly searchable.`);
       { user_id: userUuid, content: text,       role: "user", embedding: userEmbedding },
       { user_id: userUuid, content: answerText,  role: "ai",   embedding: aiEmbedding  },
     ]);
+
+    // Prune: keep only the latest 10 conversation rows (user+ai) per user
+    ;(async () => {
+      const { data: rows } = await supabase
+        .from("knowledge")
+        .select("id, created_at")
+        .eq("user_id", userUuid)
+        .in("role", ["user", "ai"])
+        .order("created_at", { ascending: false })
+        .limit(11);
+      if (rows && rows.length === 11) {
+        const cutoff = rows[10].created_at;
+        await supabase.from("knowledge").delete()
+          .eq("user_id", userUuid)
+          .in("role", ["user", "ai"])
+          .lte("created_at", cutoff);
+      }
+    })().catch(console.error);
   }
 
   return new Response("ok");
