@@ -28,7 +28,7 @@ export interface QueryOptions {
 }
 
 export const COMMANDS = [
-  { name: "/pet", description: "Ask the group AI (uses your knowledge + recent chat context)" },
+  { name: "@ai_3veryone_bot", description: "Ask the group AI (uses your knowledge + recent chat context)" },
   { name: "/save", description: "Save a note to your knowledge base" },
   { name: "/note", description: "Save a note (alias for /save)" },
   { name: "/task", description: "Create a task (supports natural language dates)" },
@@ -42,8 +42,8 @@ export async function handleQuery(
   options: QueryOptions = {}
 ): Promise<AiResponse> {
   // ── /pet (group chat AI) ──────────────────────────────────────────────────────
-  if (/^\/pet(@\w+)?(\s|$)/i.test(message)) {
-    const question = message.replace(/^\/pet(@\w+)?\s*/i, "").trim()
+  if (/@ai_3veryone_bot/i.test(message)) {
+    const question = message.replace(/@ai_3veryone_bot\s*/gi, "").trim()
     return handlePet(userId, question, options.conversationContext ?? "")
   }
 

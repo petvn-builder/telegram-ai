@@ -108,13 +108,13 @@ Everything you save is private, organized, and instantly searchable.`);
 
   // ── Build conversation context for /pet (group) ──────────────────────────────
   let conversationContext = "";
-  if (/^\/pet(@\w+)?(\s|$)/i.test(text)) {
+  if (/@ai_3veryone_bot/i.test(text)) {
     const recent = await getRecentMessages(chatId);
     conversationContext = recent
       .map((m) => `${m.displayName}: ${m.text}`)
       .join("\n");
-    console.log(`[TG /pet] fetched ${recent.length} recent messages for chat ${chatId}`);
-    console.log("[TG /pet] conversation context:\n" + (conversationContext || "(empty)"));
+    console.log(`[TG @mention] fetched ${recent.length} recent messages for chat ${chatId}`);
+    console.log("[TG @mention] conversation context:\n" + (conversationContext || "(empty)"));
   }
 
   // ── Fetch recent 1:1 conversation history ────────────────────────────────────
