@@ -144,7 +144,8 @@ export async function buildKnowledgeContext(userId: string, question: string): P
 export async function semanticSearch(
   userId: string,
   question: string,
-  conversationHistory = ""
+  conversationHistory = "",
+  tone = "professional"
 ): Promise<string> {
   const combinedMemory = await buildKnowledgeContext(userId, question)
 
@@ -152,7 +153,7 @@ export async function semanticSearch(
   console.log(combinedMemory || "(no memory)")
   console.log("----------------------------------------")
 
-  const aiResponse = await askOpenAI(combinedMemory, question, conversationHistory)
+  const aiResponse = await askOpenAI(combinedMemory, question, conversationHistory, tone)
   return aiResponse ?? "I couldn't find an answer based on your notes."
 }
 

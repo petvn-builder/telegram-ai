@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation"
 import { getSupabaseServer } from "@/lib/supabase/server"
 import TelegramConnectPanel from "./TelegramConnectPanel"
+import TonePicker from "./TonePicker"
 
 export default async function SettingsPage() {
   const supabase = await getSupabaseServer()
@@ -8,11 +9,18 @@ export default async function SettingsPage() {
 
   if (!user) redirect("/login")
 
-  const { data: identity } = await supabase
-    .from("user_identities")
-    .select("telegram_user_id, telegram_username, created_at")
-    .eq("user_id", user.id)
-    .maybeSingle()
+  const [{ data: identity }, { data: userSettings }] = await Promise.all([
+    supabase
+      .from("user_identities")
+      .select("telegram_user_id, telegram_username, created_at")
+      .eq("user_id", user.id)
+      .maybeSingle(),
+    supabase
+      .from("user_settings")
+      .select("tone")
+      .eq("user_id", user.id)
+      .maybeSingle(),
+  ])
 
   return (
     <div
@@ -86,6 +94,7 @@ export default async function SettingsPage() {
           border: "1px solid var(--border)",
           borderRadius: "14px",
           padding: "28px",
+          marginBottom: "20px",
         }}>
           <h2 style={{
             fontSize: "13px",
@@ -97,6 +106,25 @@ export default async function SettingsPage() {
           </h2>
 
           <TelegramConnectPanel existingIdentity={identity ?? null} />
+        </div>
+
+        {/* Response style section */}
+        <div style={{
+          background: "var(--bg-surface)",
+          border: "1px solid var(--border)",
+          borderRadius: "14px",
+          padding: "28px",
+        }}>
+          <h2 style={{
+            fontSize: "13px",
+            fontWeight: 500,
+            color: "var(--text-2)",
+            margin: "0 0 20px",
+          }}>
+            Response Style
+          </h2>
+
+          <TonePicker initialTone={userSettings?.tone ?? "professional"} />
         </div>
 
       </div>

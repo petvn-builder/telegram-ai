@@ -23,8 +23,9 @@ import type { AiResponse } from "@/lib/types"
 
 export interface QueryOptions {
   telegramMessageId?: string
-  conversationContext?: string  // group /pet context
+  conversationContext?: string  // group @mention context
   recentConversation?: string   // 1:1 conversation history
+  tone?: string                 // response style from user_settings
 }
 
 export const COMMANDS = [
@@ -41,10 +42,10 @@ export async function handleQuery(
   message: string,
   options: QueryOptions = {}
 ): Promise<AiResponse> {
-  // ── /pet (group chat AI) ──────────────────────────────────────────────────────
+  // ── @mention (group chat AI) ─────────────────────────────────────────────────
   if (/@ai_3veryone_bot/i.test(message)) {
     const question = message.replace(/@ai_3veryone_bot\s*/gi, "").trim()
-    return handlePet(userId, question, options.conversationContext ?? "")
+    return handlePet(userId, question, options.conversationContext ?? "", options.tone)
   }
 
   // ── Command list ──────────────────────────────────────────────────────────────
@@ -94,7 +95,7 @@ export async function handleQuery(
   }
 
   // ── Semantic search fallthrough ───────────────────────────────────────────────
-  const answer = await semanticSearch(userId, message, options.recentConversation ?? "")
+  const answer = await semanticSearch(userId, message, options.recentConversation ?? "", options.tone)
   return { kind: "answer", text: answer }
 }
 
@@ -253,12 +254,13 @@ async function handleEntity(userId: string, entityName: string): Promise<AiRespo
 async function handlePet(
   userId: string,
   question: string,
-  conversationContext: string
+  conversationContext: string,
+  tone?: string
 ): Promise<AiResponse> {
   // Get personal knowledge context (entity + semantic RAG) without calling LLM
   const knowledge = await buildKnowledgeContext(userId, question || "recent conversation context")
 
-  const answer = await askPetAI(knowledge, conversationContext, question)
+  const answer = await askPetAI(knowledge, conversationContext, question, tone)
   return { kind: "answer", text: answer ?? "Sorry, I couldn't generate a response." }
 }
 

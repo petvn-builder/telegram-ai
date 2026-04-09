@@ -124,11 +124,20 @@ Everything you save is private, organized, and instantly searchable.`);
     recentConversation = await getRecentConversation(userUuid);
   }
 
+  // ── Fetch user tone preference ────────────────────────────────────────────────
+  const { data: userSettings } = await getSupabaseAdmin()
+    .from("user_settings")
+    .select("tone")
+    .eq("user_id", userUuid)
+    .maybeSingle();
+  const tone = userSettings?.tone ?? "professional";
+
   // ── Dispatch ─────────────────────────────────────────────────────────────────
   const response = await handleQuery(userUuid, text, {
     telegramMessageId: String(message.message_id),
     conversationContext,
     recentConversation,
+    tone,
   });
 
   await sendTelegram(chatId, formatForTelegram(response));
