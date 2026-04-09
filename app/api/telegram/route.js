@@ -38,6 +38,9 @@ export async function POST(req) {
       message.from.username || message.from.first_name || "User",
       text
     ).catch(console.error);
+
+    // In groups, only respond to slash commands — all other messages are stored silently
+    if (!text.startsWith("/")) return new Response("ok");
   }
 
   // ── Account linking ─────────────────────────────────────────────────────────
@@ -108,6 +111,8 @@ Everything you save is private, organized, and instantly searchable.`);
     conversationContext = recent
       .map((m) => `${m.username || "User"}: ${m.text}`)
       .join("\n");
+    console.log(`[TG /pet] fetched ${recent.length} recent messages for chat ${chatId}`);
+    console.log("[TG /pet] conversation context:\n" + (conversationContext || "(empty)"));
   }
 
   // ── Dispatch ─────────────────────────────────────────────────────────────────
