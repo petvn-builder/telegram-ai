@@ -41,8 +41,8 @@ export async function POST(req) {
       message.from.last_name || ""
     ).catch(console.error);
 
-    // In groups, only respond to slash commands — all other messages are stored silently
-    if (!text.startsWith("/")) return new Response("ok");
+    // In groups, only respond to slash commands or @ai_3veryone_bot mentions
+    if (!text.startsWith("/") && !/@ai_3veryone_bot/i.test(text)) return new Response("ok");
   }
 
   // ── Account linking ─────────────────────────────────────────────────────────
