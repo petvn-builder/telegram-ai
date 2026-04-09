@@ -4,7 +4,8 @@ import { createEmbedding } from "@/lib/embeddings"
 import { upsertEntitiesAndLink } from "@/lib/entities"
 import { parseTaskText, createTask } from "@/lib/tasks"
 import { getOrGenerateSummary } from "@/lib/entity-summary"
-import { semanticSearch } from "@/lib/ai-search"
+import { semanticSearch, buildKnowledgeContext } from "@/lib/ai-search"
+import { askPetAI } from "@/lib/openai"
 import { parseTimeRange } from "@/lib/time-parser"
 import {
   detectSemanticContent,
@@ -22,9 +23,11 @@ import type { AiResponse } from "@/lib/types"
 
 export interface QueryOptions {
   telegramMessageId?: string
+  conversationContext?: string
 }
 
 export const COMMANDS = [
+  { name: "/pet", description: "Ask the group AI (uses your knowledge + recent chat context)" },
   { name: "/save", description: "Save a note to your knowledge base" },
   { name: "/note", description: "Save a note (alias for /save)" },
   { name: "/task", description: "Create a task (supports natural language dates)" },
@@ -37,6 +40,12 @@ export async function handleQuery(
   message: string,
   options: QueryOptions = {}
 ): Promise<AiResponse> {
+  // ── /pet (group chat AI) ──────────────────────────────────────────────────────
+  if (/^\/pet(@\w+)?(\s|$)/i.test(message)) {
+    const question = message.replace(/^\/pet(@\w+)?\s*/i, "").trim()
+    return handlePet(userId, question, options.conversationContext ?? "")
+  }
+
   // ── Command list ──────────────────────────────────────────────────────────────
   if (message === "/") {
     return { kind: "commands", commands: COMMANDS }
@@ -238,6 +247,18 @@ async function handleEntity(userId: string, entityName: string): Promise<AiRespo
     summary: summary ?? `No summary available for ${entity.name} yet.`,
     relatedNotes,
   }
+}
+
+async function handlePet(
+  userId: string,
+  question: string,
+  conversationContext: string
+): Promise<AiResponse> {
+  // Get personal knowledge context (entity + semantic RAG) without calling LLM
+  const knowledge = await buildKnowledgeContext(userId, question || "recent conversation context")
+
+  const answer = await askPetAI(knowledge, conversationContext, question)
+  return { kind: "answer", text: answer ?? "Sorry, I couldn't generate a response." }
 }
 
 async function handleTemporalQuery(

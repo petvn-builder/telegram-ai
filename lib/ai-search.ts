@@ -8,12 +8,10 @@ const MAX_MEMORY_CHARS = 2000
 const MAX_ENTITIES = 5
 
 /**
- * Two-tier entity-aware semantic search over a user's knowledge base.
- * Tier 1: match entity names in the question, inject linked notes as entity context.
- * Tier 2: vector similarity search, filtered by entity relevance gate.
- * Returns the AI's answer.
+ * Build the combined knowledge context string (entity context + semantic memory)
+ * for a user's query without calling the LLM. Shared by semanticSearch and /pet.
  */
-export async function semanticSearch(userId: string, question: string): Promise<string> {
+export async function buildKnowledgeContext(userId: string, question: string): Promise<string> {
   const db = getSupabaseAdmin()
 
   let graphMemory = ""
@@ -32,7 +30,6 @@ export async function semanticSearch(userId: string, question: string): Promise<
     matchedEntityIds.add(entity.id)
     matchedEntityNames.add(entity.name.toLowerCase().trim())
 
-    // Fetch full entity record for summary
     const { data: fullEntity } = await db
       .from("entities")
       .select("summary")
@@ -125,14 +122,7 @@ export async function semanticSearch(userId: string, question: string): Promise<
   }
 
   console.log(`[WEB AI] Tier 2 (semantic, threshold=${SIMILARITY_THRESHOLD}): ${tier2Count} notes added`)
-  console.log(`[WEB AI] Final: ${entityLinkedNoteIds.size + tier2Count} notes total sent to OpenAI`)
-  console.log("----- MEMORY SENT TO OPENAI -----")
-  console.log(memory || "(empty)")
-  console.log("----- USER MESSAGE -----")
-  console.log(question)
-  console.log("----------------------------------")
-
-  // ── Build combined memory and call AI ──────────────────────────────────────
+  console.log(`[WEB AI] Final: ${entityLinkedNoteIds.size + tier2Count} notes total`)
 
   let combinedMemory = ""
   if (graphMemory.trim()) {
@@ -141,6 +131,18 @@ export async function semanticSearch(userId: string, question: string): Promise<
   if (memory.trim()) {
     combinedMemory += "=== RELEVANT MEMORY ===\n" + memory.trim()
   }
+
+  return combinedMemory
+}
+
+/**
+ * Two-tier entity-aware semantic search over a user's knowledge base.
+ * Tier 1: match entity names in the question, inject linked notes as entity context.
+ * Tier 2: vector similarity search, filtered by entity relevance gate.
+ * Returns the AI's answer.
+ */
+export async function semanticSearch(userId: string, question: string): Promise<string> {
+  const combinedMemory = await buildKnowledgeContext(userId, question)
 
   console.log("----- FINAL MEMORY SENT TO OPENAI -----")
   console.log(combinedMemory || "(no memory)")

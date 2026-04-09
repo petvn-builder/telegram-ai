@@ -2,6 +2,7 @@ import { createEmbedding } from "@/lib/embeddings";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import { getOrCreateUser, resetIfNewDay, isLimitReached, incrementUsage } from "@/lib/user";
 import { handleQuery, COMMANDS } from "@/lib/query-handler";
+import { storeGroupMessage, getRecentMessages } from "@/lib/group-chat";
 
 // ── UUID lookup ───────────────────────────────────────────────────────────────
 
@@ -24,9 +25,20 @@ export async function POST(req) {
 
   const chatId = message.chat.id.toString();
   const text = message.text;
+  const isGroup = ["group", "supergroup"].includes(message.chat?.type);
 
   console.log("[TG] raw text:", JSON.stringify(text));
   if (!text) return new Response("ok");
+
+  // ── Store group messages for /pet context (fire-and-forget) ─────────────────
+  if (isGroup) {
+    storeGroupMessage(
+      chatId,
+      String(message.from.id),
+      message.from.username || message.from.first_name || "User",
+      text
+    ).catch(console.error);
+  }
 
   // ── Account linking ─────────────────────────────────────────────────────────
   if (text.startsWith("/start link_")) {
@@ -42,6 +54,7 @@ export async function POST(req) {
   }
 
   // ── Welcome ─────────────────────────────────────────────────────────────────
+  if (text === "/start" && isGroup) return new Response("ok"); // suppress in groups
   if (text === "/start") {
     await getOrCreateUser(message.from.id, message.from.username || "");
     await sendTelegram(chatId, `🧠 Welcome to Your AI Memory Assistant
@@ -88,9 +101,19 @@ Everything you save is private, organized, and instantly searchable.`);
   }
   await incrementUsage(user.id);
 
+  // ── Build conversation context for /pet ──────────────────────────────────────
+  let conversationContext = "";
+  if (/^\/pet(@\w+)?(\s|$)/i.test(text)) {
+    const recent = await getRecentMessages(chatId);
+    conversationContext = recent
+      .map((m) => `${m.username || "User"}: ${m.text}`)
+      .join("\n");
+  }
+
   // ── Dispatch ─────────────────────────────────────────────────────────────────
   const response = await handleQuery(userUuid, text, {
     telegramMessageId: String(message.message_id),
+    conversationContext,
   });
 
   await sendTelegram(chatId, formatForTelegram(response));
