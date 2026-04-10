@@ -1,10 +1,10 @@
 import { getSupabaseAdmin } from "@/lib/supabase/admin"
 
-const PURGE_WINDOW_MS = 30 * 60 * 1000 // 30 minutes
+const MAX_MESSAGES_PER_GROUP = 30
 
 /**
- * Persist an incoming group message and purge messages older than 30 min
- * for the same chat (delete-on-insert — no cron needed).
+ * Persist an incoming group message and prune to keep only the latest
+ * MAX_MESSAGES_PER_GROUP rows per chat (delete-on-insert — no cron needed).
  */
 export async function storeGroupMessage(
   chatId: string,
@@ -25,13 +25,23 @@ export async function storeGroupMessage(
     text,
   })
 
-  // Fire-and-forget cleanup — keeps the table small
-  Promise.resolve(
-    db.from("group_messages")
-      .delete()
+  // Fire-and-forget: keep only the latest MAX_MESSAGES_PER_GROUP rows per chat
+  ;(async () => {
+    const { data: rows } = await db
+      .from("group_messages")
+      .select("id, created_at")
       .eq("chat_id", chatId)
-      .lt("created_at", new Date(Date.now() - PURGE_WINDOW_MS).toISOString())
-  ).catch((err: unknown) => console.error("[group-chat] cleanup error", err))
+      .order("created_at", { ascending: false })
+      .limit(MAX_MESSAGES_PER_GROUP + 1)
+
+    if (rows && rows.length === MAX_MESSAGES_PER_GROUP + 1) {
+      const cutoff = rows[MAX_MESSAGES_PER_GROUP].created_at
+      await db.from("group_messages")
+        .delete()
+        .eq("chat_id", chatId)
+        .lte("created_at", cutoff)
+    }
+  })().catch((err: unknown) => console.error("[group-chat] cleanup error", err))
 }
 
 /**
