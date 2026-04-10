@@ -41,52 +41,20 @@ export async function storeGroupMessage(
  */
 export async function getRecentMessages(
   chatId: string,
-  limit = 30,
-  windowMinutes = 15
+  limit = 30
 ): Promise<Array<{ displayName: string; text: string }>> {
   const db = getSupabaseAdmin()
 
-  const windowStart = new Date(Date.now() - windowMinutes * 60 * 1000).toISOString()
-  const fields = "username, first_name, last_name, text, created_at"
-
-  // Fetch last `limit` rows regardless of time
-  const { data: byCount } = await db
+  const { data: rows } = await db
     .from("group_messages")
-    .select(fields)
+    .select("username, first_name, last_name, text, created_at")
     .eq("chat_id", chatId)
     .order("created_at", { ascending: false })
     .limit(limit)
 
-  const countRows = byCount ?? []
+  const sorted = (rows ?? []).sort((a, b) => a.created_at.localeCompare(b.created_at))
 
-  // Also fetch rows within the time window (may overlap)
-  const { data: byTime } = await db
-    .from("group_messages")
-    .select(fields)
-    .eq("chat_id", chatId)
-    .gte("created_at", windowStart)
-    .order("created_at", { ascending: false })
-    .limit(limit)
-
-  const timeRows = byTime ?? []
-
-  // Union: keep whichever set is larger, dedup by (created_at + text)
-  const source = timeRows.length >= countRows.length ? timeRows : countRows
-  const seen = new Set<string>()
-  const merged: Array<{ username: string; first_name: string | null; last_name: string | null; text: string; created_at: string }> = []
-
-  for (const row of source) {
-    const key = `${row.created_at}::${row.text}`
-    if (!seen.has(key)) {
-      seen.add(key)
-      merged.push(row)
-    }
-  }
-
-  // Sort oldest → newest for natural reading order
-  merged.sort((a, b) => a.created_at.localeCompare(b.created_at))
-
-  return merged.map(({ first_name, last_name, username, text }) => {
+  return sorted.map(({ first_name, last_name, username, text }) => {
     const displayName = [first_name, last_name].filter(Boolean).join(" ") || username || "User"
     return { displayName, text }
   })
