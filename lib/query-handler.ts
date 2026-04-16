@@ -21,6 +21,7 @@ import {
   extractTagTokens,
   syncNoteTags,
 } from "@/app/api/notes/route"
+import { pullFromGoogle } from "@/lib/google/task-sync"
 import type { AiResponse } from "@/lib/types"
 
 export interface QueryOptions {
@@ -209,6 +210,12 @@ async function handleTask(
 }
 
 async function handleTodo(userId: string): Promise<AiResponse> {
+  // Pull from Google Tasks with 3s timeout for freshness
+  await Promise.race([
+    pullFromGoogle(userId),
+    new Promise((r) => setTimeout(r, 3000)),
+  ])
+
   const db = getSupabaseAdmin()
 
   const { data: tasks } = await db

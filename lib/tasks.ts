@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js"
+import { pushCreate } from "@/lib/google/task-sync"
 
 export type TaskStatus = "inbox" | "next" | "doing" | "waiting" | "done"
 export type TaskPriority = "low" | "medium" | "high"
@@ -66,6 +67,15 @@ export async function createTask(
   if (error || !task) throw error ?? new Error("Task insert failed")
 
   const entities = await linkTaskEntities(db, userId, task.id, input.title)
+
+  // Push to Google Tasks in the background
+  const syncWork = pushCreate(userId, task)
+  try {
+    const { waitUntil } = await import("@vercel/functions")
+    waitUntil(syncWork)
+  } catch {
+    syncWork.catch(() => {})
+  }
 
   return { ...task, entities }
 }

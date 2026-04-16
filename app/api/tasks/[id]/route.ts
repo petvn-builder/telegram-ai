@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getSupabaseServer } from "@/lib/supabase/server"
 import { getSupabaseAdmin } from "@/lib/supabase/admin"
+import { pushUpdate, pushDelete } from "@/lib/google/task-sync"
 
 // ── PATCH /api/tasks/:id ───────────────────────────────────────────────────────
 
@@ -27,11 +28,20 @@ export async function PATCH(
       .update(updates)
       .eq("id", id)
       .eq("user_id", user.id)
-      .select()
+      .select("*, google_task_id, google_task_list_id")
       .single()
 
     if (error) return NextResponse.json({ error: "Update failed" }, { status: 500 })
     if (!data) return NextResponse.json({ error: "Not found" }, { status: 404 })
+
+    // Push update to Google Tasks in the background
+    const syncWork = pushUpdate(user.id, data)
+    try {
+      const { waitUntil } = await import("@vercel/functions")
+      waitUntil(syncWork)
+    } catch {
+      syncWork.catch(() => {})
+    }
 
     return NextResponse.json(data)
   } catch (error) {
@@ -53,6 +63,15 @@ export async function DELETE(
     if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
 
     const db = getSupabaseAdmin()
+
+    // Fetch google_task_id before deleting
+    const { data: task } = await db
+      .from("tasks")
+      .select("google_task_id, google_task_list_id")
+      .eq("id", id)
+      .eq("user_id", user.id)
+      .maybeSingle()
+
     const { error } = await db
       .from("tasks")
       .delete()
@@ -60,6 +79,18 @@ export async function DELETE(
       .eq("user_id", user.id)
 
     if (error) return NextResponse.json({ error: "Delete failed" }, { status: 500 })
+
+    // Push delete to Google Tasks in the background
+    if (task?.google_task_id) {
+      const syncWork = pushDelete(user.id, task.google_task_id, task.google_task_list_id || "@default")
+      try {
+        const { waitUntil } = await import("@vercel/functions")
+        waitUntil(syncWork)
+      } catch {
+        syncWork.catch(() => {})
+      }
+    }
+
     return NextResponse.json({ ok: true })
   } catch (error) {
     console.error("Tasks DELETE error:", error)

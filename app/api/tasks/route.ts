@@ -3,6 +3,7 @@ import { getSupabaseServer } from "@/lib/supabase/server"
 import { getSupabaseAdmin } from "@/lib/supabase/admin"
 import { createTask } from "@/lib/tasks"
 import type { CreateTaskInput } from "@/lib/tasks"
+import { pullFromGoogle } from "@/lib/google/task-sync"
 
 // ── GET /api/tasks ─────────────────────────────────────────────────────────────
 
@@ -11,6 +12,15 @@ export async function GET(req: NextRequest) {
     const authClient = await getSupabaseServer()
     const { data: { user } } = await authClient.auth.getUser()
     if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+
+    // Pull from Google Tasks in the background
+    const syncWork = pullFromGoogle(user.id)
+    try {
+      const { waitUntil } = await import("@vercel/functions")
+      waitUntil(syncWork)
+    } catch {
+      syncWork.catch(() => {})
+    }
 
     const db = getSupabaseAdmin()
     const { searchParams } = new URL(req.url)
