@@ -10,14 +10,14 @@ export type ExecuteResult =
 export async function executeTool(
   name: string,
   rawArgs: unknown,
-  ctx: { userId: string }
+  ctx: { userId: string; timeZone?: string }
 ): Promise<ExecuteResult> {
   const tool = getTool(name)
   if (!tool) return { ok: false, error: `Unknown tool: ${name}`, code: "unknown_tool" }
 
   try {
     const args = tool.inputSchema.parse(rawArgs ?? {})
-    const data = await tool.handler(args, ctx)
+    const data = await tool.handler(args, { ...ctx, timeZone: ctx.timeZone ?? process.env.BRAINOS_MCP_TIMEZONE })
     console.log("[tool]", JSON.stringify({ tool: name, userId: ctx.userId, ok: true }))
     return { ok: true, data }
   } catch (e) {
