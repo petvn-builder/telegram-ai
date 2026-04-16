@@ -47,7 +47,7 @@ export function parseRange(
   timeZone?: string,
 ): Range {
   const s = parseNatural(start, ref, timeZone)
-  if (end) return { start: s, end: parseNatural(end, s, timeZone) }
+  if (end) return { start: s, end: parseNatural(end, ref, timeZone) }
   if (durationMinutes && durationMinutes > 0) {
     return { start: s, end: new Date(s.getTime() + durationMinutes * 60_000) }
   }
