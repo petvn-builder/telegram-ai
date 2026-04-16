@@ -27,6 +27,7 @@ if (!userId) {
   console.error("BRAINOS_MCP_USER_ID is required to run the stdio MCP server.")
   process.exit(1)
 }
+const timeZone = process.env.BRAINOS_MCP_TIMEZONE ?? "UTC"
 
 const server = new Server(
   { name: "brainos-google", version: "0.1.0" },
@@ -47,7 +48,7 @@ server.setRequestHandler(CallToolRequestSchema, async (req) => {
   }
   try {
     const args = tool.inputSchema.parse(req.params.arguments ?? {})
-    const result = await tool.handler(args, { userId })
+    const result = await tool.handler(args, { userId, timeZone })
     return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] }
   } catch (e) {
     const msg = e instanceof ToolError ? `[${e.code}] ${e.message}` : e instanceof Error ? e.message : String(e)

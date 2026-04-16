@@ -1,17 +1,26 @@
 import * as chrono from "chrono-node"
 
+/** Convert IANA timezone to UTC offset in minutes for chrono-node. */
+function ianaToOffset(tz: string): number {
+  const now = new Date()
+  const utc = new Date(now.toLocaleString("en-US", { timeZone: "UTC" }))
+  const local = new Date(now.toLocaleString("en-US", { timeZone: tz }))
+  return (local.getTime() - utc.getTime()) / 60_000
+}
+
 /**
  * Parse a natural-language or ISO datetime string into a Date.
  * Falls back to new Date(input) for plain ISO strings chrono can't parse.
  * Throws if nothing parses.
  */
-export function parseNatural(input: string, ref: Date = new Date()): Date {
+export function parseNatural(input: string, ref: Date = new Date(), timeZone?: string): Date {
   if (!input || input.length > 500) throw new Error("parseNatural: invalid input")
   // Try ISO direct first — cheap and exact.
   const iso = new Date(input)
   if (!Number.isNaN(iso.getTime()) && /\d{4}-\d{2}-\d{2}/.test(input)) return iso
 
-  const parsed = chrono.parseDate(input, ref, { forwardDate: true })
+  const refOption = timeZone ? { instant: ref, timezone: ianaToOffset(timeZone) } : ref
+  const parsed = chrono.parseDate(input, refOption, { forwardDate: true })
   if (parsed) return parsed
 
   // Last resort
@@ -28,10 +37,11 @@ export function parseRange(
   start: string,
   end?: string,
   durationMinutes?: number,
-  ref: Date = new Date()
+  ref: Date = new Date(),
+  timeZone?: string,
 ): Range {
-  const s = parseNatural(start, ref)
-  if (end) return { start: s, end: parseNatural(end, s) }
+  const s = parseNatural(start, ref, timeZone)
+  if (end) return { start: s, end: parseNatural(end, s, timeZone) }
   if (durationMinutes && durationMinutes > 0) {
     return { start: s, end: new Date(s.getTime() + durationMinutes * 60_000) }
   }

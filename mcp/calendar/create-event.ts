@@ -27,7 +27,8 @@ export const createEventTool = defineTool({
     if (!args.end && !args.durationMinutes) {
       throw new ToolError("invalid_input", "Provide either `end` or `durationMinutes`.")
     }
-    const { start, end } = parseRange(args.start, args.end, args.durationMinutes)
+    const tz = args.timeZone || ctx.timeZone
+    const { start, end } = parseRange(args.start, args.end, args.durationMinutes, new Date(), tz)
     const cal = await calendarFor(ctx.userId)
 
     try {
@@ -38,8 +39,8 @@ export const createEventTool = defineTool({
           summary: args.summary,
           description: args.description,
           location: args.location,
-          start: args.timeZone ? { dateTime: iso(start), timeZone: args.timeZone } : { dateTime: iso(start) },
-          end: args.timeZone ? { dateTime: iso(end), timeZone: args.timeZone } : { dateTime: iso(end) },
+          start: { dateTime: iso(start), timeZone: tz },
+          end: { dateTime: iso(end), timeZone: tz },
           attendees: args.attendees?.map((email) => ({ email })),
         },
       })

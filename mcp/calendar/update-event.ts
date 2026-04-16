@@ -26,17 +26,18 @@ export const updateEventTool = defineTool({
   handler: async (args, ctx): Promise<NormalizedEvent> => {
     const cal = await calendarFor(ctx.userId)
 
+    const tz = args.timeZone || ctx.timeZone
     const body: Record<string, unknown> = {}
     if (args.summary !== undefined) body.summary = args.summary
     if (args.description !== undefined) body.description = args.description
     if (args.location !== undefined) body.location = args.location
     if (args.start) {
-      const s = parseNatural(args.start)
-      body.start = args.timeZone ? { dateTime: iso(s), timeZone: args.timeZone } : { dateTime: iso(s) }
+      const s = parseNatural(args.start, new Date(), tz)
+      body.start = { dateTime: iso(s), timeZone: tz }
     }
     if (args.end) {
-      const e = parseNatural(args.end)
-      body.end = args.timeZone ? { dateTime: iso(e), timeZone: args.timeZone } : { dateTime: iso(e) }
+      const e = parseNatural(args.end, new Date(), tz)
+      body.end = { dateTime: iso(e), timeZone: tz }
     }
     if (args.attendees) body.attendees = args.attendees.map((email) => ({ email }))
 

@@ -5,6 +5,7 @@ import { tasksTools } from "./tasks"
 
 export interface UserContext {
   userId: string
+  timeZone?: string
 }
 
 export interface ToolDef<TIn extends ZodType = ZodType, TOut = unknown> {

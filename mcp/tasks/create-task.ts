@@ -22,10 +22,8 @@ export const createTaskTool = defineTool({
 
     const requestBody: Record<string, string> = { title: args.title }
     if (args.notes) requestBody.notes = args.notes
-    if (args.due) {
-      const d = parseNatural(args.due)
-      requestBody.due = d.toISOString().split("T")[0] + "T00:00:00.000Z"
-    }
+    const d = args.due ? parseNatural(args.due, new Date(), ctx.timeZone) : new Date(Date.now() + 60 * 60 * 1000)
+    requestBody.due = d.toISOString().split("T")[0] + "T00:00:00.000Z"
 
     try {
       const res = await tasks.tasks.insert({

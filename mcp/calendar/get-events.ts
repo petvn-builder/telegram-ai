@@ -19,8 +19,8 @@ export const getEventsTool = defineTool({
   description: "List calendar events within a time range. Returns normalized events with ISO timestamps.",
   inputSchema: input,
   handler: async (args, ctx): Promise<{ events: NormalizedEvent[]; timeRange: TimeRange }> => {
-    const timeMin = parseNatural(args.timeMin)
-    const timeMax = parseNatural(args.timeMax)
+    const timeMin = parseNatural(args.timeMin, new Date(), ctx.timeZone)
+    const timeMax = parseNatural(args.timeMax, new Date(), ctx.timeZone)
     const cal = await calendarFor(ctx.userId)
 
     try {

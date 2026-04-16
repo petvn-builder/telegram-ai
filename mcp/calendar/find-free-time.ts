@@ -65,8 +65,8 @@ export const findFreeTimeTool = defineTool({
   description: "Find open time slots of a given duration in a range, optionally constrained to working hours. Returns up to `maxSlots` slots.",
   inputSchema: input,
   handler: async (args, ctx): Promise<{ slots: FreeSlot[] }> => {
-    const timeMin = parseNatural(args.timeMin)
-    const timeMax = parseNatural(args.timeMax)
+    const timeMin = parseNatural(args.timeMin, new Date(), ctx.timeZone)
+    const timeMax = parseNatural(args.timeMax, new Date(), ctx.timeZone)
     const cal = await calendarFor(ctx.userId)
 
     let busy: Interval[] = []
