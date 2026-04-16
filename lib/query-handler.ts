@@ -117,7 +117,7 @@ export async function handleQuery(
 // ── Google intent detection ──────────────────────────────────────────────────
 
 const GOOGLE_INTENT_RE =
-  /\b(meeting|meetings|calendar|event|events|schedule|scheduling|availability|free|busy|appointment|reminder|gmail|e-?mail|emails|inbox|thread|unread|reply|sent)\b/i
+  /\b(meeting|meetings|calendar|event|events|schedule|scheduling|availability|free|busy|appointment|reminder|gmail|e-?mail|emails|inbox|thread|unread|reply|sent|task|tasks|todo|to-do|to do)\b/i
 
 export function looksLikeCalendarOrEmail(msg: string): boolean {
   if (msg.startsWith("/")) return false

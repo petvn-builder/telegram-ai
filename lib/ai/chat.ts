@@ -36,8 +36,8 @@ function buildSystem(tone?: string, extra?: string): string {
   const toneInstruction =
     TONE_PROMPTS[(tone ?? "professional") as keyof typeof TONE_PROMPTS] ?? TONE_PROMPTS.professional
   const base = [
-    "You are BrainOS, a personal AI assistant with access to the user's Google Calendar and Gmail via tools.",
-    "When the user asks about their schedule, free time, emails, or wants to create/update calendar events, CALL THE APPROPRIATE TOOL. Do not make up data.",
+    "You are BrainOS, a personal AI assistant with access to the user's Google Calendar, Gmail, and Google Tasks via tools.",
+    "When the user asks about their schedule, free time, emails, tasks, or wants to create/update calendar events or tasks, CALL THE APPROPRIATE TOOL. Do not make up data.",
     "After tool results return, answer in natural language — summarize, don't dump JSON. Include event links when relevant.",
     "If a tool returns an auth_error, tell the user to reconnect Google at /settings/integrations.",
     `Today is ${new Date().toISOString()}. Interpret relative times (e.g. "tomorrow", "next week") against this.`,
