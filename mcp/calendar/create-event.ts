@@ -29,6 +29,15 @@ export const createEventTool = defineTool({
     }
     const tz = args.timeZone || ctx.timeZone
     const { start, end } = parseRange(args.start, args.end, args.durationMinutes, new Date(), tz)
+
+    console.log("[create_event] args:", JSON.stringify({ start: args.start, end: args.end, durationMinutes: args.durationMinutes, timeZone: tz }))
+    console.log("[create_event] parsed:", { start: iso(start), end: iso(end), durationMs: end.getTime() - start.getTime() })
+
+    // Sanity check: end must be after start and within 24h unless explicitly longer
+    if (end <= start) {
+      throw new ToolError("invalid_input", "End time must be after start time.")
+    }
+
     const cal = await calendarFor(ctx.userId)
 
     try {

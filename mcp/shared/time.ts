@@ -21,9 +21,13 @@ export function parseNatural(input: string, ref: Date = new Date(), timeZone?: s
   const iso = new Date(input)
   if (!Number.isNaN(iso.getTime()) && /\d{4}-\d{2}-\d{2}/.test(input) && /[Zz]|[+-]\d{2}/.test(input)) return iso
 
-  const refOption = timeZone ? { instant: ref, timezone: ianaToOffset(timeZone) } : ref
+  const offset = timeZone ? ianaToOffset(timeZone) : undefined
+  const refOption = offset !== undefined ? { instant: ref, timezone: offset } : ref
   const parsed = chrono.parseDate(input, refOption, { forwardDate: true })
-  if (parsed) return parsed
+  if (parsed) {
+    console.log("[parseNatural]", JSON.stringify({ input, timeZone, offset, ref: ref.toISOString(), result: parsed.toISOString() }))
+    return parsed
+  }
 
   // Last resort
   if (!Number.isNaN(iso.getTime())) return iso
