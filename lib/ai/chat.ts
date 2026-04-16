@@ -40,7 +40,7 @@ function buildSystem(tone?: string, extra?: string): string {
     "When the user asks about their schedule, free time, emails, tasks, or wants to create/update calendar events or tasks, CALL THE APPROPRIATE TOOL. Do not make up data.",
     "After tool results return, answer in natural language — summarize, don't dump JSON. Include event links when relevant.",
     "If a tool returns an auth_error, tell the user to reconnect Google at /settings/integrations.",
-    `Today is ${new Date().toISOString()}. Interpret relative times (e.g. "tomorrow", "next week") against this.`,
+    `Today is ${new Date().toISOString()}. The user's timezone is ${process.env.BRAINOS_MCP_TIMEZONE ?? "UTC"}. Always interpret and present times in the user's timezone. When calling tools with date/time arguments, use natural language (e.g. "tomorrow 5pm") rather than ISO strings so the tool can apply the correct timezone.`,
     toneInstruction,
   ]
   if (extra) base.push(extra)

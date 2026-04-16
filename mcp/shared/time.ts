@@ -16,8 +16,10 @@ function ianaToOffset(tz: string): number {
 export function parseNatural(input: string, ref: Date = new Date(), timeZone?: string): Date {
   if (!input || input.length > 500) throw new Error("parseNatural: invalid input")
   // Try ISO direct first — cheap and exact.
+  // Only bypass chrono for ISO strings that already include a timezone (Z or ±offset).
+  // Bare ISO strings like "2026-04-18T17:00:00" should go through chrono for timezone handling.
   const iso = new Date(input)
-  if (!Number.isNaN(iso.getTime()) && /\d{4}-\d{2}-\d{2}/.test(input)) return iso
+  if (!Number.isNaN(iso.getTime()) && /\d{4}-\d{2}-\d{2}/.test(input) && /[Zz]|[+-]\d{2}/.test(input)) return iso
 
   const refOption = timeZone ? { instant: ref, timezone: ianaToOffset(timeZone) } : ref
   const parsed = chrono.parseDate(input, refOption, { forwardDate: true })
