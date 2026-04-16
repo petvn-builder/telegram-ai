@@ -143,7 +143,7 @@ Everything you save is private, organized, and instantly searchable.`);
   await sendTelegram(chatId, formatForTelegram(response));
 
   // Save conversation history for semantic search (answers only)
-  if (response.kind === "answer" || response.kind === "temporal_answer") {
+  if (response.kind === "answer" || response.kind === "temporal_answer" || response.kind === "tool_answer") {
     const supabase = getSupabaseAdmin();
     const answerText = response.text;
     const [userEmbedding, aiEmbedding] = await Promise.all([
@@ -257,6 +257,9 @@ function formatForTelegram(r) {
       }
       return msg;
     }
+
+    case "tool_answer":
+      return r.text || "Done.";
 
     case "commands":
       return COMMANDS.map((c) => `${c.name} — ${c.description}`).join("\n");
