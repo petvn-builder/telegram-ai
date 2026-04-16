@@ -24,7 +24,7 @@ export async function GET() {
   const cookieOpts = {
     httpOnly: true,
     secure: true,
-    sameSite: "strict" as const,
+    sameSite: "lax" as const,
     path: "/",
     maxAge: 60 * 5, // 5 min
   }
