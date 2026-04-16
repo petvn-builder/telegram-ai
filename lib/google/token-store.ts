@@ -69,8 +69,14 @@ export async function loadTokens(userId: string): Promise<StoredTokens | null> {
     .eq("user_id", userId)
     .maybeSingle()
 
-  if (error) throw new Error(`loadTokens failed: ${error.message}`)
-  if (!data) return null
+  if (error) {
+    console.error("[token-store] loadTokens query failed:", error.message)
+    throw new Error(`loadTokens failed: ${error.message}`)
+  }
+  if (!data) {
+    console.log("[token-store] no credentials row for user:", userId)
+    return null
+  }
   const row = data as DbRow
 
   return {

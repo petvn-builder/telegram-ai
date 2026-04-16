@@ -86,7 +86,19 @@ export async function exchangeCode(code: string, codeVerifier: string): Promise<
  */
 export async function getAuthedClientForUser(userId: string): Promise<OAuth2Client> {
   const stored = await loadTokens(userId)
-  if (!stored) throw new Error("Google account not connected. Ask the user to connect it at /settings/integrations.")
+  if (!stored) {
+    console.error("[google/oauth] no tokens found for user:", userId)
+    throw new Error("Google account not connected. Ask the user to connect it at /settings/integrations.")
+  }
+
+  const isExpired = stored.expiry.getTime() < Date.now()
+  console.log("[google/oauth] loaded tokens for user:", userId, {
+    googleEmail: stored.googleEmail,
+    expiry: stored.expiry.toISOString(),
+    isExpired,
+    hasRefreshToken: !!stored.refreshToken,
+    scopes: stored.scopes,
+  })
 
   const client = buildOAuthClient()
   client.setCredentials({
@@ -101,6 +113,7 @@ export async function getAuthedClientForUser(userId: string): Promise<OAuth2Clie
     // On refresh, Google returns a new access_token (and expiry_date); refresh_token
     // is usually absent — saveTokens preserves the existing one in that case.
     if (!t.access_token) return
+    console.log("[google/oauth] token refreshed for user:", userId)
     saveTokens(userId, {
       accessToken: t.access_token,
       expiry: new Date(t.expiry_date ?? Date.now() + 3600_000),
