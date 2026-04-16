@@ -254,6 +254,13 @@ export function parseTaskText(raw: string): {
     }
   }
 
+  // Default to now + 4 hours if no date was parsed
+  if (!due_date) {
+    const fallback = new Date()
+    fallback.setHours(fallback.getHours() + 4)
+    due_date = fallback.toISOString()
+  }
+
   const title = text.replace(/\s+/g, " ").trim() || raw.trim()
 
   return { title, priority, due_date }
