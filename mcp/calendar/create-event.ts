@@ -7,13 +7,13 @@ import { wrapGoogleError, ToolError } from "../shared/errors"
 import type { NormalizedEvent } from "../shared/types"
 
 const input = z.object({
-  summary: z.string().min(1).describe("Event title."),
-  start: z.string().describe('Start time. ISO 8601 or natural language ("tomorrow 3pm").'),
-  end: z.string().optional().describe("End time. If omitted, set durationMinutes."),
+  summary: z.string().min(1).max(1024).describe("Event title."),
+  start: z.string().max(200).describe('Start time. ISO 8601 or natural language ("tomorrow 3pm").'),
+  end: z.string().max(200).optional().describe("End time. If omitted, set durationMinutes."),
   durationMinutes: z.number().int().min(5).max(24 * 60).optional(),
-  description: z.string().optional(),
-  location: z.string().optional(),
-  attendees: z.array(z.email()).optional().describe("Attendee email addresses."),
+  description: z.string().max(8192).optional(),
+  location: z.string().max(256).optional(),
+  attendees: z.array(z.email()).max(100).optional().describe("Attendee email addresses."),
   calendarId: z.string().default("primary"),
   timeZone: z.string().optional().describe('IANA time zone, e.g. "America/Los_Angeles".'),
   sendUpdates: z.enum(["all", "externalOnly", "none"]).default("all"),

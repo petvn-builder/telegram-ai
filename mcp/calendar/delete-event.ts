@@ -4,8 +4,8 @@ import { calendarFor } from "@/lib/google/calendar-client"
 import { wrapGoogleError } from "../shared/errors"
 
 const input = z.object({
-  eventId: z.string().min(1),
-  calendarId: z.string().default("primary"),
+  eventId: z.string().min(1).max(256),
+  calendarId: z.string().max(256).default("primary"),
   sendUpdates: z.enum(["all", "externalOnly", "none"]).default("all"),
 })
 

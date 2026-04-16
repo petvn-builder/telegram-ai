@@ -6,10 +6,10 @@ import { wrapGoogleError } from "../shared/errors"
 import type { FreeSlot } from "../shared/types"
 
 const input = z.object({
-  timeMin: z.string().describe("Range start (ISO or natural language)."),
-  timeMax: z.string().describe("Range end."),
+  timeMin: z.string().max(200).describe("Range start (ISO or natural language)."),
+  timeMax: z.string().max(200).describe("Range end."),
   durationMinutes: z.number().int().min(5).max(24 * 60),
-  calendarIds: z.array(z.string()).default(["primary"]),
+  calendarIds: z.array(z.string()).max(10).default(["primary"]),
   workingHours: z
     .object({
       start: z.string().regex(/^\d{2}:\d{2}$/).describe('Local "HH:MM" start of working day.'),

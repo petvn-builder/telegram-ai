@@ -7,9 +7,9 @@ import { wrapGoogleError, ToolError } from "../shared/errors"
 import type { NormalizedTask } from "../shared/types"
 
 const input = z.object({
-  title: z.string().min(1).describe("Task title."),
-  notes: z.string().optional().describe("Additional details or description."),
-  due: z.string().optional().describe('Due date. ISO 8601 date or natural language ("tomorrow", "next Friday").'),
+  title: z.string().min(1).max(1024).describe("Task title."),
+  notes: z.string().max(8192).optional().describe("Additional details or description."),
+  due: z.string().max(200).optional().describe('Due date. ISO 8601 date or natural language ("tomorrow", "next Friday").'),
   taskListId: z.string().default("@default").describe("Task list ID. Defaults to the user's primary list."),
 })
 

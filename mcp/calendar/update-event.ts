@@ -7,14 +7,14 @@ import { wrapGoogleError } from "../shared/errors"
 import type { NormalizedEvent } from "../shared/types"
 
 const input = z.object({
-  eventId: z.string().min(1),
-  calendarId: z.string().default("primary"),
-  summary: z.string().optional(),
-  start: z.string().optional().describe("New start (ISO or natural language)"),
-  end: z.string().optional(),
-  description: z.string().optional(),
-  location: z.string().optional(),
-  attendees: z.array(z.email()).optional(),
+  eventId: z.string().min(1).max(256),
+  calendarId: z.string().max(256).default("primary"),
+  summary: z.string().max(1024).optional(),
+  start: z.string().max(200).optional().describe("New start (ISO or natural language)"),
+  end: z.string().max(200).optional(),
+  description: z.string().max(8192).optional(),
+  location: z.string().max(256).optional(),
+  attendees: z.array(z.email()).max(100).optional(),
   timeZone: z.string().optional(),
   sendUpdates: z.enum(["all", "externalOnly", "none"]).default("all"),
 })

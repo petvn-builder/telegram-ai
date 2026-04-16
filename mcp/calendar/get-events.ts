@@ -7,10 +7,10 @@ import { wrapGoogleError } from "../shared/errors"
 import type { NormalizedEvent, TimeRange } from "../shared/types"
 
 const input = z.object({
-  timeMin: z.string().describe('Start of the time range. ISO 8601 or natural language ("today", "tomorrow 9am").'),
-  timeMax: z.string().describe('End of the time range. ISO 8601 or natural language ("next week").'),
-  calendarId: z.string().default("primary").describe("Calendar ID; defaults to the user's primary calendar."),
-  query: z.string().optional().describe("Free-text query to filter events by title/description."),
+  timeMin: z.string().max(200).describe('Start of the time range. ISO 8601 or natural language ("today", "tomorrow 9am").'),
+  timeMax: z.string().max(200).describe('End of the time range. ISO 8601 or natural language ("next week").'),
+  calendarId: z.string().max(256).default("primary").describe("Calendar ID; defaults to the user's primary calendar."),
+  query: z.string().max(1000).optional().describe("Free-text query to filter events by title/description."),
   maxResults: z.number().int().min(1).max(50).default(20),
 })
 

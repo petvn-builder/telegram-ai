@@ -114,7 +114,8 @@ function stripHtml(html: string): string {
 export function normalizeEmailSummary(m: gmail_v1.Schema$Message): NormalizedEmailSummary {
   const headers = m.payload?.headers
   const dateHeader = header(headers, "date")
-  const date = dateHeader ? new Date(dateHeader).toISOString() : new Date(Number(m.internalDate ?? 0)).toISOString()
+  const parsedDate = dateHeader ? new Date(dateHeader) : new Date(Number(m.internalDate ?? 0))
+  const date = Number.isNaN(parsedDate.getTime()) ? new Date(0).toISOString() : parsedDate.toISOString()
   const labels = m.labelIds ?? []
   return {
     id: m.id ?? "",

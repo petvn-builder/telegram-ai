@@ -8,6 +8,7 @@ import type { NormalizedEmailSummary } from "../shared/types"
 const input = z.object({
   query: z
     .string()
+    .max(1000)
     .describe('Gmail search syntax (e.g. "from:alice@x.com newer_than:7d is:unread"). Use this to filter.'),
   maxResults: z.number().int().min(1).max(50).default(10),
 })
