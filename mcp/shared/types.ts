@@ -40,6 +40,16 @@ export interface NormalizedEmail extends NormalizedEmailSummary {
   bodyHtml?: string
 }
 
+export interface NormalizedTask {
+  id: string
+  taskListId: string
+  title: string
+  notes?: string
+  due?: string
+  status: "needsAction" | "completed"
+  htmlLink: string
+}
+
 export interface FreeSlot {
   start: string
   end: string

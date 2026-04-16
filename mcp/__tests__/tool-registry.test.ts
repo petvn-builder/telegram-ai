@@ -2,11 +2,12 @@ import { describe, it, expect } from "vitest"
 import { registry, toMcpTool, toOpenAiTool, getTool } from "../tool-registry"
 
 describe("tool-registry", () => {
-  it("registers all 8 required tools", () => {
+  it("registers all 9 required tools", () => {
     const names = registry.map((t) => t.name).sort()
     expect(names).toEqual(
       [
         "create_event",
+        "create_task",
         "delete_event",
         "find_free_time",
         "get_email",

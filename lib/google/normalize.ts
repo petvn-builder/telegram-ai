@@ -1,8 +1,9 @@
-import type { calendar_v3, gmail_v1 } from "googleapis"
+import type { calendar_v3, gmail_v1, tasks_v1 } from "googleapis"
 import type {
   NormalizedEvent,
   NormalizedEmail,
   NormalizedEmailSummary,
+  NormalizedTask,
 } from "@/mcp/shared/types"
 
 // ── Calendar ─────────────────────────────────────────────────────────────────
@@ -34,6 +35,23 @@ export function normalizeEvent(
       : undefined,
     htmlLink: e.htmlLink ?? "",
     status: (e.status as NormalizedEvent["status"]) ?? "confirmed",
+  }
+}
+
+// ── Tasks ───────────────────────────────────────────────────────────────────
+
+export function normalizeTask(
+  t: tasks_v1.Schema$Task,
+  taskListId = "@default"
+): NormalizedTask {
+  return {
+    id: t.id ?? "",
+    taskListId,
+    title: t.title ?? "(no title)",
+    notes: t.notes ?? undefined,
+    due: t.due ? t.due.split("T")[0] : undefined,
+    status: (t.status as NormalizedTask["status"]) ?? "needsAction",
+    htmlLink: t.selfLink ?? "",
   }
 }
 
