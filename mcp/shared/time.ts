@@ -6,7 +6,7 @@ import * as chrono from "chrono-node"
  * Throws if nothing parses.
  */
 export function parseNatural(input: string, ref: Date = new Date()): Date {
-  if (!input) throw new Error("parseNatural: empty input")
+  if (!input || input.length > 500) throw new Error("parseNatural: invalid input")
   // Try ISO direct first — cheap and exact.
   const iso = new Date(input)
   if (!Number.isNaN(iso.getTime()) && /\d{4}-\d{2}-\d{2}/.test(input)) return iso

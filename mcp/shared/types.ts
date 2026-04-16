@@ -35,7 +35,6 @@ export interface NormalizedEmailSummary {
 
 export interface NormalizedEmail extends NormalizedEmailSummary {
   cc?: string[]
-  bcc?: string[]
   bodyText: string
   bodyHtml?: string
 }

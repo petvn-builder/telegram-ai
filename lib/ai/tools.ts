@@ -18,11 +18,15 @@ export async function executeTool(
   try {
     const args = tool.inputSchema.parse(rawArgs ?? {})
     const data = await tool.handler(args, ctx)
+    console.log("[tool]", JSON.stringify({ tool: name, userId: ctx.userId, ok: true }))
     return { ok: true, data }
   } catch (e) {
-    if (e instanceof ToolError) return { ok: false, error: e.message, code: e.code }
-    // zod errors
+    if (e instanceof ToolError) {
+      console.warn("[tool]", JSON.stringify({ tool: name, userId: ctx.userId, ok: false, code: e.code }))
+      return { ok: false, error: e.message, code: e.code }
+    }
     const msg = e instanceof Error ? e.message : String(e)
+    console.warn("[tool]", JSON.stringify({ tool: name, userId: ctx.userId, ok: false, code: "invalid_args" }))
     return { ok: false, error: msg, code: "invalid_args" }
   }
 }

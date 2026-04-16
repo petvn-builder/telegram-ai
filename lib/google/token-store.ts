@@ -11,14 +11,23 @@ export interface StoredTokens {
 
 // ── Encryption (AES-256-GCM) ─────────────────────────────────────────────────
 
+let _cachedKey: Buffer | null = null
+
 function getKey(): Buffer {
+  if (_cachedKey) return _cachedKey
   const hex = process.env.GOOGLE_TOKEN_ENCRYPTION_KEY
   if (!hex) throw new Error("GOOGLE_TOKEN_ENCRYPTION_KEY is not set")
   const key = Buffer.from(hex, "hex")
   if (key.length !== 32) {
     throw new Error("GOOGLE_TOKEN_ENCRYPTION_KEY must be 32 bytes hex-encoded (64 hex chars)")
   }
+  _cachedKey = key
   return key
+}
+
+/** Call early to fail fast if the encryption key is misconfigured. */
+export function validateEncryptionKey(): void {
+  getKey()
 }
 
 export function encrypt(plain: string): string {

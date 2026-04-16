@@ -136,7 +136,6 @@ export function normalizeEmail(m: gmail_v1.Schema$Message): NormalizedEmail {
   return {
     ...summary,
     cc: splitAddresses(header(headers, "cc")) || undefined,
-    bcc: splitAddresses(header(headers, "bcc")) || undefined,
     bodyText: text,
     bodyHtml: html,
   }
