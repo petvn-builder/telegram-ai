@@ -77,6 +77,9 @@ function serializeForWeb(r: AiResponse): Record<string, unknown> {
     case "commands":
       return { action: "commands", commands: r.commands }
 
+    case "tool_answer":
+      return { action: "tool_answer", text: r.text, events: r.events }
+
     case "error":
       return { action: "error", text: r.text }
   }

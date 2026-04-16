@@ -10,6 +10,10 @@ import { usePostHog } from "posthog-js/react"
 
 type AiCommand = { name: string; description: string }
 
+type ToolEvent =
+  | { kind: "tool_call"; name: string; args?: unknown }
+  | { kind: "tool_result"; name: string; result?: unknown; error?: string; code?: string }
+
 type AiResultContent =
   | { type: "notes"; notes: NoteWithEntities[] }
   | { type: "task_created"; task: TaskWithEntities }
@@ -18,6 +22,7 @@ type AiResultContent =
   | { type: "loading" }
   | { type: "entity_summary"; entity: string; summary: string; relatedNotes: { id: string; content: string }[] }
   | { type: "commands"; commands: AiCommand[] }
+  | { type: "tool_answer"; text: string; events: ToolEvent[] }
 
 type AiUserMessage = { role: "user"; text: string; id: string }
 type AiAssistantMessage = { role: "assistant"; content: AiResultContent; id: string }
@@ -319,6 +324,10 @@ function MessageBubble({ msg }: { msg: AiMessage }) {
     )
   }
 
+  if (content.type === "tool_answer") {
+    return <ToolAnswerBlock text={content.text} events={content.events} />
+  }
+
   if (content.type === "commands") {
     return (
       <div style={{ marginBottom: "10px" }}>
@@ -347,6 +356,88 @@ function MessageBubble({ msg }: { msg: AiMessage }) {
   }
 
   return null
+}
+
+// ── Tool-answer block ─────────────────────────────────────────────────────────
+
+function truncate(s: string, n: number): string {
+  return s.length <= n ? s : s.slice(0, n) + "…"
+}
+
+function ToolAnswerBlock({ text, events }: { text: string; events: ToolEvent[] }) {
+  const [open, setOpen] = useState(false)
+  const calls = events.filter((e) => e.kind === "tool_call")
+
+  return (
+    <div style={{ marginBottom: "10px" }}>
+      <div style={{ display: "flex", alignItems: "flex-start", gap: "8px" }}>
+        <span style={{ color: "var(--ai-accent)", display: "flex", alignItems: "center", flexShrink: 0, marginTop: "2px" }}>
+          <SparkleIcon />
+        </span>
+        <div style={{ fontSize: "13px", color: "var(--text-1)", lineHeight: 1.6, flex: 1 }}>
+          {renderMarkdown(text)}
+        </div>
+      </div>
+      {calls.length > 0 && (
+        <div style={{ marginTop: "6px", marginLeft: "22px" }}>
+          <button
+            onClick={() => setOpen((o) => !o)}
+            style={{
+              fontSize: "11px",
+              color: "var(--text-3)",
+              background: "transparent",
+              border: "none",
+              cursor: "pointer",
+              padding: 0,
+            }}
+          >
+            {open ? "▾" : "▸"} Tools used ({calls.length})
+          </button>
+          {open && (
+            <div
+              style={{
+                marginTop: "6px",
+                background: "var(--bg-surface)",
+                border: "1px solid var(--border)",
+                borderRadius: "8px",
+                padding: "8px 10px",
+                fontFamily: "monospace",
+                fontSize: "11px",
+                color: "var(--text-2)",
+                whiteSpace: "pre-wrap",
+                lineHeight: 1.5,
+              }}
+            >
+              {events.map((e, i) => {
+                if (e.kind === "tool_call") {
+                  return (
+                    <div key={i} style={{ marginBottom: "4px" }}>
+                      <span style={{ color: "var(--ai-accent)" }}>→ {e.name}</span>{" "}
+                      {e.args !== undefined && (
+                        <span>{truncate(JSON.stringify(e.args), 160)}</span>
+                      )}
+                    </div>
+                  )
+                }
+                if (e.error) {
+                  return (
+                    <div key={i} style={{ marginBottom: "8px", color: "#DC2626" }}>
+                      ← {e.name}: [{e.code ?? "error"}] {e.error}
+                    </div>
+                  )
+                }
+                return (
+                  <div key={i} style={{ marginBottom: "8px" }}>
+                    ← {e.name}: {truncate(JSON.stringify(e.result), 240)}
+                  </div>
+                )
+              })}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  )
 }
 
 // ── ChatBody ───────────────────────────────────────────────────────────────────
@@ -446,6 +537,13 @@ export default function ChatBody() {
         case "answer":
           updateLastAssistantMessage({ type: "text", text: data.text })
           ph?.capture("ai_response_received", { action: "answer" })
+          break
+        case "tool_answer":
+          updateLastAssistantMessage({ type: "tool_answer", text: data.text, events: data.events ?? [] })
+          ph?.capture("ai_response_received", {
+            action: "tool_answer",
+            tool_count: (data.events ?? []).filter((e: ToolEvent) => e.kind === "tool_call").length,
+          })
           break
         case "commands":
           updateLastAssistantMessage({ type: "commands", commands: data.commands })

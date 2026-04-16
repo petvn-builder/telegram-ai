@@ -6,6 +6,8 @@ import { parseTaskText, createTask } from "@/lib/tasks"
 import { getOrGenerateSummary } from "@/lib/entity-summary"
 import { semanticSearch, buildKnowledgeContext } from "@/lib/ai-search"
 import { askPetAI } from "@/lib/openai"
+import { chatWithTools } from "@/lib/ai/chat"
+import { userHasGoogle } from "@/lib/ai/tools"
 import { parseTimeRange } from "@/lib/time-parser"
 import {
   detectSemanticContent,
@@ -88,6 +90,19 @@ export async function handleQuery(
     return handleEntity(userId, entityName)
   }
 
+  // ── Google Calendar / Gmail (tool-calling) ───────────────────────────────────
+  if (looksLikeCalendarOrEmail(message) && (await userHasGoogle(userId))) {
+    const { text, events } = await chatWithTools({
+      userId,
+      userMessage: message,
+      tone: options.tone,
+      history: options.recentConversation
+        ? [{ role: "user", content: options.recentConversation }]
+        : undefined,
+    })
+    return { kind: "tool_answer", text, events }
+  }
+
   // ── Temporal query ────────────────────────────────────────────────────────────
   const timeRange = parseTimeRange(message)
   if (timeRange) {
@@ -97,6 +112,16 @@ export async function handleQuery(
   // ── Semantic search fallthrough ───────────────────────────────────────────────
   const answer = await semanticSearch(userId, message, options.recentConversation ?? "", options.tone)
   return { kind: "answer", text: answer }
+}
+
+// ── Google intent detection ──────────────────────────────────────────────────
+
+const GOOGLE_INTENT_RE =
+  /\b(meeting|meetings|calendar|event|events|schedule|scheduling|availability|free|busy|appointment|reminder|gmail|e-?mail|emails|inbox|thread|unread|reply|sent)\b/i
+
+export function looksLikeCalendarOrEmail(msg: string): boolean {
+  if (msg.startsWith("/")) return false
+  return GOOGLE_INTENT_RE.test(msg)
 }
 
 // ── Private handlers ──────────────────────────────────────────────────────────
