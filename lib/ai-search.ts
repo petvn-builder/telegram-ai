@@ -3,7 +3,7 @@ import { createEmbedding } from "@/lib/embeddings"
 import { askOpenAI } from "@/lib/openai"
 import { resolveEntities } from "@/lib/entity-resolver"
 
-const SIMILARITY_THRESHOLD = 0.75
+const SIMILARITY_THRESHOLD = 0.55
 const MAX_MEMORY_CHARS = 2000
 const MAX_ENTITIES = 5
 
@@ -107,7 +107,7 @@ export async function buildKnowledgeContext(userId: string, question: string): P
             (name) => name.length >= 3 && item.content.toLowerCase().includes(name)
           )
         if (!mentionsEntity) continue
-        if (item.similarity !== undefined && item.similarity < 0.70) continue
+        if (item.similarity !== undefined && item.similarity < 0.55) continue
       }
     } else {
       if (item.similarity !== undefined && item.similarity < SIMILARITY_THRESHOLD) continue
