@@ -109,12 +109,15 @@ export async function resolveEntities(
   try {
     const queryEmbedding = await createEmbedding(query)
 
-    const { data: embeddingMatches } = await db.rpc("match_entities", {
+    const { data: embeddingMatches, error: rpcError } = await db.rpc("match_entities", {
       query_embedding: queryEmbedding,
       match_user: userId,
       match_count: maxEntities,
       similarity_threshold: embeddingThreshold,
     })
+    if (rpcError) {
+      console.error("[ENTITY RESOLUTION] match_entities RPC error:", rpcError)
+    }
 
     if (!embeddingMatches?.length) {
       console.log(`[ENTITY RESOLUTION] Query: "${query}"\n[ENTITY RESOLUTION] No embedding match found`)

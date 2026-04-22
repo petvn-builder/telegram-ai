@@ -75,11 +75,16 @@ export async function buildKnowledgeContext(userId: string, question: string): P
 
   const queryEmbedding = await createEmbedding(question)
 
-  const { data: memories } = await db.rpc("match_knowledge", {
+  const { data: memories, error: rpcError } = await db.rpc("match_knowledge", {
     query_embedding: queryEmbedding,
     match_user: userId,
     match_count: 8,
   })
+  if (rpcError) {
+    console.error("[WEB AI] match_knowledge RPC error:", rpcError)
+  } else {
+    console.log(`[WEB AI] match_knowledge returned ${memories?.length ?? 0} rows`)
+  }
 
   console.log(`[WEB AI] Tier 1 (entity-linked): ${entityLinkedNoteIds.size} notes, ${matchedEntityIds.size} entities matched`)
   console.log("---- GRAPH MEMORY BUILT ----")
