@@ -4,7 +4,7 @@ import { createEmbedding } from "@/lib/embeddings"
 import { upsertEntitiesAndLink } from "@/lib/entities"
 import { parseTaskText, createTask } from "@/lib/tasks"
 import { getOrGenerateSummary } from "@/lib/entity-summary"
-import { semanticSearch, buildKnowledgeContext } from "@/lib/ai-search"
+import { semanticSearch, buildKnowledgeContext, makePreview } from "@/lib/ai-search"
 import { askPetAI } from "@/lib/openai"
 import { chatWithTools } from "@/lib/ai/chat"
 import { userHasGoogle } from "@/lib/ai/tools"
@@ -111,8 +111,13 @@ export async function handleQuery(
   }
 
   // ── Semantic search fallthrough ───────────────────────────────────────────────
-  const answer = await semanticSearch(userId, message, options.recentConversation ?? "", options.tone)
-  return { kind: "answer", text: answer }
+  const { text, sources } = await semanticSearch(
+    userId,
+    message,
+    options.recentConversation ?? "",
+    options.tone
+  )
+  return { kind: "answer", text, sources }
 }
 
 // ── Google intent detection ──────────────────────────────────────────────────
@@ -290,10 +295,17 @@ async function handlePet(
   tone?: string
 ): Promise<AiResponse> {
   // Get personal knowledge context (entity + semantic RAG) without calling LLM
-  const knowledge = await buildKnowledgeContext(userId, question || "recent conversation context")
+  const { memory, sources } = await buildKnowledgeContext(
+    userId,
+    question || "recent conversation context"
+  )
 
-  const answer = await askPetAI(knowledge, conversationContext, question, tone)
-  return { kind: "answer", text: answer ?? "Sorry, I couldn't generate a response." }
+  const answer = await askPetAI(memory, conversationContext, question, tone)
+  return {
+    kind: "answer",
+    text: answer ?? "Sorry, I couldn't generate a response.",
+    sources,
+  }
 }
 
 async function handleTemporalQuery(
@@ -322,5 +334,12 @@ async function handleTemporalQuery(
   }
 
   const text = await summarizeNotes(notes, timeRange.label)
-  return { kind: "temporal_answer", text, rangeLabel: timeRange.label, noteCount: notes.length }
+  const sources = notes.slice(0, 5).map((n) => ({ id: n.id, preview: makePreview(n.content) }))
+  return {
+    kind: "temporal_answer",
+    text,
+    rangeLabel: timeRange.label,
+    noteCount: notes.length,
+    sources,
+  }
 }

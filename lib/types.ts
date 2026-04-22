@@ -1,6 +1,11 @@
+export interface NoteSource {
+  id: string
+  preview: string
+}
+
 export type AiResponse =
-  | { kind: "answer";          text: string }
-  | { kind: "temporal_answer"; text: string; rangeLabel: string; noteCount: number }
+  | { kind: "answer";          text: string; sources?: NoteSource[] }
+  | { kind: "temporal_answer"; text: string; rangeLabel: string; noteCount: number; sources?: NoteSource[] }
   | { kind: "note_created";    note: { id: string; content: string; created_at: string }; entities: Array<{ name: string; type: string }> }
   | { kind: "task_created";    task: Record<string, unknown> }
   | { kind: "todo_list";       tasks: Array<{ title: string; status: string; due_date: string | null; priority: string }> }

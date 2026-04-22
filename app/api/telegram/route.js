@@ -179,13 +179,27 @@ Everything you save is private, organized, and instantly searchable.`);
 
 // ── Channel serializer ────────────────────────────────────────────────────────
 
+// Escape characters that Telegram's Markdown parser treats as formatting.
+function escapeMd(s) {
+  return s.replace(/([\\`*_{}\[\]()#+\-.!])/g, "\\$1");
+}
+
+function renderWithSources(text, sources) {
+  const base = process.env.NEXT_PUBLIC_APP_URL;
+  if (!base || !sources || sources.length === 0) return text;
+  const lines = sources.map(
+    (s) => `• [${escapeMd(s.preview)}](${base}/notes/${s.id})`
+  );
+  return `${text}\n\n---\n📎 Sources:\n${lines.join("\n")}`;
+}
+
 function formatForTelegram(r) {
   switch (r.kind) {
     case "answer":
-      return r.text;
+      return renderWithSources(r.text, r.sources);
 
     case "temporal_answer":
-      return r.text;
+      return renderWithSources(r.text, r.sources);
 
     case "note_created": {
       let msg = `✅ Saved! ${r.entities.length} entit${r.entities.length === 1 ? "y" : "ies"} linked`;

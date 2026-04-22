@@ -2,20 +2,34 @@ import { getSupabaseAdmin } from "@/lib/supabase/admin"
 import { createEmbedding } from "@/lib/embeddings"
 import { askOpenAI } from "@/lib/openai"
 import { resolveEntities } from "@/lib/entity-resolver"
+import type { NoteSource } from "@/lib/types"
 
 const SIMILARITY_THRESHOLD = 0.55
 const MAX_MEMORY_CHARS = 2000
 const MAX_ENTITIES = 5
+const MAX_SOURCES = 5
+const PREVIEW_CHARS = 60
+
+export function makePreview(content: string): string {
+  const collapsed = content.replace(/\s+/g, " ").trim()
+  return collapsed.length > PREVIEW_CHARS
+    ? collapsed.slice(0, PREVIEW_CHARS) + "…"
+    : collapsed
+}
 
 /**
  * Build the combined knowledge context string (entity context + semantic memory)
  * for a user's query without calling the LLM. Shared by semanticSearch and /pet.
  */
-export async function buildKnowledgeContext(userId: string, question: string): Promise<string> {
+export async function buildKnowledgeContext(
+  userId: string,
+  question: string
+): Promise<{ memory: string; sources: NoteSource[] }> {
   const db = getSupabaseAdmin()
 
   let graphMemory = ""
   let memory = ""
+  const sourceMap = new Map<string, string>() // id → preview (insertion order preserved)
 
   // ── Tier 1: Entity context ──────────────────────────────────────────────────
 
@@ -59,6 +73,7 @@ export async function buildKnowledgeContext(userId: string, question: string): P
       if (fetchedNotes.length > 0) {
         for (const note of fetchedNotes) {
           entityLinkedNoteIds.add(note.id)
+          sourceMap.set(note.id, makePreview(note.content))
           graphMemory += `  - ${note.content}\n`
         }
       } else if (fullEntity?.summary) {
@@ -121,6 +136,7 @@ export async function buildKnowledgeContext(userId: string, question: string): P
     if (uniqueContents.has(normalizedItem)) continue
     uniqueContents.add(normalizedItem)
 
+    if (item.id) sourceMap.set(item.id, makePreview(item.content))
     memory += `[${item.role}] ${item.content}\n`
     tier2Count++
     if (memory.length > MAX_MEMORY_CHARS) break
@@ -137,7 +153,11 @@ export async function buildKnowledgeContext(userId: string, question: string): P
     combinedMemory += "=== RELEVANT MEMORY ===\n" + memory.trim()
   }
 
-  return combinedMemory
+  const sources: NoteSource[] = [...sourceMap]
+    .slice(0, MAX_SOURCES)
+    .map(([id, preview]) => ({ id, preview }))
+
+  return { memory: combinedMemory, sources }
 }
 
 /**
@@ -151,15 +171,18 @@ export async function semanticSearch(
   question: string,
   conversationHistory = "",
   tone = "professional"
-): Promise<string> {
-  const combinedMemory = await buildKnowledgeContext(userId, question)
+): Promise<{ text: string; sources: NoteSource[] }> {
+  const { memory, sources } = await buildKnowledgeContext(userId, question)
 
   console.log("----- FINAL MEMORY SENT TO OPENAI -----")
-  console.log(combinedMemory || "(no memory)")
+  console.log(memory || "(no memory)")
   console.log("----------------------------------------")
 
-  const aiResponse = await askOpenAI(combinedMemory, question, conversationHistory, tone)
-  return aiResponse ?? "I couldn't find an answer based on your notes."
+  const aiResponse = await askOpenAI(memory, question, conversationHistory, tone)
+  return {
+    text: aiResponse ?? "I couldn't find an answer based on your notes.",
+    sources,
+  }
 }
 
 /**
