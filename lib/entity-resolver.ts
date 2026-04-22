@@ -3,6 +3,17 @@ import { createEmbedding } from "@/lib/embeddings"
 
 const EMBEDDING_THRESHOLD = 0.75
 
+/**
+ * True if `needle` appears as a whole word inside `haystack`. Needed because
+ * `String.includes` matches substrings inside other words — e.g. entity "ba"
+ * would spuriously match "tbham" in a Vietnamese query. Uses \b which treats
+ * runs of Unicode letters (including diacritical vowels) as a single word.
+ */
+function containsWord(haystack: string, needle: string): boolean {
+  const escaped = needle.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+  return new RegExp(`(^|\\P{L})${escaped}(\\P{L}|$)`, "u").test(haystack)
+}
+
 export type MatchType = "exact_name" | "exact_alias" | "substring_name" | "substring_alias" | "embedding"
 
 export interface ResolvedEntity {
@@ -73,10 +84,10 @@ export async function resolveEntities(
     } else if (aliases.some((a) => normalizedQuery === a)) {
       matchType = "exact_alias"
       matchedAlias = aliases.find((a) => normalizedQuery === a) ?? null
-    } else if (normalizedQuery.includes(entityName)) {
+    } else if (entityName.length >= 3 && containsWord(normalizedQuery, entityName)) {
       matchType = "substring_name"
     } else {
-      const aliasHit = aliases.find((a) => a.length >= 2 && normalizedQuery.includes(a))
+      const aliasHit = aliases.find((a) => a.length >= 3 && containsWord(normalizedQuery, a))
       if (aliasHit) {
         matchType = "substring_alias"
         matchedAlias = aliasHit
