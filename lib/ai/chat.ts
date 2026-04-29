@@ -35,12 +35,47 @@ export interface ChatWithToolsResult {
 function buildSystem(tone?: string, extra?: string): string {
   const toneInstruction =
     TONE_PROMPTS[(tone ?? "professional") as keyof typeof TONE_PROMPTS] ?? TONE_PROMPTS.professional
+
+  const tz = process.env.BRAINOS_MCP_TIMEZONE ?? "UTC"
+  const now = new Date()
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: tz,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(now) // en-CA gives YYYY-MM-DD
+  const todayIso = parts
+  const todayHuman = new Intl.DateTimeFormat("en-US", {
+    timeZone: tz,
+    weekday: "long",
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+  }).format(now)
+  const nowHuman = new Intl.DateTimeFormat("en-US", {
+    timeZone: tz,
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: true,
+  }).format(now)
+
+  const timeBlock = `Current time context (authoritative — use this, not your training cutoff):
+- Today's date: ${todayIso} (${todayHuman})
+- Current local time: ${nowHuman} ${tz}
+- User timezone: ${tz}
+
+When classifying events:
+- An event whose date equals today's date is happening "today" — do NOT call it "upcoming".
+- Use "today", "tomorrow", and "yesterday" where natural instead of repeating the full date.
+- Interpret relative phrases ("this week", "next Monday") against today's date in ${tz}.
+- When passing date/time arguments to tools, use natural language ("tomorrow 5pm") so the tool applies ${tz} correctly.`
+
   const base = [
     "You are BrainOS, a personal AI assistant with access to the user's Google Calendar, Gmail, and Google Tasks via tools.",
     "When the user asks about their schedule, free time, emails, tasks, or wants to create/update calendar events or tasks, CALL THE APPROPRIATE TOOL. Do not make up data.",
     "After tool results return, answer in natural language — summarize, don't dump JSON. Include event links when relevant.",
     "If a tool returns an auth_error, tell the user to reconnect Google at /settings/integrations.",
-    `Today is ${new Date().toISOString()}. The user's timezone is ${process.env.BRAINOS_MCP_TIMEZONE ?? "UTC"}. Always interpret and present times in the user's timezone. When calling tools with date/time arguments, use natural language (e.g. "tomorrow 5pm") rather than ISO strings so the tool can apply the correct timezone.`,
+    timeBlock,
     toneInstruction,
   ]
   if (extra) base.push(extra)
