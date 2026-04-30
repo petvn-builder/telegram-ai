@@ -393,7 +393,10 @@ export default function GraphPage() {
   useEffect(() => {
     const onMove = (e: MouseEvent) => setHoverPos({ x: e.clientX, y: e.clientY })
     window.addEventListener("mousemove", onMove)
-    return () => window.removeEventListener("mousemove", onMove)
+    return () => {
+      window.removeEventListener("mousemove", onMove)
+      if (typeof document !== "undefined") document.body.style.cursor = ""
+    }
   }, [])
 
   // Load dismissed IDs from localStorage
@@ -533,21 +536,39 @@ export default function GraphPage() {
     return 12 + ratio * ratio * 60
   }, [maxMentionCount])
 
-  // Configure physics
+  // Configure physics — Obsidian-style spacing: hub charge scales with size,
+  // strong collision padding to prevent overlap, soft links so collision wins.
   useEffect(() => {
     if (!data || !fgRef.current) return
     const fg = fgRef.current
     hasCenteredRef.current = false
-    fg.d3Force("charge")?.strength(-600)
-    fg.d3Force("link")?.distance((link: any) => {
-      const s = typeof link.source === "object" ? computeNodeSize(link.source) : 14
-      const t = typeof link.target === "object" ? computeNodeSize(link.target) : 14
-      return 80 + (s + t) * 1.5
-    })
+
+    fg.d3Force("charge")
+      ?.strength((node: any) =>
+        node.type === "entity"
+          ? -120 - computeNodeSize(node) * 14
+          : -40
+      )
+      .distanceMax(420)
+
+    fg.d3Force("link")
+      ?.distance((link: any) => {
+        const s = typeof link.source === "object" ? computeNodeSize(link.source) : 14
+        const t = typeof link.target === "object" ? computeNodeSize(link.target) : 14
+        return Math.max(60, (s + t) * 1.6 + 40)
+      })
+      .strength(0.35)
+
     fg.d3Force(
       "collision",
-      d3.forceCollide((node: any) => computeNodeSize(node) / 2 + 6)
+      d3
+        .forceCollide((node: any) => computeNodeSize(node) / 2 + 14)
+        .strength(1)
+        .iterations(2)
     )
+
+    fg.d3Force("x", d3.forceX(0).strength(0.02))
+    fg.d3Force("y", d3.forceY(0).strength(0.02))
   }, [data, computeNodeSize])
 
   // Auto-center on biggest entity once simulation settles
@@ -568,6 +589,11 @@ export default function GraphPage() {
   // Hover
   async function handleNodeHover(node: any) {
     hoveredNodeIdRef.current = node?.id ?? null
+    // Cursor feedback + immediate repaint for neighbor highlighting
+    if (typeof document !== "undefined") {
+      document.body.style.cursor = node ? "pointer" : ""
+    }
+    fgRef.current?.refresh?.()
     if (!node || node.type !== "note") {
       setHoveredNote(null)
       return
@@ -695,6 +721,31 @@ export default function GraphPage() {
     }
   }, [data])
 
+  // Subtle radial vignette overlay (Obsidian-style depth)
+  const renderVignette = useCallback((ctx: CanvasRenderingContext2D, globalScale: number) => {
+    const canvas = ctx.canvas
+    const w = canvas.width / (window.devicePixelRatio || 1)
+    const h = canvas.height / (window.devicePixelRatio || 1)
+    ctx.save()
+    ctx.setTransform(1, 0, 0, 1, 0, 0)
+    const grad = ctx.createRadialGradient(w / 2, h / 2, Math.min(w, h) * 0.2, w / 2, h / 2, Math.max(w, h) * 0.7)
+    grad.addColorStop(0, "rgba(0,0,0,0)")
+    grad.addColorStop(1, isLight ? "rgba(0,0,0,0.06)" : "rgba(0,0,0,0.30)")
+    ctx.fillStyle = grad
+    ctx.fillRect(0, 0, w, h)
+    ctx.restore()
+  }, [isLight])
+
+  // Reset all pinned nodes and reheat simulation
+  const handleResetLayout = useCallback(() => {
+    if (!data || !fgRef.current) return
+    for (const n of data.nodes as any[]) {
+      n.fx = undefined
+      n.fy = undefined
+    }
+    fgRef.current.d3ReheatSimulation?.()
+  }, [data])
+
   // Loading screen
   if (!data) {
     return (
@@ -799,6 +850,39 @@ export default function GraphPage() {
           </Link>
         </div>
 
+        {/* Reset layout pill (top-right of canvas) */}
+        <div style={{ position: "absolute", top: "16px", right: "16px", zIndex: 10 }}>
+          <button
+            onClick={handleResetLayout}
+            title="Unpin all nodes and re-run layout"
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: "6px",
+              padding: "7px 12px",
+              fontSize: "12px",
+              fontWeight: 500,
+              color: "var(--text-2)",
+              background: isLight ? "rgba(245,245,251,0.88)" : "rgba(18,18,26,0.85)",
+              border: "1px solid var(--border)",
+              borderRadius: "8px",
+              cursor: "pointer",
+              backdropFilter: "blur(12px)",
+              transition: "color 0.15s, border-color 0.15s",
+            }}
+            onMouseEnter={(e) => {
+              (e.currentTarget as HTMLElement).style.color = "var(--text-1)"
+              ;(e.currentTarget as HTMLElement).style.borderColor = "var(--border-hover)"
+            }}
+            onMouseLeave={(e) => {
+              (e.currentTarget as HTMLElement).style.color = "var(--text-2)"
+              ;(e.currentTarget as HTMLElement).style.borderColor = "var(--border)"
+            }}
+          >
+            ↻ Reset Layout
+          </button>
+        </div>
+
         <ForceGraph2D
           ref={fgRef}
           graphData={data}
@@ -808,25 +892,53 @@ export default function GraphPage() {
             return (r / 4) ** 2
           }}
           nodeRelSize={4}
-          linkWidth={(link: any) => (link.weight || 1) * 0.5}
+          linkWidth={(link: any) => {
+            const src = typeof link.source === "object" ? (link.source as any).id : link.source
+            const tgt = typeof link.target === "object" ? (link.target as any).id : link.target
+            const activeId = hoveredNodeIdRef.current ?? clickedEntityIdRef.current
+            if (activeId && (src === activeId || tgt === activeId)) return 1.4
+            return (link.weight || 1) * 0.5
+          }}
           linkColor={(link: any) => {
             const src = typeof link.source === "object" ? (link.source as any).id : link.source
             const tgt = typeof link.target === "object" ? (link.target as any).id : link.target
             const activeId = hoveredNodeIdRef.current ?? clickedEntityIdRef.current
             if (activeId) {
               if (src === activeId || tgt === activeId)
-                return isLight ? "rgba(99,102,241,0.40)" : "rgba(99,102,241,0.35)"
+                return isLight ? "rgba(212,119,92,0.55)" : "rgba(212,119,92,0.50)"
               return isLight ? "rgba(0,0,0,0.02)" : "rgba(255,255,255,0.01)"
             }
             return linkColorBase
           }}
-          linkDirectionalParticles={2}
+          linkCurvature={(link: any) => {
+            const src = typeof link.source === "object" ? link.source : null
+            const tgt = typeof link.target === "object" ? link.target : null
+            return src?.type === "entity" && tgt?.type === "entity" ? 0.08 : 0
+          }}
+          linkDirectionalParticles={(link: any) => {
+            const src = typeof link.source === "object" ? (link.source as any).id : link.source
+            const tgt = typeof link.target === "object" ? (link.target as any).id : link.target
+            const activeId = hoveredNodeIdRef.current ?? clickedEntityIdRef.current
+            if (activeId && (src === activeId || tgt === activeId)) return 3
+            return 2
+          }}
           linkDirectionalParticleSpeed={0.004}
-          linkDirectionalParticleColor={() => particleColor}
-          cooldownTicks={100}
-          d3VelocityDecay={0.3}
+          linkDirectionalParticleColor={(link: any) => {
+            const src = typeof link.source === "object" ? (link.source as any).id : link.source
+            const tgt = typeof link.target === "object" ? (link.target as any).id : link.target
+            const activeId = hoveredNodeIdRef.current ?? clickedEntityIdRef.current
+            if (activeId && (src === activeId || tgt === activeId)) {
+              return isLight ? "rgba(212,119,92,0.85)" : "rgba(212,119,92,0.75)"
+            }
+            return particleColor
+          }}
+          cooldownTicks={200}
+          warmupTicks={60}
+          d3VelocityDecay={0.25}
+          d3AlphaDecay={0.018}
           onEngineStop={handleEngineStop}
           onRenderFramePre={renderClusters}
+          onRenderFramePost={renderVignette}
           nodeCanvasObjectMode={() => "replace"}
           nodeCanvasObject={(node: any, ctx, globalScale) => {
             const { x, y } = node
@@ -845,7 +957,7 @@ export default function GraphPage() {
             // 3-intensity alpha: primary / medium / light
             let alpha: number
             if (!isEntity) {
-              alpha = activeId ? 0.10 : 0.20
+              alpha = activeId ? (isConnected ? 0.55 : 0.08) : 0.30
             } else if (!activeId) {
               alpha = ALPHA_MEDIUM          // idle — all entities uniform
             } else if (isActive) {
@@ -856,16 +968,30 @@ export default function GraphPage() {
               alpha = ALPHA_LIGHT           // distant
             }
 
-            // Scale up hovered node slightly
-            const drawR = (isActive && !!hovId) ? r * 1.08 : r
+            // Scale up active node slightly (Obsidian "pop")
+            const drawR = isActive ? r * 1.12 : r
 
-            // Glow ring for top-10% hub entities
+            // Soft halo for active entity (Obsidian-style glow)
+            if (isActive && isEntity) {
+              const haloR = drawR * 2.4
+              const grad = ctx.createRadialGradient(x, y, drawR, x, y, haloR)
+              grad.addColorStop(0, "rgba(212,119,92,0.22)")
+              grad.addColorStop(1, "rgba(212,119,92,0)")
+              ctx.beginPath()
+              ctx.arc(x, y, haloR, 0, 2 * Math.PI)
+              ctx.fillStyle = grad
+              ctx.fill()
+            }
+
+            // Outer ring for top-10% hubs
             const isTop10 = isEntity && top10Threshold > 0 && mc >= top10Threshold
             if (isTop10 && alpha > ALPHA_LIGHT) {
               ctx.beginPath()
               ctx.arc(x, y, drawR + 4, 0, 2 * Math.PI)
-              ctx.strokeStyle = `rgba(99,102,241,${0.30 * alpha})`
-              ctx.lineWidth = 1.2
+              ctx.strokeStyle = isActive
+                ? `rgba(212,119,92,${0.85})`
+                : `rgba(99,102,241,${0.40 * alpha + 0.15})`
+              ctx.lineWidth = isActive ? 2 : 1.2
               ctx.stroke()
             }
 
@@ -876,31 +1002,56 @@ export default function GraphPage() {
             ctx.fillStyle = `rgba(${cr},${cg},${cb},${alpha})`
             ctx.fill()
 
-            // Label (entity nodes only, skip if radius too small)
-            if (isEntity && drawR >= 7) {
-              const rawFont = Math.min(size * 0.42, 16)
-              const fontSize = Math.max(9, rawFont / Math.max(1, globalScale))
-              const weight = mc >= p70Threshold ? 600 : 500
-              ctx.font = `${weight} ${fontSize}px -apple-system, BlinkMacSystemFont, sans-serif`
-              ctx.textAlign = "center"
-              ctx.textBaseline = "top"
-              if (size >= 28 && !isLight) {
-                ctx.shadowColor = "rgba(0,0,0,0.35)"
-                ctx.shadowBlur = 2
-                ctx.shadowOffsetY = 1
+            // Subtle outline for definition (light mode benefits most)
+            if (isEntity) {
+              ctx.lineWidth = 1
+              ctx.strokeStyle = isLight
+                ? `rgba(40,40,60,${0.18 * alpha + 0.05})`
+                : `rgba(0,0,0,${0.35 * alpha + 0.10})`
+              ctx.stroke()
+            }
+
+            // Label rendering with zoom-aware fade (Obsidian style)
+            // Always show labels for active node + 1-hop neighbors; otherwise fade based on zoom.
+            if (isEntity && drawR >= 6) {
+              const forceShow = isActive || isConnected
+              // Smoothstep between zoom 0.6 → 1.2
+              const zoomFade = Math.max(0, Math.min(1, (globalScale - 0.6) / 0.6))
+              if (forceShow || zoomFade > 0.05) {
+                const rawFont = Math.min(size * 0.42, 16)
+                const fontSize = Math.max(9, rawFont / Math.max(1, globalScale))
+                const weight = mc >= p70Threshold ? 600 : 500
+                ctx.font = `${weight} ${fontSize}px -apple-system, BlinkMacSystemFont, sans-serif`
+                ctx.textAlign = "center"
+                ctx.textBaseline = "top"
+                if (size >= 28 && !isLight) {
+                  ctx.shadowColor = "rgba(0,0,0,0.45)"
+                  ctx.shadowBlur = 3
+                  ctx.shadowOffsetY = 1
+                }
+                const baseLabelAlpha = Math.min(1, alpha + 0.20)
+                const labelAlpha = forceShow ? Math.max(baseLabelAlpha, 0.85) : baseLabelAlpha * zoomFade
+                ctx.fillStyle = isLight
+                  ? `rgba(26,26,46,${labelAlpha})`
+                  : `rgba(210,210,225,${labelAlpha})`
+                ctx.fillText(node.label || node.id, x, y + drawR + 3)
+                ctx.shadowColor = "transparent"
+                ctx.shadowBlur = 0
+                ctx.shadowOffsetY = 0
               }
-              const labelAlpha = Math.min(1, alpha + 0.15)
-              ctx.fillStyle = isLight
-                ? `rgba(26,26,46,${labelAlpha})`
-                : `rgba(200,200,215,${labelAlpha})`
-              ctx.fillText(node.label || node.id, x, y + drawR + 3)
-              ctx.shadowColor = "transparent"
-              ctx.shadowBlur = 0
-              ctx.shadowOffsetY = 0
             }
           }}
           onNodeHover={handleNodeHover}
           onNodeClick={handleNodeClick}
+          onNodeDragEnd={(node: any) => {
+            node.fx = node.x
+            node.fy = node.y
+          }}
+          onNodeRightClick={(node: any) => {
+            node.fx = undefined
+            node.fy = undefined
+            fgRef.current?.d3ReheatSimulation?.()
+          }}
         />
       </div>
 
