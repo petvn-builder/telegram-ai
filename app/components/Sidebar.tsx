@@ -471,6 +471,7 @@ function SidebarInner() {
 
           {/* WORKSPACE section */}
           <SectionHeader label="Workspace" />
+          <NavLink href="/assistant" label="Assistant" icon={<SparkleIcon />} isActive={pathname === "/assistant"} />
           <NavLink href="/dashboard" label="Home" icon={<HomeIcon />} isActive={pathname === "/dashboard"} />
           <NavLink href="/tasks" label="Tasks" icon={<TasksIcon />} isActive={pathname === "/tasks"} />
           <NavLink href="/notes" label="Notes" icon={<NotesIcon />} isActive={pathname === "/notes" || pathname.startsWith("/notes/")} />
