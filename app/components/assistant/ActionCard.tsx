@@ -6,7 +6,6 @@ import type {
   BriefAction,
   BriefActionStep,
   CreateTaskPayload,
-  ReplyEmailPayload,
   ScheduleTimePayload,
 } from "@/lib/assistant/brief"
 
@@ -35,6 +34,8 @@ function formatSlot(iso: string): string {
 }
 
 export default function ActionCard({ item, action }: Props) {
+  const replyStep = pickReplyStep(action)
+
   return (
     <div
       style={{
@@ -60,21 +61,31 @@ export default function ActionCard({ item, action }: Props) {
         {item.title}
       </div>
 
-      {action?.primary.type === "reply_email" && (
-        <DraftPreview draft={action.primary.payload.draft} />
+      {replyStep && (
+        <ReplyComposer
+          step={replyStep}
+          item={item}
+          secondary={action?.secondary}
+        />
       )}
 
-      {action && (
+      {!replyStep && action && (
         <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", alignItems: "center" }}>
-          <ActionButton step={action.primary} item={item} variant="primary" />
+          <ActionButton step={action.primary} variant="primary" />
           {action.secondary && (
-            <ActionButton step={action.secondary} item={item} variant="secondary" />
+            <ActionButton step={action.secondary} variant="secondary" />
           )}
           <ConfidencePill value={action.confidence} />
         </div>
       )}
     </div>
   )
+}
+
+function pickReplyStep(action?: BriefAction): BriefActionStep & { type: "reply_email" } | null {
+  if (action?.primary.type === "reply_email") return action.primary
+  if (action?.secondary?.type === "reply_email") return action.secondary
+  return null
 }
 
 function CardHeader({ item }: { item: ContextItem }) {
@@ -113,40 +124,161 @@ function CardHeader({ item }: { item: ContextItem }) {
   )
 }
 
-function DraftPreview({ draft }: { draft: string }) {
+function ReplyComposer({
+  step,
+  item,
+  secondary,
+}: {
+  step: BriefActionStep & { type: "reply_email" }
+  item: ContextItem
+  secondary?: BriefActionStep
+}) {
+  const [draft, setDraft] = useState(step.payload.draft)
+  const [editing, setEditing] = useState(false)
+  const [sending, setSending] = useState(false)
+  const [status, setStatus] = useState<{ kind: "ok" | "error"; msg: string } | null>(null)
+
+  const threadId = step.payload.threadId || item.metadata?.threadId
+  const canSend = !!threadId && draft.trim().length > 0
+
+  async function send() {
+    if (!canSend) return
+    setSending(true)
+    setStatus(null)
+    try {
+      const res = await fetch("/api/assistant/reply", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          threadId,
+          draft,
+          subject: step.payload.subject ?? item.title,
+          to: step.payload.to ?? item.metadata?.from,
+        }),
+      })
+      if (res.ok) {
+        setStatus({ kind: "ok", msg: "Sent · reply on thread" })
+      } else {
+        const j = await res.json().catch(() => ({}))
+        const reconnect = j.code === "scope_error"
+        setStatus({
+          kind: "error",
+          msg: reconnect
+            ? "Reconnect Google to enable send"
+            : j.error ?? "Send failed",
+        })
+      }
+    } catch (e) {
+      setStatus({
+        kind: "error",
+        msg: e instanceof Error ? e.message : "Send failed",
+      })
+    } finally {
+      setSending(false)
+    }
+  }
+
+  const sent = status?.kind === "ok"
+
   return (
-    <details
+    <div
       style={{
-        fontSize: "13px",
         background: "var(--ai-accent-dim)",
         borderLeft: "2px solid var(--ai-accent)",
         borderRadius: "4px",
-        padding: "8px 10px",
+        padding: "10px 12px",
+        display: "flex",
+        flexDirection: "column",
+        gap: "8px",
       }}
     >
-      <summary
+      <div
         style={{
-          cursor: "pointer",
-          color: "var(--ai-accent)",
-          fontWeight: 500,
-          fontSize: "12px",
-          letterSpacing: "0.04em",
-          textTransform: "uppercase",
+          display: "flex",
+          alignItems: "center",
+          gap: "8px",
         }}
       >
-        Drafted reply
-      </summary>
-      <p
-        style={{
-          margin: "8px 0 0",
-          whiteSpace: "pre-wrap",
-          color: "var(--text-1)",
-          lineHeight: 1.55,
-        }}
-      >
-        {draft}
-      </p>
-    </details>
+        <span
+          style={{
+            color: "var(--ai-accent)",
+            fontWeight: 500,
+            fontSize: "11px",
+            letterSpacing: "0.06em",
+            textTransform: "uppercase",
+          }}
+        >
+          Drafted reply
+        </span>
+        {!sent && (
+          <button
+            onClick={() => setEditing((v) => !v)}
+            style={textBtnStyle()}
+            disabled={sending}
+          >
+            {editing ? "Done editing" : "Edit"}
+          </button>
+        )}
+      </div>
+
+      {editing ? (
+        <textarea
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          rows={Math.max(4, draft.split("\n").length + 1)}
+          style={{
+            width: "100%",
+            fontSize: "13px",
+            lineHeight: 1.55,
+            padding: "8px 10px",
+            border: "1px solid var(--ai-border)",
+            borderRadius: "6px",
+            background: "var(--bg-surface)",
+            color: "var(--text-1)",
+            fontFamily: "inherit",
+            resize: "vertical",
+          }}
+          disabled={sending || sent}
+        />
+      ) : (
+        <p
+          style={{
+            margin: 0,
+            whiteSpace: "pre-wrap",
+            color: "var(--text-1)",
+            lineHeight: 1.55,
+            fontSize: "13px",
+          }}
+        >
+          {draft}
+        </p>
+      )}
+
+      <div style={{ display: "flex", gap: "8px", alignItems: "center", flexWrap: "wrap" }}>
+        {!sent && (
+          <button
+            onClick={send}
+            disabled={sending || !canSend}
+            style={btnStyle("primary", sending)}
+          >
+            {sending ? "Sending…" : step.label || "Send reply"}
+          </button>
+        )}
+        {secondary && !sent && (
+          <ActionButton step={secondary} variant="secondary" />
+        )}
+        {status && (
+          <span
+            style={{
+              fontSize: "12px",
+              color: status.kind === "ok" ? "var(--ai-accent)" : "var(--accent)",
+            }}
+          >
+            {status.msg}
+          </span>
+        )}
+      </div>
+    </div>
   )
 }
 
@@ -168,11 +300,9 @@ function ConfidencePill({ value }: { value: number }) {
 
 function ActionButton({
   step,
-  item,
   variant,
 }: {
   step: BriefActionStep
-  item: ContextItem
   variant: "primary" | "secondary"
 }) {
   const [busy, setBusy] = useState(false)
@@ -183,7 +313,7 @@ function ActionButton({
     try {
       switch (step.type) {
         case "reply_email":
-          openMailtoDraft(step.payload, item)
+          // Reply is handled by ReplyComposer; this is a fallback.
           break
         case "create_task": {
           const ok = await postCreateTask(step.payload)
@@ -222,16 +352,6 @@ function ActionButton({
   )
 }
 
-function openMailtoDraft(payload: ReplyEmailPayload, item: ContextItem) {
-  const to = payload.to ?? item.metadata?.from ?? ""
-  const subjectRaw = payload.subject ?? item.title
-  const subject = subjectRaw.startsWith("Re:") ? subjectRaw : `Re: ${subjectRaw}`
-  window.location.href =
-    `mailto:${encodeURIComponent(to)}` +
-    `?subject=${encodeURIComponent(subject)}` +
-    `&body=${encodeURIComponent(payload.draft)}`
-}
-
 async function postCreateTask(payload: CreateTaskPayload): Promise<boolean> {
   const res = await fetch("/api/tasks", {
     method: "POST",
@@ -268,5 +388,17 @@ function btnStyle(
     cursor: busy ? "wait" : "pointer",
     opacity: busy ? 0.6 : 1,
     transition: "background 0.15s, border-color 0.15s",
+  }
+}
+
+function textBtnStyle(): React.CSSProperties {
+  return {
+    fontSize: "11px",
+    padding: "2px 6px",
+    border: "none",
+    background: "transparent",
+    color: "var(--ai-accent)",
+    cursor: "pointer",
+    textDecoration: "underline",
   }
 }
