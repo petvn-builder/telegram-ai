@@ -85,62 +85,6 @@ function entityStyle(type: string) {
   return ENTITY_COLORS[type] ?? { bg: "rgba(128,128,160,0.10)", text: "var(--text-2)", border: "var(--border)" }
 }
 
-// ─── convex hull (Graham scan) ────────────────────────────────────────────────
-
-function cross(O: [number, number], A: [number, number], B: [number, number]) {
-  return (A[0] - O[0]) * (B[1] - O[1]) - (A[1] - O[1]) * (B[0] - O[0])
-}
-
-function convexHull(pts: [number, number][]): [number, number][] | null {
-  if (pts.length < 2) return null
-
-  // For exactly 2 points, return a padded rectangle around the segment
-  if (pts.length === 2) {
-    const [ax, ay] = pts[0]
-    const [bx, by] = pts[1]
-    const dx = bx - ax
-    const dy = by - ay
-    const len = Math.sqrt(dx * dx + dy * dy) || 1
-    const px = (-dy / len) * 22
-    const py = (dx / len) * 22
-    return [
-      [ax + px, ay + py],
-      [bx + px, by + py],
-      [bx - px, by - py],
-      [ax - px, ay - py],
-    ]
-  }
-
-  const sorted = [...pts].sort((a, b) => a[0] - b[0] || a[1] - b[1])
-  const lower: [number, number][] = []
-  for (const p of sorted) {
-    while (lower.length >= 2 && cross(lower[lower.length - 2], lower[lower.length - 1], p) <= 0)
-      lower.pop()
-    lower.push(p)
-  }
-  const upper: [number, number][] = []
-  for (const p of [...sorted].reverse()) {
-    while (upper.length >= 2 && cross(upper[upper.length - 2], upper[upper.length - 1], p) <= 0)
-      upper.pop()
-    upper.push(p)
-  }
-  lower.pop()
-  upper.pop()
-  return [...lower, ...upper]
-}
-
-// Expand hull points outward from centroid by `padding` px
-function expandHull(hull: [number, number][], padding: number): [number, number][] {
-  const cx = hull.reduce((s, p) => s + p[0], 0) / hull.length
-  const cy = hull.reduce((s, p) => s + p[1], 0) / hull.length
-  return hull.map(([x, y]) => {
-    const dx = x - cx
-    const dy = y - cy
-    const len = Math.sqrt(dx * dx + dy * dy) || 1
-    return [x + (dx / len) * padding, y + (dy / len) * padding]
-  })
-}
-
 // ─── insight icon map ─────────────────────────────────────────────────────────
 
 const INSIGHT_ICONS: Record<string, string> = {
@@ -502,32 +446,39 @@ export default function GraphPage() {
     const fg = fgRef.current
     hasCenteredRef.current = false
 
+    // Charge: bigger hubs push harder, but capped so dragging doesn't blow up the layout.
+    // distanceMax keeps the effect local — far nodes aren't yanked when a hub is dragged.
     fg.d3Force("charge")
-      ?.strength((node: any) =>
-        node.type === "entity"
-          ? -120 - computeNodeSize(node) * 14
-          : -40
-      )
-      .distanceMax(420)
+      ?.strength((node: any) => {
+        if (node.type !== "entity") return -120
+        const s = computeNodeSize(node)
+        return Math.max(-700, -160 - s * 6)
+      })
+      .distanceMax(260)
 
+    // Link distance: notes need more room (large tangential ring around hubs), so we add
+    // a generous floor proportional to the larger endpoint.
     fg.d3Force("link")
       ?.distance((link: any) => {
         const s = typeof link.source === "object" ? computeNodeSize(link.source) : 14
         const t = typeof link.target === "object" ? computeNodeSize(link.target) : 14
-        return Math.max(60, (s + t) * 1.6 + 40)
+        const big = Math.max(s, t)
+        return Math.max(90, big * 2.2 + 50)
       })
-      .strength(0.35)
+      .strength(0.3)
 
     fg.d3Force(
       "collision",
       d3
-        .forceCollide((node: any) => computeNodeSize(node) / 2 + 14)
+        .forceCollide((node: any) => computeNodeSize(node) / 2 + 18)
         .strength(1)
-        .iterations(2)
+        .iterations(3)
     )
 
-    fg.d3Force("x", d3.forceX(0).strength(0.02))
-    fg.d3Force("y", d3.forceY(0).strength(0.02))
+    // Very weak centering — strong enough to pull lone components inward,
+    // weak enough not to suck nodes toward (0,0) when the user drags.
+    fg.d3Force("x", d3.forceX(0).strength(0.005))
+    fg.d3Force("y", d3.forceY(0).strength(0.005))
   }, [data, computeNodeSize])
 
   // Fit the whole graph into view once simulation settles
@@ -621,26 +572,15 @@ export default function GraphPage() {
 
   const visibleInsights = insights.filter((i) => !dismissedIds.has(i.id))
 
-  // Theme-dependent canvas values
+  // Theme-dependent canvas values — read --bg-base so canvas matches the rest of the app
   const isLight = theme === "light"
-  const canvasBg      = isLight ? "#f5f5fb" : "#0d0d14"
+  const canvasBg = useMemo(() => {
+    if (typeof window === "undefined") return isLight ? "#F5F5F0" : "#1C1C1E"
+    const v = getComputedStyle(document.documentElement).getPropertyValue("--bg-base").trim()
+    return v || (isLight ? "#F5F5F0" : "#1C1C1E")
+  }, [isLight, theme])
   const linkColorBase = isLight ? "rgba(0,0,0,0.08)" : "rgba(255,255,255,0.06)"
   const particleColor = isLight ? "rgba(99,102,241,0.6)" : "rgba(99,102,241,0.5)"
-
-  // Subtle radial vignette overlay (Obsidian-style depth)
-  const renderVignette = useCallback((ctx: CanvasRenderingContext2D, globalScale: number) => {
-    const canvas = ctx.canvas
-    const w = canvas.width / (window.devicePixelRatio || 1)
-    const h = canvas.height / (window.devicePixelRatio || 1)
-    ctx.save()
-    ctx.setTransform(1, 0, 0, 1, 0, 0)
-    const grad = ctx.createRadialGradient(w / 2, h / 2, Math.min(w, h) * 0.2, w / 2, h / 2, Math.max(w, h) * 0.7)
-    grad.addColorStop(0, "rgba(0,0,0,0)")
-    grad.addColorStop(1, isLight ? "rgba(0,0,0,0.06)" : "rgba(0,0,0,0.30)")
-    ctx.fillStyle = grad
-    ctx.fillRect(0, 0, w, h)
-    ctx.restore()
-  }, [isLight])
 
   // Reset all pinned nodes and reheat simulation
   const handleResetLayout = useCallback(() => {
@@ -843,7 +783,6 @@ export default function GraphPage() {
           d3VelocityDecay={0.25}
           d3AlphaDecay={0.018}
           onEngineStop={handleEngineStop}
-          onRenderFramePost={renderVignette}
           nodeCanvasObjectMode={() => "replace"}
           nodePointerAreaPaint={(node: any, color, ctx, globalScale) => {
             const isEntity = node.type === "entity"
