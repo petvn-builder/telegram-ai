@@ -1,5 +1,10 @@
-import { searchEmailsTool } from "@/mcp/gmail/search-emails"
-import { getEventsTool } from "@/mcp/calendar/get-events"
+import { gmailFor } from "@/lib/google/gmail-client"
+import { calendarFor } from "@/lib/google/calendar-client"
+import {
+  normalizeEmailSummary,
+  normalizeEvent,
+} from "@/lib/google/normalize"
+import { parseNatural, iso } from "@/mcp/shared/time"
 import type {
   NormalizedEmailSummary,
   NormalizedEvent,
@@ -17,7 +22,7 @@ export type SafeFetchResult<T> = {
 
 function isAuthError(err: unknown): boolean {
   const msg = err instanceof Error ? err.message : String(err)
-  return /not connected|reconnect|invalid_grant|auth_error/i.test(msg)
+  return /not connected|reconnect|invalid_grant|auth_error|401|403/i.test(msg)
 }
 
 async function safe<T>(
@@ -41,14 +46,29 @@ export async function getEmails(
   opts?: { query?: string; maxResults?: number }
 ): Promise<SafeFetchResult<NormalizedEmailSummary[]>> {
   return safe(async () => {
-    const res = await searchEmailsTool.handler(
-      {
-        query: opts?.query ?? "newer_than:2d -category:promotions",
-        maxResults: opts?.maxResults ?? 15,
-      },
-      ctx
+    const query = opts?.query ?? "newer_than:2d -category:promotions"
+    const maxResults = opts?.maxResults ?? 15
+    const gmail = await gmailFor(ctx.userId)
+
+    const list = await gmail.users.messages.list({
+      userId: "me",
+      q: query,
+      maxResults,
+    })
+    const ids = (list.data.messages ?? []).map((m) => m.id!).filter(Boolean)
+    if (ids.length === 0) return []
+
+    const fetched = await Promise.all(
+      ids.map((id) =>
+        gmail.users.messages.get({
+          userId: "me",
+          id,
+          format: "metadata",
+          metadataHeaders: ["From", "To", "Subject", "Date"],
+        })
+      )
     )
-    return res.messages
+    return fetched.map((r) => normalizeEmailSummary(r.data))
   }, [])
 }
 
@@ -57,15 +77,19 @@ export async function getCalendarEvents(
   opts?: { timeMin?: string; timeMax?: string; maxResults?: number }
 ): Promise<SafeFetchResult<NormalizedEvent[]>> {
   return safe(async () => {
-    const res = await getEventsTool.handler(
-      {
-        timeMin: opts?.timeMin ?? "today",
-        timeMax: opts?.timeMax ?? "tomorrow",
-        calendarId: "primary",
-        maxResults: opts?.maxResults ?? 25,
-      },
-      ctx
-    )
-    return res.events
+    const ref = new Date()
+    const timeMin = parseNatural(opts?.timeMin ?? "today", ref, ctx.timeZone)
+    const timeMax = parseNatural(opts?.timeMax ?? "tomorrow", ref, ctx.timeZone)
+    const cal = await calendarFor(ctx.userId)
+
+    const res = await cal.events.list({
+      calendarId: "primary",
+      timeMin: iso(timeMin),
+      timeMax: iso(timeMax),
+      maxResults: opts?.maxResults ?? 25,
+      singleEvents: true,
+      orderBy: "startTime",
+    })
+    return (res.data.items ?? []).map((e) => normalizeEvent(e, "primary"))
   }, [])
 }
