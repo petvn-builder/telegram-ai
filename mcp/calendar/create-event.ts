@@ -1,9 +1,8 @@
 import { z } from "zod"
 import { defineTool } from "../tool-registry"
-import { calendarFor } from "@/lib/google/calendar-client"
-import { normalizeEvent } from "@/lib/google/normalize"
 import { parseRange, iso } from "../shared/time"
 import { wrapGoogleError, ToolError } from "../shared/errors"
+import { createCalendarEvent } from "@/lib/google/calendar-create"
 import type { NormalizedEvent } from "../shared/types"
 
 const input = z.object({
@@ -33,30 +32,23 @@ export const createEventTool = defineTool({
     console.log("[create_event] args:", JSON.stringify({ start: args.start, end: args.end, durationMinutes: args.durationMinutes, timeZone: tz }))
     console.log("[create_event] parsed:", { start: iso(start), end: iso(end), durationMs: end.getTime() - start.getTime() })
 
-    // Sanity check: end must be after start and within 24h unless explicitly longer
-    if (end <= start) {
-      throw new ToolError("invalid_input", "End time must be after start time.")
-    }
-
-    const cal = await calendarFor(ctx.userId)
-
     try {
-      const res = await cal.events.insert({
+      return await createCalendarEvent({
+        userId: ctx.userId,
+        summary: args.summary,
+        start,
+        end,
+        description: args.description,
+        location: args.location,
+        attendees: args.attendees,
         calendarId: args.calendarId,
+        timeZone: tz,
         sendUpdates: args.sendUpdates,
-        requestBody: {
-          summary: args.summary,
-          description: args.description,
-          location: args.location,
-          start: { dateTime: iso(start), timeZone: tz },
-          end: { dateTime: iso(end), timeZone: tz },
-          attendees: args.attendees?.map((email) => ({ email })),
-        },
       })
-      if (!res.data) throw new ToolError("google_error", "Empty response from Google Calendar")
-      return normalizeEvent(res.data, args.calendarId)
     } catch (e) {
-      if (e instanceof ToolError) throw e
+      if (e instanceof Error && e.message === "End time must be after start time") {
+        throw new ToolError("invalid_input", e.message)
+      }
       throw wrapGoogleError(e)
     }
   },

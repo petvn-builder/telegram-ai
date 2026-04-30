@@ -306,10 +306,11 @@ function ActionButton({
   variant: "primary" | "secondary"
 }) {
   const [busy, setBusy] = useState(false)
-  const [done, setDone] = useState<string | null>(null)
+  const [status, setStatus] = useState<{ kind: "ok" | "error"; msg: string } | null>(null)
 
   async function run() {
     setBusy(true)
+    setStatus(null)
     try {
       switch (step.type) {
         case "reply_email":
@@ -317,15 +318,17 @@ function ActionButton({
           break
         case "create_task": {
           const ok = await postCreateTask(step.payload)
-          setDone(ok ? "Task created" : "Failed")
+          setStatus({ kind: ok ? "ok" : "error", msg: ok ? "Task created" : "Failed" })
           break
         }
         case "view_task":
           window.location.href = `/tasks?focus=${encodeURIComponent(step.payload.taskId)}`
           break
-        case "schedule_time":
-          openSchedule(step.payload)
+        case "schedule_time": {
+          const result = await postSchedule(step.payload)
+          setStatus(result)
           break
+        }
         case "review_note":
           window.location.href = `/notes?open=${encodeURIComponent(step.payload.noteId)}`
           break
@@ -335,15 +338,24 @@ function ActionButton({
     }
   }
 
+  const isDone = status?.kind === "ok"
+
   return (
     <>
-      <button onClick={run} disabled={busy} style={btnStyle(variant, busy)}>
-        {busy ? "Working…" : step.label}
+      <button onClick={run} disabled={busy || isDone} style={btnStyle(variant, busy)}>
+        {busy ? "Working…" : isDone ? "Done" : step.label}
       </button>
-      {done && (
-        <span style={{ fontSize: "12px", color: "var(--text-3)" }}>{done}</span>
+      {status && (
+        <span
+          style={{
+            fontSize: "12px",
+            color: status.kind === "ok" ? "var(--ai-accent)" : "var(--accent)",
+          }}
+        >
+          {status.msg}
+        </span>
       )}
-      {step.type === "schedule_time" && step.payload.suggestedSlot && (
+      {step.type === "schedule_time" && step.payload.suggestedSlot && !status && (
         <span style={{ fontSize: "11px", color: "var(--text-3)" }}>
           {formatSlot(step.payload.suggestedSlot)} · {step.payload.duration}m
         </span>
@@ -366,10 +378,36 @@ async function postCreateTask(payload: CreateTaskPayload): Promise<boolean> {
   return res.ok
 }
 
-function openSchedule(payload: ScheduleTimePayload) {
-  const params = new URLSearchParams({ create: "1", title: payload.title })
-  if (payload.suggestedSlot) params.set("when", payload.suggestedSlot)
-  window.location.href = `/tasks?${params.toString()}`
+async function postSchedule(
+  payload: ScheduleTimePayload
+): Promise<{ kind: "ok" | "error"; msg: string }> {
+  if (!payload.suggestedSlot) {
+    return { kind: "error", msg: "No slot suggested" }
+  }
+  try {
+    const res = await fetch("/api/assistant/schedule", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        title: payload.title,
+        suggestedSlot: payload.suggestedSlot,
+        duration: payload.duration,
+      }),
+    })
+    if (res.ok) {
+      return { kind: "ok", msg: "Event created" }
+    }
+    const j = await res.json().catch(() => ({}))
+    if (j.code === "scope_error") {
+      return { kind: "error", msg: "Reconnect Google to enable" }
+    }
+    return { kind: "error", msg: j.error ?? "Failed" }
+  } catch (e) {
+    return {
+      kind: "error",
+      msg: e instanceof Error ? e.message : "Failed",
+    }
+  }
 }
 
 function btnStyle(
