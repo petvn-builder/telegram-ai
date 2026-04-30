@@ -359,7 +359,6 @@ export default function GraphPage() {
   const [insights, setInsights] = useState<Insight[]>([])
   const [insightsLoading, setInsightsLoading] = useState(false)
   const [dismissedIds, setDismissedIds] = useState<Set<string>>(new Set())
-  const [clusterLabels, setClusterLabels] = useState<Record<string, string>>({})
   const [userId, setUserId] = useState<string | null>(null)
   const [panelOpen, setPanelOpen] = useState(false)
   const fgRef = useRef<any>(null)
@@ -369,13 +368,7 @@ export default function GraphPage() {
   const hoveredNodeIdRef = useRef<string | null>(null)
   const clickedEntityIdRef = useRef<string | null>(null)
   const adjacencyRef = useRef<Map<string, Set<string>>>(new Map())
-  const clusterLabelsRef = useRef<Record<string, string>>({})
   const summaryCache = useRef<Record<string, string>>({})
-
-  // Keep ref in sync with state (used in canvas render callback)
-  useEffect(() => {
-    clusterLabelsRef.current = clusterLabels
-  }, [clusterLabels])
 
   // Sync theme from html[data-theme]
   useEffect(() => {
@@ -435,40 +428,6 @@ export default function GraphPage() {
       .catch(() => {})
       .finally(() => setInsightsLoading(false))
   }, [data, userId])
-
-  // Fetch AI cluster labels after graph data arrives
-  useEffect(() => {
-    if (!data?.clusters || data.clusters.length === 0) return
-
-    // Deterministic fallback: use first entity ID per cluster while AI loads
-    const fallback: Record<string, string> = {}
-    for (const cluster of data.clusters) {
-      const firstNode = data.nodes.find(
-        (n) => n.type === "entity" && cluster.entityIds.includes(n.id)
-      )
-      fallback[cluster.id] = firstNode?.label ?? "Group"
-    }
-    setClusterLabels(fallback)
-
-    // Fetch AI labels in background
-    fetch("/api/graph/cluster-labels", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        clusters: data.clusters.map((c) => ({ id: c.id, entity_ids: c.entityIds })),
-      }),
-    })
-      .then((r) => r.json())
-      .then(({ labels }) => {
-        if (!Array.isArray(labels)) return
-        setClusterLabels((prev) => {
-          const next = { ...prev }
-          for (const { id, label } of labels) next[id] = label
-          return next
-        })
-      })
-      .catch(() => {})
-  }, [data])
 
   // Build adjacency map when data changes
   useEffect(() => {
@@ -571,19 +530,11 @@ export default function GraphPage() {
     fg.d3Force("y", d3.forceY(0).strength(0.02))
   }, [data, computeNodeSize])
 
-  // Auto-center on biggest entity once simulation settles
+  // Fit the whole graph into view once simulation settles
   function handleEngineStop() {
-    if (hasCenteredRef.current || !fgRef.current || !data) return
+    if (hasCenteredRef.current || !fgRef.current) return
     hasCenteredRef.current = true
-    const biggest = data.nodes
-      .filter((n) => n.type === "entity")
-      .sort((a, b) => (b.mentionCount ?? 0) - (a.mentionCount ?? 0))[0]
-    if (biggest?.x != null) {
-      fgRef.current.centerAt(biggest.x, biggest.y, 600)
-      fgRef.current.zoom(2.2, 600)
-    } else {
-      fgRef.current.zoomToFit(400, 80)
-    }
+    fgRef.current.zoomToFit(600, 80)
   }
 
   // Hover
@@ -675,51 +626,6 @@ export default function GraphPage() {
   const canvasBg      = isLight ? "#f5f5fb" : "#0d0d14"
   const linkColorBase = isLight ? "rgba(0,0,0,0.08)" : "rgba(255,255,255,0.06)"
   const particleColor = isLight ? "rgba(99,102,241,0.6)" : "rgba(99,102,241,0.5)"
-
-  // Cluster hull renderer — called before nodes each frame
-  const renderClusters = useCallback((ctx: CanvasRenderingContext2D) => {
-    if (!data?.clusters) return
-    for (const cluster of data.clusters) {
-      const points: [number, number][] = cluster.entityIds
-        .map((id) => data.nodes.find((n) => n.id === id))
-        .filter((n): n is GraphNode => !!n && n.x != null && n.y != null)
-        .map((n) => [n.x!, n.y!])
-
-      if (points.length < 2) continue
-      const hull = convexHull(points)
-      if (!hull || hull.length < 3) continue
-      const expanded = expandHull(hull, 24)
-
-      const [cr, cg, cb] = cluster.color
-
-      // Filled hull
-      ctx.beginPath()
-      ctx.moveTo(expanded[0][0], expanded[0][1])
-      for (let i = 1; i < expanded.length; i++) {
-        ctx.lineTo(expanded[i][0], expanded[i][1])
-      }
-      ctx.closePath()
-      ctx.fillStyle = `rgba(${cr},${cg},${cb},0.07)`
-      ctx.fill()
-      ctx.strokeStyle = `rgba(${cr},${cg},${cb},0.18)`
-      ctx.lineWidth = 0.8
-      ctx.setLineDash([4, 4])
-      ctx.stroke()
-      ctx.setLineDash([])
-
-      // Cluster label at centroid
-      const cx = points.reduce((s, p) => s + p[0], 0) / points.length
-      const cy = points.reduce((s, p) => s + p[1], 0) / points.length
-      const label = clusterLabelsRef.current[cluster.id] ?? ""
-      if (label) {
-        ctx.font = "500 9px -apple-system, BlinkMacSystemFont, sans-serif"
-        ctx.textAlign = "center"
-        ctx.textBaseline = "middle"
-        ctx.fillStyle = `rgba(${cr},${cg},${cb},0.60)`
-        ctx.fillText(label.toUpperCase(), cx, cy)
-      }
-    }
-  }, [data])
 
   // Subtle radial vignette overlay (Obsidian-style depth)
   const renderVignette = useCallback((ctx: CanvasRenderingContext2D, globalScale: number) => {
@@ -937,9 +843,22 @@ export default function GraphPage() {
           d3VelocityDecay={0.25}
           d3AlphaDecay={0.018}
           onEngineStop={handleEngineStop}
-          onRenderFramePre={renderClusters}
           onRenderFramePost={renderVignette}
           nodeCanvasObjectMode={() => "replace"}
+          nodePointerAreaPaint={(node: any, color, ctx, globalScale) => {
+            const isEntity = node.type === "entity"
+            if (!isEntity) {
+              const activeId = hoveredNodeIdRef.current ?? clickedEntityIdRef.current
+              const isConnected = !!activeId && !!adjacencyRef.current.get(activeId)?.has(node.id)
+              const reveal = (activeId && isConnected) || globalScale > 2.0
+              if (!reveal) return
+            }
+            const r = computeNodeSize(node) / 2
+            ctx.fillStyle = color
+            ctx.beginPath()
+            ctx.arc(node.x, node.y, r, 0, 2 * Math.PI)
+            ctx.fill()
+          }}
           nodeCanvasObject={(node: any, ctx, globalScale) => {
             const { x, y } = node
             const isEntity = node.type === "entity"
@@ -954,18 +873,25 @@ export default function GraphPage() {
             const isActive = node.id === activeId
             const isConnected = !!activeId && !!adjacencyRef.current.get(activeId)?.has(node.id)
 
-            // 3-intensity alpha: primary / medium / light
+            // Hide notes unless: an entity is active and this note is linked, OR zoom > 2.0
+            if (!isEntity) {
+              const reveal = (activeId && isConnected) || globalScale > 2.0
+              if (!reveal) return
+            }
+
+            // Idle alpha: entities scale with mention count so hubs anchor the eye.
             let alpha: number
             if (!isEntity) {
-              alpha = activeId ? (isConnected ? 0.55 : 0.08) : 0.30
+              alpha = activeId ? (isConnected ? 0.65 : 0.08) : 0.40
             } else if (!activeId) {
-              alpha = ALPHA_MEDIUM          // idle — all entities uniform
+              const ratio = Math.log(mc + 1) / Math.log(maxMentionCount + 1)
+              alpha = 0.18 + 0.62 * ratio   // tail ~0.18 → top hub ~0.80
             } else if (isActive) {
-              alpha = ALPHA_PRIMARY         // selected
+              alpha = ALPHA_PRIMARY
             } else if (isConnected) {
-              alpha = ALPHA_MEDIUM          // 1-hop neighbor
+              alpha = ALPHA_MEDIUM
             } else {
-              alpha = ALPHA_LIGHT           // distant
+              alpha = ALPHA_LIGHT
             }
 
             // Scale up active node slightly (Obsidian "pop")
@@ -1011,13 +937,14 @@ export default function GraphPage() {
               ctx.stroke()
             }
 
-            // Label rendering with zoom-aware fade (Obsidian style)
-            // Always show labels for active node + 1-hop neighbors; otherwise fade based on zoom.
+            // Label gating: at idle, only top-10% hubs are labeled.
+            // On hover/select, the active node + its 1-hop neighbors get labels.
+            // When zoomed past 1.8, every entity is labeled.
             if (isEntity && drawR >= 6) {
               const forceShow = isActive || isConnected
-              // Smoothstep between zoom 0.6 → 1.2
-              const zoomFade = Math.max(0, Math.min(1, (globalScale - 0.6) / 0.6))
-              if (forceShow || zoomFade > 0.05) {
+              const isHubLabel = top10Threshold > 0 && mc >= top10Threshold
+              const zoomShow = globalScale > 1.8
+              if (forceShow || isHubLabel || zoomShow) {
                 const rawFont = Math.min(size * 0.42, 16)
                 const fontSize = Math.max(9, rawFont / Math.max(1, globalScale))
                 const weight = mc >= p70Threshold ? 600 : 500
@@ -1029,8 +956,7 @@ export default function GraphPage() {
                   ctx.shadowBlur = 3
                   ctx.shadowOffsetY = 1
                 }
-                const baseLabelAlpha = Math.min(1, alpha + 0.20)
-                const labelAlpha = forceShow ? Math.max(baseLabelAlpha, 0.85) : baseLabelAlpha * zoomFade
+                const labelAlpha = forceShow ? 0.95 : Math.min(1, alpha + 0.25)
                 ctx.fillStyle = isLight
                   ? `rgba(26,26,46,${labelAlpha})`
                   : `rgba(210,210,225,${labelAlpha})`
