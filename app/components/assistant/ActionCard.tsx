@@ -61,6 +61,10 @@ export default function ActionCard({ item, action }: Props) {
         {item.title}
       </div>
 
+      {item.type === "email" && item.content && (
+        <IncomingEmailPreview item={item} />
+      )}
+
       {replyStep && (
         <ReplyComposer
           step={replyStep}
@@ -77,6 +81,73 @@ export default function ActionCard({ item, action }: Props) {
           )}
           <ConfidencePill value={action.confidence} />
         </div>
+      )}
+    </div>
+  )
+}
+
+function senderLabel(from: string): string {
+  const m = from.match(/^([^<]+)<([^>]+)>$/)
+  if (m) return m[1].trim().replace(/^"|"$/g, "")
+  return from
+}
+
+function IncomingEmailPreview({ item }: { item: ContextItem }) {
+  const [open, setOpen] = useState(false)
+  const from = item.metadata?.from
+  const senderName = from ? senderLabel(from) : null
+  return (
+    <div
+      style={{
+        background: "var(--bg-base)",
+        border: "1px solid var(--border-subtle)",
+        borderRadius: "8px",
+        padding: "10px 12px",
+        fontSize: "12px",
+        color: "var(--text-2)",
+        lineHeight: 1.55,
+      }}
+    >
+      {senderName && (
+        <div
+          style={{
+            fontSize: "11px",
+            color: "var(--text-3)",
+            marginBottom: "4px",
+          }}
+        >
+          From <span style={{ color: "var(--text-2)" }}>{senderName}</span>
+          {item.createdAt && (
+            <span> · {new Date(item.createdAt).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}</span>
+          )}
+        </div>
+      )}
+      <div
+        style={{
+          whiteSpace: "pre-wrap",
+          color: "var(--text-2)",
+          maxHeight: open ? undefined : "4.4em",
+          overflow: "hidden",
+          position: "relative",
+        }}
+      >
+        {item.content}
+      </div>
+      {item.content.length > 200 && (
+        <button
+          onClick={() => setOpen((v) => !v)}
+          style={{
+            marginTop: "4px",
+            fontSize: "11px",
+            border: "none",
+            background: "transparent",
+            color: "var(--text-3)",
+            cursor: "pointer",
+            padding: 0,
+          }}
+        >
+          {open ? "Show less" : "Show more"}
+        </button>
       )}
     </div>
   )

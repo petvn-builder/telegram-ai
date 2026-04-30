@@ -30,6 +30,35 @@ function encodeHeader(value: string): string {
   return `=?UTF-8?B?${b64}?=`
 }
 
+// Quoted-printable encode each line; preserves blank-line spacing and handles
+// non-ASCII safely. RFC 2045 §6.7: line length max 76, soft-break with `=`,
+// encode `=` itself and any non-ASCII byte as `=XX`.
+function quotedPrintableLine(line: string): string {
+  const buf = Buffer.from(line, "utf-8")
+  let out = ""
+  let col = 0
+  const flush = (token: string) => {
+    if (col + token.length > 75) {
+      out += "=\r\n"
+      col = 0
+    }
+    out += token
+    col += token.length
+  }
+  for (let i = 0; i < buf.length; i++) {
+    const b = buf[i]
+    const isPrintable = b >= 0x20 && b <= 0x7e && b !== 0x3d // not '='
+    flush(isPrintable ? String.fromCharCode(b) : `=${b.toString(16).toUpperCase().padStart(2, "0")}`)
+  }
+  return out
+}
+
+function quotedPrintable(body: string): string {
+  // Normalize to LF first, then re-emit with CRLF between lines.
+  const lines = body.replace(/\r\n/g, "\n").split("\n")
+  return lines.map(quotedPrintableLine).join("\r\n")
+}
+
 function buildRfc2822(args: {
   to: string
   from?: string
@@ -39,18 +68,16 @@ function buildRfc2822(args: {
   references?: string
   cc?: string[]
 }): string {
-  const lines: string[] = []
-  lines.push(`To: ${args.to}`)
-  if (args.cc && args.cc.length > 0) lines.push(`Cc: ${args.cc.join(", ")}`)
-  lines.push(`Subject: ${encodeHeader(args.subject)}`)
-  if (args.inReplyTo) lines.push(`In-Reply-To: ${args.inReplyTo}`)
-  if (args.references) lines.push(`References: ${args.references}`)
-  lines.push("MIME-Version: 1.0")
-  lines.push('Content-Type: text/plain; charset="UTF-8"')
-  lines.push("Content-Transfer-Encoding: 7bit")
-  lines.push("")
-  lines.push(args.body)
-  return lines.join("\r\n")
+  const headers: string[] = []
+  headers.push(`To: ${args.to}`)
+  if (args.cc && args.cc.length > 0) headers.push(`Cc: ${args.cc.join(", ")}`)
+  headers.push(`Subject: ${encodeHeader(args.subject)}`)
+  if (args.inReplyTo) headers.push(`In-Reply-To: ${args.inReplyTo}`)
+  if (args.references) headers.push(`References: ${args.references}`)
+  headers.push("MIME-Version: 1.0")
+  headers.push('Content-Type: text/plain; charset="UTF-8"')
+  headers.push("Content-Transfer-Encoding: quoted-printable")
+  return headers.join("\r\n") + "\r\n\r\n" + quotedPrintable(args.body)
 }
 
 function base64UrlEncode(input: string): string {

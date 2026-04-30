@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 import { getSupabaseServer } from "@/lib/supabase/server"
 import { getSupabaseAdmin } from "@/lib/supabase/admin"
+import { loadTokens } from "@/lib/google/token-store"
 import {
   getEmails,
   getCalendarEvents,
@@ -18,7 +19,7 @@ import {
 import { generateBrief, type BriefOutput } from "@/lib/assistant/brief"
 import type { DashTask, DashNote } from "@/app/api/dashboard/route"
 
-const TOP_N_FOR_LLM = 20
+const TOP_N_FOR_LLM = 30
 
 export type BriefResponse = BriefOutput & {
   items: ContextItem[]
@@ -56,7 +57,12 @@ export async function GET() {
     const db = getSupabaseAdmin()
     const tz = resolveTimeZone()
     const todayStr = new Date().toISOString().split("T")[0]
-    const ctx = { userId: user.id, timeZone: tz }
+    const tokens = await loadTokens(user.id).catch(() => null)
+    const ctx = {
+      userId: user.id,
+      timeZone: tz,
+      myEmail: tokens?.googleEmail ?? user.email ?? undefined,
+    }
 
     const [tasksRes, notesRes, emailsRes, eventsRes, freeRes] = await Promise.all([
       db

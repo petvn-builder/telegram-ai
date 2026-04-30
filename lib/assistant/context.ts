@@ -31,10 +31,13 @@ export function scoreItem(item: ContextItem): number {
   const todayStr = new Date().toISOString().split("T")[0]
   if (item.metadata?.dueDate) s += 2
   if (item.metadata?.dueDate && item.metadata.dueDate < todayStr) s += 3
+  // Every email gets a baseline so personal mail isn't crowded out by tasks.
+  if (item.type === "email") s += 1
   if (item.type === "email" && item.metadata?.requiresAction) s += 3
-  if (item.type === "email" && item.metadata?.unread) s += 1
+  if (item.type === "email" && item.metadata?.unread) s += 2
   const ageHours = (Date.now() - new Date(item.createdAt).getTime()) / 36e5
   if (ageHours < 24) s += 1
+  if (ageHours < 6) s += 1
   s += (item.metadata?.urgency ?? 0) * 2
   return s
 }
@@ -50,6 +53,28 @@ const ACTION_PHRASES = [
   "waiting on",
   "follow up",
   "follow-up",
+  "remember to",
+  "don't forget",
+  "do not forget",
+  "make sure",
+  "need to",
+  "we need",
+  "have to",
+  "important",
+  "urgent",
+  "todo",
+  "to-do",
+  "action required",
+  "send me",
+  "send the",
+  "share the",
+  "share with",
+  "attach",
+  "deadline",
+  "by tomorrow",
+  "by today",
+  "by eod",
+  "asap",
 ]
 
 function looksLikeAutomation(from: string): boolean {

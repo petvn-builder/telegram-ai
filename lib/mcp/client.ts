@@ -12,7 +12,12 @@ import type {
   FreeSlot,
 } from "@/mcp/shared/types"
 
-export type McpUserContext = { userId: string; timeZone: string }
+export type McpUserContext = {
+  userId: string
+  timeZone: string
+  /** User's connected Google address; used to drop self-sent threads. */
+  myEmail?: string
+}
 
 export type SourceStatus = "ok" | "disconnected" | "error"
 
@@ -43,13 +48,23 @@ async function safe<T>(
   }
 }
 
+function extractAddress(from: string): string {
+  // "Name <addr@x>" → "addr@x"; falls back to the trimmed input.
+  const m = from.match(/<([^>]+)>/)
+  return (m ? m[1] : from).trim().toLowerCase()
+}
+
 export async function getEmails(
   ctx: McpUserContext,
   opts?: { query?: string; maxResults?: number }
 ): Promise<SafeFetchResult<NormalizedEmailSummary[]>> {
   return safe(async () => {
-    const query = opts?.query ?? "newer_than:2d -category:promotions"
-    const maxResults = opts?.maxResults ?? 15
+    // Broaden default: 4 days, drop promotions/social/forums/updates noise.
+    // -from:me drops drafts where the user is the only sender on a thread.
+    const query =
+      opts?.query ??
+      "newer_than:4d -category:promotions -category:social -category:forums -in:chats"
+    const maxResults = opts?.maxResults ?? 25
     const gmail = await gmailFor(ctx.userId)
 
     const list = await gmail.users.messages.list({
@@ -70,7 +85,27 @@ export async function getEmails(
         })
       )
     )
-    return fetched.map((r) => normalizeEmailSummary(r.data))
+    const normalized = fetched.map((r) => normalizeEmailSummary(r.data))
+
+    // Dedupe by threadId: keep the latest message per thread.
+    const latestPerThread = new Map<string, NormalizedEmailSummary>()
+    for (const m of normalized) {
+      const cur = latestPerThread.get(m.threadId)
+      if (!cur || new Date(m.date).getTime() > new Date(cur.date).getTime()) {
+        latestPerThread.set(m.threadId, m)
+      }
+    }
+
+    // Drop threads whose latest message is from the user (i.e. already replied).
+    const myAddr = ctx.myEmail?.toLowerCase()
+    const result: NormalizedEmailSummary[] = []
+    for (const m of latestPerThread.values()) {
+      if (myAddr && extractAddress(m.from) === myAddr) continue
+      result.push(m)
+    }
+    // Newest first.
+    result.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+    return result
   }, [])
 }
 
