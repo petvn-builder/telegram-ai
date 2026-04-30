@@ -1,20 +1,33 @@
 import { NextResponse } from "next/server"
 import { getSupabaseServer } from "@/lib/supabase/server"
 import { getSupabaseAdmin } from "@/lib/supabase/admin"
-import { getEmails, getCalendarEvents, type SourceStatus } from "@/lib/mcp/client"
+import {
+  getEmails,
+  getCalendarEvents,
+  getFreeSlots,
+  type SourceStatus,
+} from "@/lib/mcp/client"
 import {
   emailToItem,
   eventToItem,
   taskToItem,
   noteToItem,
+  scoreItem,
   type ContextItem,
 } from "@/lib/assistant/context"
 import { generateBrief, type BriefOutput } from "@/lib/assistant/brief"
 import type { DashTask, DashNote } from "@/app/api/dashboard/route"
 
+const TOP_N_FOR_LLM = 20
+
 export type BriefResponse = BriefOutput & {
   items: ContextItem[]
-  sources: { gmail: SourceStatus; calendar: SourceStatus; tasks: SourceStatus; notes: SourceStatus }
+  sources: {
+    gmail: SourceStatus
+    calendar: SourceStatus
+    tasks: SourceStatus
+    notes: SourceStatus
+  }
   generatedAt: string
 }
 
@@ -45,7 +58,7 @@ export async function GET() {
     const todayStr = new Date().toISOString().split("T")[0]
     const ctx = { userId: user.id, timeZone: tz }
 
-    const [tasksRes, notesRes, emailsRes, eventsRes] = await Promise.all([
+    const [tasksRes, notesRes, emailsRes, eventsRes, freeRes] = await Promise.all([
       db
         .from("tasks")
         .select("id, title, status, due_date, priority")
@@ -65,6 +78,7 @@ export async function GET() {
         .limit(8),
       getEmails(ctx),
       getCalendarEvents(ctx),
+      getFreeSlots(ctx, { durationMinutes: 30, maxSlots: 3 }),
     ])
 
     const tasks: DashTask[] = (tasksRes.data ?? []) as DashTask[]
@@ -77,22 +91,34 @@ export async function GET() {
       notes: (notesRes.error ? "error" : "ok") as SourceStatus,
     }
 
-    const items: ContextItem[] = [
+    const allItems: ContextItem[] = [
       ...tasks.map(taskToItem),
       ...notes.map(noteToItem),
       ...emailsRes.data.map(emailToItem),
       ...eventsRes.data.map(eventToItem),
-    ].sort((a, b) => (b.metadata?.urgency ?? 0) - (a.metadata?.urgency ?? 0))
+    ].sort((a, b) => scoreItem(b) - scoreItem(a))
 
-    const brief = await generateBrief(items, {
+    const llmItems = allItems.slice(0, TOP_N_FOR_LLM)
+
+    if (process.env.NODE_ENV !== "production") {
+      console.log("[assistant/brief]", {
+        totalItems: allItems.length,
+        sentToLLM: llmItems.length,
+        freeSlots: freeRes.data.length,
+        sources,
+      })
+    }
+
+    const brief = await generateBrief(llmItems, {
       timeZone: tz,
       now: new Date().toISOString(),
       todayHuman: todayHuman(tz),
+      freeSlots: freeRes.data,
     })
 
     const response: BriefResponse = {
       ...brief,
-      items,
+      items: allItems,
       sources,
       generatedAt: new Date().toISOString(),
     }

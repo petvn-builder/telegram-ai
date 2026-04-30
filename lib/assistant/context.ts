@@ -21,7 +21,22 @@ export type ContextItem = {
     link?: string
     unread?: boolean
     status?: string
+    threadId?: string
+    from?: string
   }
+}
+
+export function scoreItem(item: ContextItem): number {
+  let s = 0
+  const todayStr = new Date().toISOString().split("T")[0]
+  if (item.metadata?.dueDate) s += 2
+  if (item.metadata?.dueDate && item.metadata.dueDate < todayStr) s += 3
+  if (item.type === "email" && item.metadata?.requiresAction) s += 3
+  if (item.type === "email" && item.metadata?.unread) s += 1
+  const ageHours = (Date.now() - new Date(item.createdAt).getTime()) / 36e5
+  if (ageHours < 24) s += 1
+  s += (item.metadata?.urgency ?? 0) * 2
+  return s
 }
 
 const ACTION_PHRASES = [
@@ -70,6 +85,8 @@ export function emailToItem(e: NormalizedEmailSummary): ContextItem {
       people: [e.from, ...e.to].filter(Boolean),
       requiresAction,
       unread: e.unread,
+      threadId: e.threadId,
+      from: e.from,
     },
   }
 }

@@ -4,10 +4,12 @@ import {
   normalizeEmailSummary,
   normalizeEvent,
 } from "@/lib/google/normalize"
+import { computeFreeSlots } from "@/lib/google/free-time"
 import { parseNatural, iso } from "@/mcp/shared/time"
 import type {
   NormalizedEmailSummary,
   NormalizedEvent,
+  FreeSlot,
 } from "@/mcp/shared/types"
 
 export type McpUserContext = { userId: string; timeZone: string }
@@ -91,5 +93,30 @@ export async function getCalendarEvents(
       orderBy: "startTime",
     })
     return (res.data.items ?? []).map((e) => normalizeEvent(e, "primary"))
+  }, [])
+}
+
+export async function getFreeSlots(
+  ctx: McpUserContext,
+  opts?: {
+    timeMin?: string
+    timeMax?: string
+    durationMinutes?: number
+    maxSlots?: number
+    workingHours?: { start: string; end: string }
+  }
+): Promise<SafeFetchResult<FreeSlot[]>> {
+  return safe(async () => {
+    const ref = new Date()
+    const timeMin = parseNatural(opts?.timeMin ?? "today", ref, ctx.timeZone)
+    const timeMax = parseNatural(opts?.timeMax ?? "tomorrow", ref, ctx.timeZone)
+    return computeFreeSlots({
+      userId: ctx.userId,
+      timeMin,
+      timeMax,
+      durationMinutes: opts?.durationMinutes ?? 30,
+      maxSlots: opts?.maxSlots ?? 3,
+      workingHours: opts?.workingHours ?? { start: "09:00", end: "18:00" },
+    })
   }, [])
 }
