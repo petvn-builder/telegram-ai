@@ -24,7 +24,11 @@ export default function AssistantPage() {
     fetcher,
     {
       revalidateOnFocus: false,
-      dedupingInterval: 60_000,
+      revalidateOnReconnect: false,
+      revalidateIfStale: false,
+      // Cache forever within the SWR client; only manual mutate() or a full
+      // page reload triggers a refetch.
+      dedupingInterval: 24 * 60 * 60 * 1000,
       keepPreviousData: true,
     }
   )
