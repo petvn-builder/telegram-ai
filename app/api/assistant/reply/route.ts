@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getSupabaseServer } from "@/lib/supabase/server"
-import { sendReply } from "@/lib/google/gmail-send"
+import { createReplyDraft } from "@/lib/google/gmail-send"
 
 export async function POST(req: NextRequest) {
   try {
@@ -25,7 +25,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "draft required" }, { status: 400 })
     }
 
-    const result = await sendReply({
+    const result = await createReplyDraft({
       userId: user.id,
       threadId,
       body: draft,
@@ -35,14 +35,14 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json(result)
   } catch (error) {
-    const msg = error instanceof Error ? error.message : "send failed"
+    const msg = error instanceof Error ? error.message : "draft failed"
     if (/insufficient|invalid_grant|unauthorized|403|401/i.test(msg)) {
       return NextResponse.json(
-        { error: "Reconnect Google to grant send permission.", code: "scope_error" },
+        { error: "Reconnect Google to grant draft permission.", code: "scope_error" },
         { status: 403 }
       )
     }
-    console.error("[assistant/reply] send error:", error)
-    return NextResponse.json({ error: "Send failed", detail: msg }, { status: 500 })
+    console.error("[assistant/reply] draft error:", error)
+    return NextResponse.json({ error: "Draft failed", detail: msg }, { status: 500 })
   }
 }

@@ -78,6 +78,8 @@ PER-TYPE RULES:
 
 EMAIL — if it asks a question, requires a decision, or is awaiting reply:
   → MUST emit primary: { type: "reply_email", payload: { threadId, draft, to, subject } }
+  → This action SAVES a draft on the user's Gmail thread for them to review and send themselves; it does NOT send.
+  → label should reflect that, e.g. "Draft reply" — never "Send reply".
   → draft is 3–6 sentences, professional, directly answers, moves the conversation forward
   → subject = original subject prefixed with "Re: " if not already
   → If the email also implies work ("can you prepare", "please send", "we need to"):
@@ -113,7 +115,7 @@ SECTIONING:
 QUALITY BAR:
 - NO vague suggestions ("consider doing X", "follow up with Y")
 - ALWAYS produce concrete actions with full payloads
-- Action labels are imperative and short ("Send draft reply", "Create task: prep deck")
+- Action labels are imperative and short ("Draft reply", "Create task: prep deck")
 - confidence: 0.0–1.0. Only emit actions with confidence >= 0.7
 - MAX 7 actions total, ordered by impact
 

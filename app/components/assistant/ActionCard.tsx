@@ -228,21 +228,21 @@ function ReplyComposer({
         }),
       })
       if (res.ok) {
-        setStatus({ kind: "ok", msg: "Sent · reply on thread" })
+        setStatus({ kind: "ok", msg: "draft-saved" })
       } else {
         const j = await res.json().catch(() => ({}))
         const reconnect = j.code === "scope_error"
         setStatus({
           kind: "error",
           msg: reconnect
-            ? "Reconnect Google to enable send"
-            : j.error ?? "Send failed",
+            ? "Reconnect Google to enable drafts"
+            : j.error ?? "Draft failed",
         })
       }
     } catch (e) {
       setStatus({
         kind: "error",
-        msg: e instanceof Error ? e.message : "Send failed",
+        msg: e instanceof Error ? e.message : "Draft failed",
       })
     } finally {
       setSending(false)
@@ -332,22 +332,29 @@ function ReplyComposer({
             disabled={sending || !canSend}
             style={btnStyle("primary", sending)}
           >
-            {sending ? "Sending…" : step.label || "Send reply"}
+            {sending ? "Saving…" : "Save draft"}
           </button>
         )}
         {secondary && !sent && (
           <ActionButton step={secondary} variant="secondary" />
         )}
-        {status && (
-          <span
-            style={{
-              fontSize: "12px",
-              color: status.kind === "ok" ? "var(--ai-accent)" : "var(--accent)",
-            }}
-          >
+        {status && status.kind === "ok" ? (
+          <span style={{ fontSize: "12px", color: "var(--ai-accent)" }}>
+            Draft saved ·{" "}
+            <a
+              href="https://mail.google.com/mail/u/0/#drafts"
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{ color: "var(--ai-accent)", textDecoration: "underline" }}
+            >
+              open Gmail to send
+            </a>
+          </span>
+        ) : status ? (
+          <span style={{ fontSize: "12px", color: "var(--accent)" }}>
             {status.msg}
           </span>
-        )}
+        ) : null}
       </div>
     </div>
   )

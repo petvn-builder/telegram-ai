@@ -1,6 +1,6 @@
 import { gmailFor } from "./gmail-client"
 
-export type SendReplyArgs = {
+export type CreateReplyDraftArgs = {
   userId: string
   threadId: string
   body: string
@@ -9,7 +9,8 @@ export type SendReplyArgs = {
   cc?: string[]
 }
 
-export type SendReplyResult = {
+export type CreateReplyDraftResult = {
+  draftId: string
   messageId: string
   threadId: string
 }
@@ -88,7 +89,7 @@ function base64UrlEncode(input: string): string {
     .replace(/=+$/, "")
 }
 
-export async function sendReply(args: SendReplyArgs): Promise<SendReplyResult> {
+export async function createReplyDraft(args: CreateReplyDraftArgs): Promise<CreateReplyDraftResult> {
   const gmail = await gmailFor(args.userId)
 
   // Fetch the latest message in the thread to grab Message-Id + headers for threading.
@@ -123,16 +124,19 @@ export async function sendReply(args: SendReplyArgs): Promise<SendReplyResult> {
     cc: args.cc,
   })
 
-  const sent = await gmail.users.messages.send({
+  const draft = await gmail.users.drafts.create({
     userId: "me",
     requestBody: {
-      raw: base64UrlEncode(raw),
-      threadId: args.threadId,
+      message: {
+        raw: base64UrlEncode(raw),
+        threadId: args.threadId,
+      },
     },
   })
 
   return {
-    messageId: sent.data.id ?? "",
-    threadId: sent.data.threadId ?? args.threadId,
+    draftId: draft.data.id ?? "",
+    messageId: draft.data.message?.id ?? "",
+    threadId: draft.data.message?.threadId ?? args.threadId,
   }
 }
