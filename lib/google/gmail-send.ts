@@ -89,6 +89,44 @@ function base64UrlEncode(input: string): string {
     .replace(/=+$/, "")
 }
 
+export type CreateEmailDraftArgs = {
+  userId: string
+  to: string
+  body: string
+  subject: string
+  cc?: string[]
+}
+
+export type CreateEmailDraftResult = {
+  draftId: string
+  messageId: string
+}
+
+export async function createEmailDraft(args: CreateEmailDraftArgs): Promise<CreateEmailDraftResult> {
+  const gmail = await gmailFor(args.userId)
+
+  const raw = buildRfc2822({
+    to: args.to,
+    subject: args.subject,
+    body: args.body,
+    cc: args.cc,
+  })
+
+  const draft = await gmail.users.drafts.create({
+    userId: "me",
+    requestBody: {
+      message: {
+        raw: base64UrlEncode(raw),
+      },
+    },
+  })
+
+  return {
+    draftId: draft.data.id ?? "",
+    messageId: draft.data.message?.id ?? "",
+  }
+}
+
 export async function createReplyDraft(args: CreateReplyDraftArgs): Promise<CreateReplyDraftResult> {
   const gmail = await gmailFor(args.userId)
 
