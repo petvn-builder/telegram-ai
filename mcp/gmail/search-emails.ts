@@ -9,7 +9,9 @@ const input = z.object({
   query: z
     .string()
     .max(1000)
-    .describe('Gmail search syntax (e.g. "from:alice@x.com newer_than:7d is:unread"). Use this to filter.'),
+    .describe(
+      'Gmail search syntax (e.g. "from:alice@x.com newer_than:7d is:unread"). For "emails that need a reply", combine in:inbox is:unread with -category:promotions -category:social -category:updates and exclude noreply/notifications/mailer-daemon senders and transactional subjects (receipt, invoice, statement, transaction notice, delivery status).'
+    ),
   maxResults: z.number().int().min(1).max(50).default(10),
 })
 

@@ -78,6 +78,17 @@ When classifying events:
     "- 'reply to <email>' or 'respond to <sender>' → first search_emails to find the threadId, then create_reply_draft.",
     "- 'schedule/book/invite/meeting/calendar/event' → create_event. Only use create_event when the user explicitly wants a calendar entry.",
     "- 'task/todo/to-do' → create_task / list_tasks / etc.",
+    `EMAIL TRIAGE — when the user asks for emails that "need reply", "to reply to", "to read", "to triage", or "in my inbox" without naming a sender:
+- "Needs reply" means a human wrote to the user and is waiting on a response. Transactional, automated, and bulk mail do NOT need a reply.
+- Build the search_emails query as: \`in:inbox is:unread -category:promotions -category:social -category:updates -category:forums -from:noreply -from:no-reply -from:notifications -from:notification -from:mailer-daemon -from:postmaster -subject:(receipt OR invoice OR statement OR "transaction notice" OR "delivery status") newer_than:30d\`. Adapt (drop newer_than for "all time", add from: when the user names a sender).
+- Over-fetch: pass maxResults = 2× the user's requested count (e.g. 20 for "top 10"), so post-filtering still leaves enough.
+- Post-filter the returned messages and DROP any where:
+  • sender address looks automated (noreply, no-reply, notifications, mailer-daemon, postmaster, support@, alerts@, *-bounces@)
+  • subject matches transactional patterns (Transaction Notice, Receipt, Biên lai, Delivery Status Notification, Statement, Invoice, Your order, Payment confirmation, debit/credit notice)
+  • sender domain is a known marketing/newsletter source (klook, indiehackers, vidiq, substack, mailchimp, sendgrid, *.marketing.*) or subject is promo-style (leading emoji + sales language)
+  • the snippet is clearly one-way broadcast (no question, no ask, no addressed greeting)
+- If fewer than the requested count remain after filtering, return only the real ones and say so explicitly (e.g. "Found 3 that look like they need a reply — the rest of your unread inbox is transactional/promotional"). Never pad the list with mail you just filtered out.
+- If the user explicitly asks to include promotions/newsletters/all unread, skip the triage filter and just list.`,
     "IMPORTANT: create_email_draft and create_reply_draft SAVE A DRAFT in Gmail. They DO NOT send the email. After calling them, tell the user the draft was saved and they can review and send it from Gmail (link: https://mail.google.com/mail/u/0/#drafts). Never claim an email was sent.",
     "After tool results return, answer in natural language — summarize, don't dump JSON. Include event links when relevant.",
     "If a tool returns an auth_error, tell the user to reconnect Google at /settings/integrations.",
