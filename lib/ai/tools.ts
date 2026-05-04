@@ -1,7 +1,20 @@
-import { registry, toOpenAiTool, getTool } from "@/mcp/tool-registry"
+import { registry, toOpenAiTool, getTool, type OpenAiToolDescriptor } from "@/mcp/tool-registry"
+import { calendarTools } from "@/mcp/calendar"
+import { gmailTools } from "@/mcp/gmail"
 import { ToolError } from "@/mcp/shared/errors"
 
 export const openaiTools = registry.map(toOpenAiTool)
+
+const googleToolNames = new Set<string>([
+  ...calendarTools.map((t) => t.name),
+  ...gmailTools.map((t) => t.name),
+])
+
+export function getToolsForUser(opts: { hasGoogle: boolean }): OpenAiToolDescriptor[] {
+  return registry
+    .filter((t) => opts.hasGoogle || !googleToolNames.has(t.name))
+    .map(toOpenAiTool)
+}
 
 export type ExecuteResult =
   | { ok: true; data: unknown }

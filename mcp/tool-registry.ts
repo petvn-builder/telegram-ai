@@ -2,6 +2,7 @@ import { z, ZodType } from "zod"
 import { calendarTools } from "./calendar"
 import { gmailTools } from "./gmail"
 import { tasksTools } from "./tasks"
+import { knowledgeTools } from "./knowledge"
 
 export interface UserContext {
   userId: string
@@ -20,7 +21,12 @@ export function defineTool<TIn extends ZodType, TOut>(def: ToolDef<TIn, TOut>): 
 }
 
 // Registry of every tool exposed by this server.
-export const registry: ToolDef[] = [...calendarTools, ...gmailTools, ...tasksTools] as unknown as ToolDef[]
+export const registry: ToolDef[] = [
+  ...calendarTools,
+  ...gmailTools,
+  ...tasksTools,
+  ...knowledgeTools,
+] as unknown as ToolDef[]
 
 export function getTool(name: string): ToolDef | undefined {
   return registry.find((t) => t.name === name)

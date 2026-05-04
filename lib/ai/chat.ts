@@ -4,6 +4,7 @@ import type {
   ChatCompletionMessageToolCall,
 } from "openai/resources/chat/completions"
 import { openaiTools, executeTool } from "./tools"
+import type { OpenAiToolDescriptor } from "@/mcp/tool-registry"
 import { TONE_PROMPTS } from "@/lib/openai"
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
@@ -25,6 +26,7 @@ export interface ChatWithToolsInput {
   history?: Array<{ role: "user" | "assistant"; content: string }>
   maxHops?: number
   onEvent?: (e: ChatToolEvent) => void
+  tools?: OpenAiToolDescriptor[]
 }
 
 export interface ChatWithToolsResult {
@@ -71,9 +73,20 @@ When classifying events:
 - When passing date/time arguments to tools, use natural language ("tomorrow 5pm") so the tool applies ${tz} correctly.`
 
   const base = [
-    "You are BrainOS, a personal AI assistant with access to the user's Google Calendar, Gmail, and Google Tasks via tools.",
+    "You are BrainOS, a personal AI assistant with access to the user's Google Calendar, Gmail, Google Tasks, and personal knowledge base via tools.",
     "Pick the tool that matches the user's intent. Do not make up data.",
+    `GROUNDING RULE (read first):
+You have NO prior knowledge of this user's life, work, people, decisions, plans, preferences, or history.
+For ANY question that references the user's personal context — phrases like "my", "I", named people/projects, past events, or anything that would require knowing this specific user — you MUST call a data tool before answering:
+  - search_notes  → for recall, summarization, "what did I write about X", anything about the user's notes/people/projects/decisions
+  - find_free_time / get_events  → for the user's schedule
+  - search_emails / get_thread  → for the user's email
+  - list_tasks  → for the user's tasks
+Only answer without calling a tool for: greetings, general-knowledge questions ("what's the capital of France"), clarifying questions back to the user, or follow-ups where a prior tool result already contains the answer.
+If unsure whether a question is personal, call search_notes — it is cheap and the right default.`,
     "INTENT ROUTING:",
+    "- 'recall / summarize / what did I write about / notes about X / who is / what's the status of' → search_notes.",
+    "- 'when can I / am I free / find time for / what's my schedule' → find_free_time or get_events.",
     "- 'email/draft/write/send <something> to <recipient>' → create_email_draft. This is an EMAIL, not a calendar event, even if the body mentions a time or activity (e.g. 'play tennis at 7pm').",
     "- 'reply to <email>' or 'respond to <sender>' → first search_emails to find the threadId, then create_reply_draft.",
     "- 'schedule/book/invite/meeting/calendar/event' → create_event. Only use create_event when the user explicitly wants a calendar entry.",
@@ -102,6 +115,7 @@ When classifying events:
 export async function chatWithTools(input: ChatWithToolsInput): Promise<ChatWithToolsResult> {
   const maxHops = input.maxHops ?? 4
   const events: ChatToolEvent[] = []
+  const tools = input.tools ?? openaiTools
 
   const messages: ChatCompletionMessageParam[] = [
     { role: "system", content: buildSystem(input.tone, input.system) },
@@ -115,7 +129,7 @@ export async function chatWithTools(input: ChatWithToolsInput): Promise<ChatWith
     const resp = await openai.chat.completions.create({
       model: "gpt-4o-mini",
       messages,
-      tools: openaiTools,
+      tools,
       tool_choice: "auto",
     })
 

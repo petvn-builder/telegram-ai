@@ -364,9 +364,34 @@ function truncate(s: string, n: number): string {
   return s.length <= n ? s : s.slice(0, n) + "…"
 }
 
+function extractNoteSources(events: ToolEvent[]): { id: string; preview: string }[] {
+  const out: { id: string; preview: string }[] = []
+  const seen = new Set<string>()
+  for (const ev of events) {
+    if (ev.kind !== "tool_result" || ev.name !== "search_notes" || !ev.result) continue
+    const sources = (ev.result as { sources?: unknown }).sources
+    if (!Array.isArray(sources)) continue
+    for (const s of sources) {
+      if (
+        s &&
+        typeof s === "object" &&
+        typeof (s as { id?: unknown }).id === "string" &&
+        typeof (s as { preview?: unknown }).preview === "string" &&
+        !seen.has((s as { id: string }).id)
+      ) {
+        const src = s as { id: string; preview: string }
+        seen.add(src.id)
+        out.push(src)
+      }
+    }
+  }
+  return out
+}
+
 function ToolAnswerBlock({ text, events }: { text: string; events: ToolEvent[] }) {
   const [open, setOpen] = useState(false)
   const calls = events.filter((e) => e.kind === "tool_call")
+  const sources = extractNoteSources(events)
 
   return (
     <div style={{ marginBottom: "10px" }}>
@@ -378,6 +403,29 @@ function ToolAnswerBlock({ text, events }: { text: string; events: ToolEvent[] }
           {renderMarkdown(text)}
         </div>
       </div>
+      {sources.length > 0 && (
+        <div style={{ marginTop: "8px", marginLeft: "22px" }}>
+          <div style={{ fontSize: "11px", color: "var(--text-3)", marginBottom: "4px" }}>
+            Sources
+          </div>
+          <ul style={{ listStyle: "none", padding: 0, margin: 0 }}>
+            {sources.map((s) => (
+              <li key={s.id} style={{ marginBottom: "2px" }}>
+                <Link
+                  href={`/notes/${s.id}`}
+                  style={{
+                    fontSize: "12px",
+                    color: "var(--ai-accent)",
+                    textDecoration: "none",
+                  }}
+                >
+                  • {truncate(s.preview, 80)}
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
       {calls.length > 0 && (
         <div style={{ marginTop: "6px", marginLeft: "22px" }}>
           <button

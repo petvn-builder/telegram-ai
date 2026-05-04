@@ -272,8 +272,24 @@ function formatForTelegram(r) {
       return msg;
     }
 
-    case "tool_answer":
-      return r.text || "Done.";
+    case "tool_answer": {
+      const text = r.text || "Done.";
+      // If the agent called search_notes, surface its sources via the standard footer.
+      const noteSources = [];
+      const seen = new Set();
+      for (const ev of r.events ?? []) {
+        if (ev.kind !== "tool_result" || ev.name !== "search_notes" || !ev.result) continue;
+        const sources = ev.result.sources;
+        if (!Array.isArray(sources)) continue;
+        for (const s of sources) {
+          if (s && s.id && !seen.has(s.id)) {
+            seen.add(s.id);
+            noteSources.push(s);
+          }
+        }
+      }
+      return renderWithSources(text, noteSources);
+    }
 
     case "commands":
       return COMMANDS.map((c) => `${c.name} — ${c.description}`).join("\n");

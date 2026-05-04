@@ -4,10 +4,10 @@ import { createEmbedding } from "@/lib/embeddings"
 import { upsertEntitiesAndLink } from "@/lib/entities"
 import { parseTaskText, createTask } from "@/lib/tasks"
 import { getOrGenerateSummary } from "@/lib/entity-summary"
-import { semanticSearch, buildKnowledgeContext, makePreview } from "@/lib/ai-search"
+import { buildKnowledgeContext, makePreview } from "@/lib/ai-search"
 import { askPetAI } from "@/lib/openai"
 import { chatWithTools } from "@/lib/ai/chat"
-import { userHasGoogle } from "@/lib/ai/tools"
+import { userHasGoogle, getToolsForUser } from "@/lib/ai/tools"
 import { parseTimeRange } from "@/lib/time-parser"
 import {
   detectSemanticContent,
@@ -91,43 +91,28 @@ export async function handleQuery(
     return handleEntity(userId, entityName)
   }
 
-  // ── Google Calendar / Gmail (tool-calling) ───────────────────────────────────
-  if (looksLikeCalendarOrEmail(message) && (await userHasGoogle(userId))) {
-    const { text, events } = await chatWithTools({
-      userId,
-      userMessage: message,
-      tone: options.tone,
-      history: options.recentConversation
-        ? [{ role: "user", content: options.recentConversation }]
-        : undefined,
-    })
-    return { kind: "tool_answer", text, events }
-  }
-
-  // ── Temporal query ────────────────────────────────────────────────────────────
+  // ── Temporal query (structured RAG with date-range metadata) ─────────────────
   const timeRange = parseTimeRange(message)
   if (timeRange) {
     return handleTemporalQuery(userId, message, timeRange)
   }
 
-  // ── Semantic search fallthrough ───────────────────────────────────────────────
-  const { text, sources } = await semanticSearch(
+  // ── Tool-calling agent (default for all non-shortcut messages) ───────────────
+  // The LLM decides whether to call calendar/email/task/search_notes tools or
+  // answer directly. Google tools are only exposed if the user has connected
+  // their account.
+  const hasGoogle = await userHasGoogle(userId)
+  const tools = getToolsForUser({ hasGoogle })
+  const { text, events } = await chatWithTools({
     userId,
-    message,
-    options.recentConversation ?? "",
-    options.tone
-  )
-  return { kind: "answer", text, sources }
-}
-
-// ── Google intent detection ──────────────────────────────────────────────────
-
-const GOOGLE_INTENT_RE =
-  /\b(meeting|meetings|calendar|event|events|schedule|scheduling|availability|free|busy|appointment|reminder|gmail|e-?mail|emails|inbox|thread|unread|reply|sent|task|tasks|todo|to-do|to do)\b/i
-
-export function looksLikeCalendarOrEmail(msg: string): boolean {
-  if (msg.startsWith("/")) return false
-  return GOOGLE_INTENT_RE.test(msg)
+    userMessage: message,
+    tone: options.tone,
+    tools,
+    history: options.recentConversation
+      ? [{ role: "user", content: options.recentConversation }]
+      : undefined,
+  })
+  return { kind: "tool_answer", text, events }
 }
 
 // ── Private handlers ──────────────────────────────────────────────────────────
