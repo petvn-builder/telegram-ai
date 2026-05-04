@@ -61,16 +61,34 @@ function buildSystem(tone?: string, extra?: string): string {
     hour12: true,
   }).format(now)
 
+  const dayFmt = new Intl.DateTimeFormat("en-CA", {
+    timeZone: tz,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  })
+  const weekdayFmt = new Intl.DateTimeFormat("en-US", { timeZone: tz, weekday: "short" })
+  const upcomingDays: string[] = []
+  for (let i = 0; i < 14; i++) {
+    const d = new Date(now.getTime() + i * 86_400_000)
+    const label = i === 0 ? "today" : i === 1 ? "tomorrow" : `+${i}d`
+    upcomingDays.push(`${weekdayFmt.format(d)} ${dayFmt.format(d)}${i <= 1 ? ` (${label})` : ""}`)
+  }
+
   const timeBlock = `Current time context (authoritative — use this, not your training cutoff):
 - Today's date: ${todayIso} (${todayHuman})
 - Current local time: ${nowHuman} ${tz}
 - User timezone: ${tz}
+- Next 14 days (use this table for ALL weekday↔date mapping — never compute weekdays yourself):
+  ${upcomingDays.join(", ")}
 
 When classifying events:
 - An event whose date equals today's date is happening "today" — do NOT call it "upcoming".
 - Use "today", "tomorrow", and "yesterday" where natural instead of repeating the full date.
-- Interpret relative phrases ("this week", "next Monday") against today's date in ${tz}.
-- When passing date/time arguments to tools, use natural language ("tomorrow 5pm") so the tool applies ${tz} correctly.`
+- Interpret relative phrases ("this week", "next Monday", "this weekend") against today's date in ${tz}, and resolve them using the 14-day table above. "This weekend" = the next upcoming Sat+Sun in that table.
+- Never name a weekday from a date unless that pairing appears in the table above. If a date is outside the 14-day window, state the ISO date only or call a tool to resolve it.
+- When passing date/time arguments to tools, use natural language ("tomorrow 5pm", "this Saturday 7pm") so the tool applies ${tz} correctly.
+- For weekend/free-time planning, you MUST call find_free_time with the natural-language window (e.g. "this Saturday evening") rather than inferring availability from get_events output alone.`
 
   const base = [
     "You are BrainOS, a personal AI assistant with access to the user's Google Calendar, Gmail, Google Tasks, and personal knowledge base via tools.",
