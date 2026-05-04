@@ -31,6 +31,21 @@ export interface QueryOptions {
   tone?: string                 // response style from user_settings
 }
 
+// Note-recall verbs: the user is asking about their saved notes/journals.
+const NOTE_RECALL_RE =
+  /\b(note|notes|noted|wrote|written|logged|captured|journaled|jot(?:ted)?|saved|recap|summary|summarize|review|reflection|did i (?:do|write|note|say|capture)|what did i)\b/i
+
+// Calendar/scheduling verbs: the user wants live calendar data. If any of
+// these appear, the message is NEVER routed to the notes-temporal handler,
+// even if a note-recall verb (e.g. "recap") is also present.
+const CALENDAR_INTENT_RE =
+  /\b(schedule|scheduling|reschedule|book|booking|invite|meeting|meetings|appointment|availability|free\s*time|on\s+my\s+calendar|create\s+event|add\s+event|find\s+time|when\s+(?:can|am|are)\s+i)\b/i
+
+function isNoteRecallNotCalendar(msg: string): boolean {
+  if (CALENDAR_INTENT_RE.test(msg)) return false
+  return NOTE_RECALL_RE.test(msg)
+}
+
 export const COMMANDS = [
   { name: "@ai_3veryone_bot", description: "Ask the group AI (uses your knowledge + recent chat context)" },
   { name: "/save", description: "Save a note to your knowledge base" },
@@ -91,9 +106,11 @@ export async function handleQuery(
     return handleEntity(userId, entityName)
   }
 
-  // ── Temporal query (structured RAG with date-range metadata) ─────────────────
+  // ── Temporal note-recall (notes from a time range — NOT calendar) ───────────
+  // Only fires when the user is asking about their saved notes. Calendar/
+  // scheduling intent always falls through to the tool-calling agent.
   const timeRange = parseTimeRange(message)
-  if (timeRange) {
+  if (timeRange && isNoteRecallNotCalendar(message)) {
     return handleTemporalQuery(userId, message, timeRange)
   }
 
