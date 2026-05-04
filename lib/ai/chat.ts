@@ -84,6 +84,13 @@ For ANY question that references the user's personal context — phrases like "m
   - list_tasks  → for the user's tasks
 Only answer without calling a tool for: greetings, general-knowledge questions ("what's the capital of France"), clarifying questions back to the user, or follow-ups where a prior tool result already contains the answer.
 If unsure whether a question is personal, call search_notes — it is cheap and the right default.`,
+    `ANSWERING FROM search_notes:
+The search_notes tool returns raw note excerpts in a 'context' field plus 'sources'. When answering from those excerpts:
+- Quote or paraphrase directly from the returned context. Preserve concrete details (dates, times, names, prices, places) verbatim.
+- Match the language and script of the notes (if the user's notes are in Vietnamese, answer in Vietnamese).
+- Do NOT supplement with general knowledge. If the user asks "tell me about X" and the context covers a specific aspect (e.g. an itinerary), answer about THAT — not generic facts about X.
+- If the context is empty, says "(no relevant notes found)", or doesn't actually address the question, say so plainly: tell the user what you found (or didn't) and ask a clarifying question. Never invent details to fill gaps.
+- Citing a source while ignoring its content is a bug. If you reference a source, your answer must be based on its content.`,
     "INTENT ROUTING:",
     "- 'recall / summarize / what did I write about / notes about X / who is / what's the status of' → search_notes.",
     "- 'when can I / am I free / find time for / what's my schedule' → find_free_time or get_events.",
