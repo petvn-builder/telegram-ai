@@ -1,6 +1,6 @@
 # BrainOS — Solution Architecture
 
-> Last updated: April 2026
+> Last updated: May 2026
 
 ---
 
@@ -44,16 +44,18 @@ The system is a full-stack monolith deployed on Vercel, backed by Supabase (Post
 │                                                                     │
 │  ┌─────────────┐ ┌─────────────┐ ┌──────────────┐ ┌────────────┐ │
 │  │ /api/notes  │ │ /api/tasks  │ │ /api/graph   │ │ /api/ai    │ │
-│  │ CRUD +      │ │ CRUD +      │ │ Graph data   │ │ Chat       │ │
-│  │ entity sync │ │ NLP dates   │ │ + clusters   │ │ + search   │ │
+│  │ CRUD +      │ │ CRUD +      │ │ Graph data   │ │ Chat +     │ │
+│  │ entity sync │ │ NLP dates   │ │ + clusters   │ │ MCP tools  │ │
 │  └──────┬──────┘ └──────┬──────┘ └──────┬───────┘ └─────┬──────┘ │
 │         │               │               │               │         │
 │  ┌──────┴───────────────┴───────────────┴───────────────┴──────┐  │
 │  │                     LIB LAYER                                │  │
-│  │  entities.ts  ·  tasks.ts  ·  ai-search.ts  ·  openai.js   │  │
+│  │  entities.ts  ·  tasks.ts  ·  ai-search.ts  ·  openai.js    │  │
 │  │  embeddings.js  ·  extractEntities.js  ·  query-handler.ts  │  │
 │  │  entity-resolver.ts  ·  time-parser.ts  ·  telegram-link.ts │  │
 │  │  graph/buildGraph.ts  ·  graph/buildClusters.ts             │  │
+│  │  ai/chat.ts  ·  ai/tools.ts  ·  mcp/tool-registry.ts        │  │
+│  │  mcp/{calendar,gmail,tasks,knowledge}/*  ·  mcp/server.ts   │  │
 │  └─────────────────────────┬────────────────────────────────────┘  │
 │                             │                                      │
 │  ┌──────────────────────────┴───────────────────────────────────┐  │
@@ -137,6 +139,9 @@ telegram-ai/
 ├── lib/                          # Server-safe business logic
 │   ├── supabase/                 #   3 client factories (browser/server/admin)
 │   ├── graph/                    #   Graph building + clustering algorithms
+│   ├── ai/                       #   Tool-calling agent loop
+│   │   ├── chat.ts               #     chatWithTools(): system prompt + hop loop
+│   │   └── tools.ts              #     executeTool(), getToolsForUser()
 │   ├── openai.js                 #   LLM wrapper (askOpenAI, askPetAI)
 │   ├── embeddings.js             #   Vector embedding generation
 │   ├── extractEntities.js        #   AI entity extraction (JSON schema)
@@ -144,13 +149,22 @@ telegram-ai/
 │   ├── entity-summary.ts         #   Cached entity summaries (7-day TTL)
 │   ├── entity-resolver.ts        #   Fuzzy entity name matching
 │   ├── tasks.ts                  #   Task creation + NLP date parser
-│   ├── query-handler.ts          #   AI command dispatcher
-│   ├── ai-search.ts              #   2-tier RAG pipeline
+│   ├── query-handler.ts          #   Thin dispatcher (slash cmds → handlers; else → chatWithTools)
+│   ├── ai-search.ts              #   2-tier RAG (now wrapped by search_notes tool)
 │   ├── time-parser.ts            #   Natural language date parsing
-│   ├── temporal-notes.ts         #   Time-range note queries
+│   ├── temporal-notes.ts         #   Time-range note queries (gated on calendar intent)
 │   ├── telegram-link.ts          #   Secure account linking (SHA-256)
 │   ├── group-chat.ts             #   Telegram group message handling
 │   └── user.js                   #   Rate limiting (20 msgs/day)
+│
+├── mcp/                          # MCP-style tool registry (LLM tool surface)
+│   ├── tool-registry.ts          #   defineTool(), toOpenAiTool(), toMcpTool()
+│   ├── server.ts                 #   Standalone stdio MCP server (Claude Desktop)
+│   ├── shared/                   #   ToolError, UserContext, Google client helpers
+│   ├── calendar/                 #   get_events, create/update/delete_event, find_free_time
+│   ├── gmail/                    #   search_emails, get_email/thread, create_(reply_)draft
+│   ├── tasks/                    #   create/list/update/delete_task
+│   └── knowledge/                #   search_notes (wraps 2-tier RAG)
 │
 ├── migrations/                   # SQL migration files (manual apply)
 ├── middleware.ts                  # Auth guard + route protection
@@ -204,46 +218,60 @@ User Input (web or Telegram)
 - Entity merging is *additive* — structured fields (attributes, events, relationships) are union-merged, never overwritten. This prevents data loss when the same entity is mentioned across multiple notes
 - Content hashing prevents duplicate processing on re-saves
 
-### 5.2 AI Search Pipeline (RAG)
+### 5.2 AI Chat & MCP Tool Layer
 
-A two-tier retrieval-augmented generation pipeline powers all AI responses:
+The assistant routes user messages through a thin dispatcher and, for anything beyond slash commands, hands control to a **tool-calling agent**. Tool selection is the LLM's job, not regex routing — the system prompt steers the model toward the right tool, and a small MCP-style registry exposes calendar, gmail, tasks, and knowledge operations as validated function calls.
 
 ```
-User Question
-  │
-  ▼
-┌─────────────────────────────────────────┐
-│  TIER 1: Entity Context                 │
-│                                         │
-│  1. Resolve entity names in question    │
-│     (4-level: exact name → exact alias  │
-│      → substring name → substring alias)│
-│  2. Fallback: embedding similarity      │
-│  3. Fetch entity summaries + linked     │
-│     note snippets (up to 5 per entity)  │
-└────────────────┬────────────────────────┘
-                 │
-                 ▼
-┌─────────────────────────────────────────┐
-│  TIER 2: Semantic Memory                │
-│                                         │
-│  1. Embed the question                  │
-│  2. Vector similarity search (pgvector) │
-│     match_knowledge RPC, top 8 results  │
-│  3. Filter: similarity ≥ 0.75,         │
-│     exclude conversation history,       │
-│     deduplicate against Tier 1          │
-└────────────────┬────────────────────────┘
-                 │
-                 ▼
-┌─────────────────────────────────────────┐
-│  LLM Response (gpt-4o-mini)            │
-│  System prompt + combined context       │
-│  + conversation history + tone pref     │
-└─────────────────────────────────────────┘
+User message (web /api/ai/chat or Telegram /api/telegram)
+   │
+   ▼
+query-handler.ts ──► slash command? ─yes─► direct handler
+   │                                          (/save, /task, /todo, /entity)
+   │ no
+   ▼
+calendar intent? ─no──► temporal note query? ─yes─► handleTemporalQuery
+   │                    (note-recall verb + time range)   (RAG over time range)
+   │ yes (or neither)
+   ▼
+chatWithTools (lib/ai/chat.ts)
+   │  system prompt: time + 14-day weekday table + grounding rules
+   │                 + intent routing + email triage + tone
+   │  tools: filtered by Google OAuth status (getToolsForUser)
+   ▼
+gpt-4o-mini  ──► tool_calls? ──yes──► executeTool (Zod validate → handler)
+   ▲                                           │
+   └───────── feed tool result back ◄──────────┘   (loop, max 4 hops)
+   │
+   ▼
+final text answer + ChatToolEvent[] for UI inspection
 ```
 
-**Why two tiers?** Entity context provides *structured, high-signal* information (summaries, known facts). Semantic memory adds *breadth* — surfacing notes that are semantically relevant but not linked to a recognized entity. Together they produce responses that feel both knowledgeable and serendipitous.
+**Routing (`lib/query-handler.ts`).** Slash commands and `/entity <name>` are handled inline. The temporal-notes RAG handler only fires when a note-recall verb is present *and* no calendar-intent verb is present (commit `e27dbd9` — prevents "schedule this week" from being answered out of notes). Everything else falls through to `chatWithTools()`. The keyword-based gate that previously protected the agent was removed in commit `e89c249`; tool-calling is now the default.
+
+**Tool registry (`mcp/tool-registry.ts`).** Each tool is declared with `defineTool({ name, description, inputSchema (Zod), handler })`. Two adapters expose the same registry to two consumers: `toOpenAiTool()` produces the schema sent to the OpenAI Chat Completions API, and `toMcpTool()` is consumed by `mcp/server.ts` — a standalone stdio MCP server that lets external clients (Claude Desktop, MCP Inspector) drive the same tool surface. Google tools are filtered out for users without OAuth via `getToolsForUser({ hasGoogle })`.
+
+**Tool catalogue (15 tools):**
+
+| Category | Tools | Purpose |
+|----------|-------|---------|
+| Calendar | `get_events`, `create_event`, `update_event`, `delete_event`, `find_free_time` | Read/write Google Calendar; natural-language times resolved in user TZ |
+| Gmail | `search_emails`, `get_email`, `get_thread`, `create_email_draft`, `create_reply_draft` | Search and draft (never send) |
+| Tasks | `create_task`, `list_tasks`, `update_task`, `delete_task` | BrainOS tasks, synced with Google Tasks |
+| Knowledge | `search_notes` | 2-tier RAG over the user's notes; returns raw excerpts + sources |
+
+**Agent loop (`chatWithTools`).** Model: `gpt-4o-mini`, `tool_choice: "auto"`, up to 4 hops. On each hop the model either emits text (done) or one or more `tool_calls`. `executeTool()` validates args against the tool's Zod schema, runs the handler with `UserContext { userId, timeZone }`, and feeds the JSON result back as a `tool` message. Tool failures surface as structured `ToolError` codes (`auth_error`, `permission`, `not_found`, `invalid_input`, `rate_limit`) so the model can recover or apologize gracefully. If the hop budget is exhausted, the final call is made without tools to force a text answer.
+
+**System-prompt-driven behaviour.** The prompt is load-bearing. Six blocks shape behaviour, each tied to a specific past failure mode:
+
+1. **Time context + 14-day weekday table** (commit `1028126`) — agent must look up weekday↔date pairings rather than self-compute, which stops weekday hallucinations on dates near month boundaries.
+2. **GROUNDING RULE** (commit `e89c249`) — any personal-context question MUST trigger a tool call; `search_notes` is the cheap default when intent is ambiguous.
+3. **search_notes grounding** (commit `a753498`) — `search_notes` now returns raw excerpts + source IDs (not a pre-summarized answer); the prompt requires the model to quote/paraphrase from those excerpts, match the notes' language, and refuse to fill gaps with general knowledge.
+4. **Intent routing** — explicit dispatch hints disambiguate near-collisions (e.g., "email tennis plan to Anna" → `create_email_draft`, not `create_event`, even though the body mentions a time).
+5. **Email triage** (commit `b3180f9`) — for "emails that need reply" the model builds a Gmail query that excludes promotions/social/updates/forums and noreply senders, over-fetches 2×, then post-filters automated/transactional/marketing patterns.
+6. **Drafts vs. sends** — `create_email_draft` and `create_reply_draft` only save drafts; the prompt forbids the model from claiming an email was sent.
+
+**Observability.** Every `tool_call` and `tool_result` is emitted to an `onEvent` callback and returned in the `tool_answer` response payload as `ChatToolEvent[]`, so the UI can render the agent's tool trace alongside the answer.
 
 ### 5.3 Task Management
 
@@ -293,7 +321,7 @@ The bot serves as a fast-capture and retrieval channel, operating via a webhook 
 | `/todo` | `handleTodo()` | List active tasks by status |
 | `/entity [name]` | `handleEntity()` | Entity summary + related notes |
 | `@ai_3veryone_bot` | `handlePet()` | Group chat AI with RAG |
-| Free text | `semanticSearch()` | 2-tier RAG → answer |
+| Free text | `chatWithTools()` | Tool-calling agent (calendar / gmail / tasks / search_notes) |
 
 **Group chat support:** Messages in group chats are stored (rolling window of last 30 messages per chat) and used as conversation context when the bot is @mentioned. Each group member's knowledge base is queried independently.
 
@@ -454,6 +482,10 @@ Entity extraction and embedding generation run in Vercel's `waitUntil()` — a l
 
 Vector search runs on the same PostgreSQL instance via pgvector. This eliminates an additional service dependency and keeps the data model unified. The trade-off is limited to scale — pgvector performs well for thousands of embeddings but would need evaluation at higher volumes.
 
+### Model-Driven Tool Dispatch over Keyword Routing
+
+Tool selection in the AI chat is delegated to the LLM through a system-prompt-driven MCP tool registry, not regex/keyword classification (commit `e89c249` removed the previous keyword gate). Adding a capability now means defining a tool with a Zod schema and adding a routing hint to the prompt — not threading a new branch through `query-handler.ts`. The trade-off is that prompt regressions require explicit safeguards in the prompt rather than code-level guards: see the 14-day weekday table (`1028126`), the calendar-intent gate ahead of the temporal-notes handler (`e27dbd9`), the search_notes grounding block (`a753498`), and the email triage block (`b3180f9`). Each of these is a fix for a model behaviour rather than a routing bug.
+
 ### SWR over Server State Management
 
 Client-side data fetching uses SWR (stale-while-revalidate) rather than a heavier state management library. Combined with optimistic updates and `mutate()`, this provides a responsive UI without the boilerplate of Redux or Zustand. The trade-off is that complex cross-component state coordination requires React Context (used for AI panel and sidebar state).
@@ -509,6 +541,8 @@ Client-side data fetching uses SWR (stale-while-revalidate) rather than a heavie
 | **TypeScript migration** | 4 legacy JS files in `lib/` | Migrate `openai.js`, `embeddings.js`, `extractEntities.js`, `user.js` to TypeScript |
 | **Bot handler size** | `telegram/route.js` is ~1500 lines | Extract into focused handler modules |
 | **Env documentation** | No `.env.example` | Add template for developer onboarding |
+| **Tool-call observability** | `ChatToolEvent[]` is returned to the UI but never persisted | Persist tool-call traces to debug prompt regressions and measure tool-selection accuracy |
+| **MCP server reach** | `mcp/server.ts` is a stdio server intended for Claude Desktop / MCP Inspector — no HTTP/SSE transport | Add an authenticated HTTP MCP transport so other clients can use the same tool surface remotely |
 
 ### Scaling Considerations
 

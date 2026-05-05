@@ -11,91 +11,74 @@ type KnowledgeLinkRow = {
   entity_id: string
 }
 
-type NoteRow = {
+export type EntityNode = {
   id: string
-  content: string
-}
-
-export type GraphNode = {
-  id: string
-  label?: string
-  type: "entity" | "note"
-  entityType?: string
+  label: string
+  type: "entity"
+  entityType: string
   size: number
-  mentionCount?: number
+  mentionCount: number
 }
 
-export type GraphLink = {
+export type EntityEdge = {
   source: string
   target: string
-  type: "mention"
+  weight: number
 }
 
-export type GraphResponse = {
-  nodes: GraphNode[]
-  links: GraphLink[]
+export type EntityGraph = {
+  nodes: EntityNode[]
+  links: EntityEdge[]
   clusters: Cluster[]
+  orphanIds: string[]
 }
 
-export function buildGraph(
+export function buildEntityGraph(
   entities: EntityRow[],
-  knowledgeLinks: KnowledgeLinkRow[],
-  notes: NoteRow[]
-): GraphResponse {
-  const nodes: GraphNode[] = []
-  const links: GraphLink[] = []
-
+  knowledgeLinks: KnowledgeLinkRow[]
+): EntityGraph {
   const entityMentionCount: Record<string, number> = {}
-  const noteSet = new Set<string>()
+  const noteToEntities: Record<string, Set<string>> = {}
 
-  // Map notes by id for quick lookup
-  const noteMap: Record<string, string> = {}
-  for (const note of notes) {
-    noteMap[note.id] = note.content
-  }
-
-  // Count mentions + collect note ids
   for (const link of knowledgeLinks) {
     entityMentionCount[link.entity_id] =
       (entityMentionCount[link.entity_id] || 0) + 1
-
-    noteSet.add(link.knowledge_id)
-
-    links.push({
-      source: link.entity_id,
-      target: link.knowledge_id,
-      type: "mention",
-    })
+    if (!noteToEntities[link.knowledge_id]) {
+      noteToEntities[link.knowledge_id] = new Set()
+    }
+    noteToEntities[link.knowledge_id].add(link.entity_id)
   }
 
-  // Build entity nodes
-  for (const entity of entities) {
+  const nodes: EntityNode[] = entities.map((entity) => {
     const mentionCount = entityMentionCount[entity.id] || 0
-
-    nodes.push({
+    return {
       id: entity.id,
       label: entity.name,
       type: "entity",
       entityType: entity.type,
       mentionCount,
       size: 6 + Math.log(mentionCount + 1) * 4,
-    })
+    }
+  })
+
+  const edgeWeights: Record<string, number> = {}
+  for (const ids of Object.values(noteToEntities)) {
+    const arr = [...ids]
+    for (let i = 0; i < arr.length; i++) {
+      for (let j = i + 1; j < arr.length; j++) {
+        const [a, b] = arr[i] < arr[j] ? [arr[i], arr[j]] : [arr[j], arr[i]]
+        const key = `${a}|${b}`
+        edgeWeights[key] = (edgeWeights[key] || 0) + 1
+      }
+    }
   }
 
-  // Build note nodes with content label (shortened)
-  for (const noteId of noteSet) {
-    const content = noteMap[noteId] || ""
+  const links: EntityEdge[] = Object.entries(edgeWeights).map(([key, weight]) => {
+    const [source, target] = key.split("|")
+    return { source, target, weight }
+  })
 
-    nodes.push({
-      id: noteId,
-      label: content.slice(0, 60),
-      type: "note",
-      size: 3,
-    })
-  }
+  const { clusters, orphanIds } = buildClusters(entities, knowledgeLinks)
 
-  const clusters = buildClusters(entities, knowledgeLinks)
-
-  return { nodes, links, clusters }
+  return { nodes, links, clusters, orphanIds }
 }
-  

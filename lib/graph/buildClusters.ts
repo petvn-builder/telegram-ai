@@ -4,22 +4,26 @@ export type Cluster = {
   color: [number, number, number]
 }
 
-// Muted colors distinct from node ENTITY_FILL colors
+export type ClusterResult = {
+  clusters: Cluster[]
+  orphanIds: string[]
+}
+
 const CLUSTER_PALETTE: [number, number, number][] = [
-  [120, 100, 220], // soft violet
-  [80, 180, 140],  // soft teal
-  [220, 160, 60],  // soft amber
-  [200, 100, 160], // soft rose
-  [80, 140, 210],  // soft sky
-  [160, 120, 80],  // soft brown
-  [100, 180, 100], // soft green
-  [200, 120, 80],  // soft orange
+  [120, 100, 220],
+  [80, 180, 140],
+  [220, 160, 60],
+  [200, 100, 160],
+  [80, 140, 210],
+  [160, 120, 80],
+  [100, 180, 100],
+  [200, 120, 80],
 ]
 
 export function buildClusters(
   entities: { id: string }[],
   links: { entity_id: string; knowledge_id: string }[]
-): Cluster[] {
+): ClusterResult {
   const parent: Record<string, string> = {}
 
   function find(x: string): string {
@@ -33,13 +37,11 @@ export function buildClusters(
     if (ra !== rb) parent[ra] = rb
   }
 
-  // Initialize: each entity is its own root
   for (const e of entities) parent[e.id] = e.id
 
-  // Group entity_ids by note, then union entities that share a note
   const noteToEntities: Record<string, string[]> = {}
   for (const link of links) {
-    if (parent[link.entity_id] === undefined) continue // orphan link
+    if (parent[link.entity_id] === undefined) continue
     if (!noteToEntities[link.knowledge_id]) noteToEntities[link.knowledge_id] = []
     noteToEntities[link.knowledge_id].push(link.entity_id)
   }
@@ -50,7 +52,6 @@ export function buildClusters(
     }
   }
 
-  // Collect clusters by root
   const groups: Record<string, string[]> = {}
   for (const e of entities) {
     const root = find(e.id)
@@ -58,11 +59,21 @@ export function buildClusters(
     groups[root].push(e.id)
   }
 
-  return Object.values(groups)
-    .filter((ids) => ids.length >= 2)
-    .map((ids, i) => ({
-      id: `cluster-${i}`,
-      entityIds: ids,
-      color: CLUSTER_PALETTE[i % CLUSTER_PALETTE.length],
-    }))
+  const clusters: Cluster[] = []
+  const orphanIds: string[] = []
+  let i = 0
+  for (const ids of Object.values(groups)) {
+    if (ids.length >= 2) {
+      clusters.push({
+        id: `cluster-${i}`,
+        entityIds: ids,
+        color: CLUSTER_PALETTE[i % CLUSTER_PALETTE.length],
+      })
+      i++
+    } else {
+      orphanIds.push(ids[0])
+    }
+  }
+
+  return { clusters, orphanIds }
 }
