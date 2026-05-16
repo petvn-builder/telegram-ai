@@ -5,21 +5,45 @@ import { formatTodoList } from "@/lib/telegram-format"
 import { sendTelegram } from "@/lib/telegram-send"
 import type { AiResponse } from "@/lib/types"
 
-const DEDUPE_WINDOW_MS = 50 * 60 * 1000 // 50 minutes
+const LOOKBACK_MS = 59 * 60 * 1000 // 59 minutes
+const DEDUPE_WINDOW_MS = 60 * 60 * 1000 // 60 minutes
 
-function currentHourInTz(now: Date, tz: string): string {
+// Returns minutes-since-midnight in the given IANA timezone.
+function minutesSinceMidnightInTz(at: Date, tz: string): number | null {
   try {
-    const h = new Intl.DateTimeFormat("en-US", {
+    const parts = new Intl.DateTimeFormat("en-US", {
       hour: "2-digit",
+      minute: "2-digit",
       hour12: false,
       timeZone: tz,
-    }).format(now)
-    // Intl can return "24" for midnight in some locales; normalize.
-    const hh = h === "24" ? "00" : h.padStart(2, "0")
-    return `${hh}:00`
+    }).formatToParts(at)
+    const h = parts.find((p) => p.type === "hour")?.value
+    const m = parts.find((p) => p.type === "minute")?.value
+    if (h == null || m == null) return null
+    const hh = h === "24" ? 0 : Number(h)
+    const mm = Number(m)
+    if (Number.isNaN(hh) || Number.isNaN(mm)) return null
+    return hh * 60 + mm
   } catch {
-    return "??:??"
+    return null
   }
+}
+
+// Parse "HH:MM" → minutes-since-midnight.
+function parseSlot(slot: string): number | null {
+  const m = /^(\d{1,2}):(\d{2})$/.exec(slot)
+  if (!m) return null
+  const hh = Number(m[1])
+  const mm = Number(m[2])
+  if (hh < 0 || hh > 23 || mm < 0 || mm > 59) return null
+  return hh * 60 + mm
+}
+
+// True if `slot` falls within the lookback window ending at `nowMinutes` (in same tz, mod 24h).
+function slotInLookback(slotMinutes: number, nowMinutes: number, lookbackMinutes: number): boolean {
+  // Account for wraparound: e.g. lookback at 00:30 should cover 23:31..00:30.
+  const diff = (nowMinutes - slotMinutes + 24 * 60) % (24 * 60)
+  return diff >= 0 && diff <= lookbackMinutes
 }
 
 export async function GET(req: NextRequest) {
@@ -48,9 +72,16 @@ export async function GET(req: NextRequest) {
 
   for (const job of jobs ?? []) {
     try {
-      const target = currentHourInTz(now, job.timezone || "UTC")
+      const tz = job.timezone || "UTC"
+      const nowMin = minutesSinceMidnightInTz(now, tz)
+      if (nowMin == null) { skipped++; continue }
+
       const times: string[] = Array.isArray(job.send_times) ? job.send_times : []
-      if (!times.includes(target)) { skipped++; continue }
+      const matched = times.some((slot) => {
+        const m = parseSlot(slot)
+        return m != null && slotInLookback(m, nowMin, LOOKBACK_MS / 60000)
+      })
+      if (!matched) { skipped++; continue }
 
       if (job.last_sent_at) {
         const last = new Date(job.last_sent_at).getTime()
