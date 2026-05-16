@@ -69,7 +69,8 @@ export const config = {
      * - favicon.ico
      * - api/telegram  (bot webhook — no browser session)
      * - api/auth      (auth callback — must be reachable before session exists)
+     * - api/cron      (Vercel Cron — uses CRON_SECRET, no browser session)
      */
-    "/((?!_next/static|_next/image|favicon.ico|api/telegram|api/auth/callback).*)",
+    "/((?!_next/static|_next/image|favicon.ico|api/telegram|api/auth/callback|api/cron).*)",
   ],
 }

@@ -3,6 +3,7 @@ import { getSupabaseServer } from "@/lib/supabase/server"
 import TelegramConnectPanel from "./TelegramConnectPanel"
 import TonePicker from "./TonePicker"
 import GoogleConnectPanel from "./GoogleConnectPanel"
+import DailyBriefPanel from "./DailyBriefPanel"
 
 export default async function SettingsPage() {
   const supabase = await getSupabaseServer()
@@ -107,6 +108,26 @@ export default async function SettingsPage() {
           </h2>
 
           <TelegramConnectPanel existingIdentity={identity ?? null} />
+        </div>
+
+        {/* Daily Brief section */}
+        <div style={{
+          background: "var(--bg-surface)",
+          border: "1px solid var(--border)",
+          borderRadius: "14px",
+          padding: "28px",
+          marginBottom: "20px",
+        }}>
+          <h2 style={{
+            fontSize: "13px",
+            fontWeight: 500,
+            color: "var(--text-2)",
+            margin: "0 0 20px",
+          }}>
+            Daily Brief
+          </h2>
+
+          <DailyBriefPanel telegramConnected={!!identity} />
         </div>
 
         {/* Google section */}

@@ -216,7 +216,7 @@ async function handleTask(
   return { kind: "task_created", task: task as unknown as Record<string, unknown> }
 }
 
-async function handleTodo(userId: string): Promise<AiResponse> {
+export async function handleTodo(userId: string): Promise<AiResponse> {
   // Pull from Google Tasks with 3s timeout for freshness
   await Promise.race([
     pullFromGoogle(userId),
